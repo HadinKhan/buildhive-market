@@ -80,26 +80,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
           <div className="flex items-center justify-between pt-2">
             <div className="flex flex-col gap-1">
-              <span className="text-[10px] text-gray-500">
+              <span className="text-xs text-gray-500">
                 {product.sales || 0} Sales
               </span>
-              <div className="flex items-center gap-1">
-                <div className="flex text-yellow-400">
-                  {[...Array(5)].map((_, i) => (
-                    <Icons.Star
-                      key={i}
-                      className={`h-3 w-3 ${
-                        i < (product.rating || 0)
-                          ? "fill-current"
-                          : "text-gray-300"
-                      }`}
-                    />
-                  ))}
-                </div>
-                <span className="text-[10px] text-gray-400">
-                  ({(product.rating || 0) * 3 + 3})
-                </span>
-              </div>
             </div>
             <Button
               size="sm"
@@ -207,17 +190,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             isDark ? "border-slate-700" : "border-gray-100"
           }`}
         >
-          <div className="flex items-center gap-1">
-            <div className="flex text-yellow-400">
-              {[...Array(5)].map((_, i) => (
-                <Icons.Star key={i} className="h-3 w-3 fill-current" />
-              ))}
-            </div>
-            <span className="text-xs text-gray-400">
-              ({product.rating || 0})
-            </span>
-          </div>
-          <span className="text-xs text-gray-400">
+          <span
+            className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}
+          >
             {product.sales || 0} Sales
           </span>
         </div>

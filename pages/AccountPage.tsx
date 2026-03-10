@@ -777,6 +777,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                         value={addressForm.full_name}
                         onChange={handleAddressChange}
                         required
+                        aria-label="Full Name"
                         className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                       />
                     </div>
@@ -790,6 +791,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                         value={addressForm.phone}
                         onChange={handleAddressChange}
                         required
+                        aria-label="Phone Number"
                         className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                       />
                     </div>
@@ -804,6 +806,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       value={addressForm.address_line1}
                       onChange={handleAddressChange}
                       required
+                      aria-label="Address Line 1"
                       className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                     />
                   </div>
@@ -816,6 +819,8 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       name="address_line2"
                       value={addressForm.address_line2}
                       onChange={handleAddressChange}
+                      placeholder="Address Line 2 (optional)"
+                      title="Address Line 2 (optional)"
                       className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                     />
                   </div>
@@ -830,6 +835,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                         value={addressForm.city}
                         onChange={handleAddressChange}
                         required
+                        aria-label="City"
                         className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                       />
                     </div>
@@ -843,6 +849,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                         value={addressForm.state}
                         onChange={handleAddressChange}
                         required
+                        aria-label="State or Province"
                         className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                       />
                     </div>
@@ -858,6 +865,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                         value={addressForm.postal_code}
                         onChange={handleAddressChange}
                         required
+                        aria-label="Postal Code"
                         className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                       />
                     </div>
@@ -871,6 +879,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                         value={addressForm.country}
                         onChange={handleAddressChange}
                         required
+                        aria-label="Country"
                         className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                       />
                     </div>

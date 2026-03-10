@@ -24,6 +24,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const [headerSearch, setHeaderSearch] = useState("");
 
   // Use auth context user if available, otherwise fall back to prop
   const user = authUser || propUser;
@@ -121,6 +122,15 @@ export const Header: React.FC<HeaderProps> = ({
                   type="text"
                   placeholder="Search supplies..."
                   className="h-10 w-64 rounded-full border border-gray-200 bg-gray-50 pl-10 pr-4 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                  value={headerSearch}
+                  onChange={(e) => setHeaderSearch(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === "Enter" && headerSearch.trim()) {
+                      window.location.href = `/products?search=${encodeURIComponent(
+                        headerSearch
+                      )}`;
+                    }
+                  }}
                 />
               </div>
 

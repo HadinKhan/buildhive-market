@@ -147,6 +147,7 @@ export const ContactPage: React.FC<ContactPageProps> = () => {
                   name="subject"
                   value={form.subject}
                   onChange={handleChange}
+                  aria-label="Subject"
                   className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                   required
                 >
@@ -250,17 +251,19 @@ export const ContactPage: React.FC<ContactPageProps> = () => {
               </h3>
               <div className="flex gap-4">
                 {[
-                  Icons.Facebook,
-                  Icons.Twitter,
-                  Icons.Linkedin,
-                  Icons.Instagram,
-                ].map((Icon, i) => (
+                  { icon: Icons.Facebook, name: "Facebook" },
+                  { icon: Icons.Twitter, name: "Twitter" },
+                  { icon: Icons.Linkedin, name: "LinkedIn" },
+                  { icon: Icons.Instagram, name: "Instagram" },
+                ].map((social, i) => (
                   <a
                     key={i}
                     href="#"
+                    title={`Follow us on ${social.name}`}
+                    aria-label={`Follow us on ${social.name}`}
                     className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 text-gray-500 transition-all hover:border-primary hover:bg-primary hover:text-white"
                   >
-                    <Icon className="h-5 w-5" />
+                    <social.icon className="h-5 w-5" />
                   </a>
                 ))}
               </div>

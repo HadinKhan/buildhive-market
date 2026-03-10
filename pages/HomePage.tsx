@@ -18,6 +18,8 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
   const [loadingFeatured, setLoadingFeatured] = useState(true);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("All Categories");
 
   useEffect(() => {
     loadFeaturedProducts();
@@ -147,20 +149,49 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                 <select
                   className="bg-transparent text-sm font-medium text-gray-600 focus:outline-none"
                   aria-label="Select Category"
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
                 >
                   <option>All Categories</option>
-                  <option>Tools</option>
-                  <option>Heavy Machinery</option>
-                  <option>Materials</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.name}>
+                      {cat.name}
+                    </option>
+                  ))}
                 </select>
               </div>
               <input
                 type="text"
                 placeholder="Search construction material & more..."
                 className="flex-1 bg-transparent px-4 py-2 text-sm focus:outline-none"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === "Enter") {
+                    const params = new URLSearchParams();
+                    if (searchQuery) params.set("search", searchQuery);
+                    if (selectedCategory !== "All Categories") {
+                      const cat = categories.find(
+                        (c) => c.name === selectedCategory
+                      );
+                      if (cat) params.set("categoryId", cat.id);
+                    }
+                    window.location.href = `/products?${params.toString()}`;
+                  }
+                }}
               />
               <button
-                onClick={() => onNavigate("products")}
+                onClick={() => {
+                  const params = new URLSearchParams();
+                  if (searchQuery) params.set("search", searchQuery);
+                  if (selectedCategory !== "All Categories") {
+                    const cat = categories.find(
+                      (c) => c.name === selectedCategory
+                    );
+                    if (cat) params.set("categoryId", cat.id);
+                  }
+                  window.location.href = `/products?${params.toString()}`;
+                }}
                 className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500 text-white transition-colors hover:bg-blue-600"
                 aria-label="Search Products"
               >
@@ -182,7 +213,9 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               ].map((tag) => (
                 <span
                   key={tag}
-                  onClick={() => onNavigate("products")}
+                  onClick={() => {
+                    window.location.href = `/products?search=${tag}`;
+                  }}
                   className="rounded-full bg-white px-3 py-1 text-xs shadow-sm cursor-pointer hover:bg-gray-50"
                 >
                   {tag}

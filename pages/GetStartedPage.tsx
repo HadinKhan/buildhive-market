@@ -168,8 +168,6 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
               className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             >
               <option value="buyer">Buyer / Individual</option>
-              <option value="contractor">Contractor / Builder</option>
-              <option value="supplier">Supplier / Vendor</option>
             </select>
           </div>
 

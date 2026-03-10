@@ -49,7 +49,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
                 variant="outline"
                 size="lg"
                 onClick={() => onNavigate("contact")}
-                className="w-full border-white/20 bg-white/5 text-white hover:bg-white hover:text-slate-900 sm:w-auto"
+                className="w-full border-white bg-white/10 text-white hover:bg-white hover:text-slate-900 sm:w-auto backdrop-blur-sm"
               >
                 Contact Us
               </Button>
@@ -273,7 +273,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
         </div>
       </section>
 
-      {/* Team Section (Optional/Generic) */}
+      {/* Team Section */}
       <section className="py-20 lg:py-32">
         <div className="container mx-auto px-4 lg:px-8">
           <div className="mb-16 text-center">
@@ -286,36 +286,29 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
             </p>
           </div>
 
-          <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-8 sm:grid-cols-3 max-w-4xl mx-auto">
             {[
               {
-                name: "Ahmed Khan",
-                role: "CEO & Founder",
-                img: "https://images.unsplash.com/photo-1560250097-0b93528c311a?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80",
+                name: "Ayaan Ahmad",
+                role: "Team Member",
               },
               {
-                name: "Sarah Ahmed",
-                role: "Head of Operations",
-                img: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80",
+                name: "Muhammad Hamad Qamar",
+                role: "Team Member",
               },
               {
-                name: "Bilal Hassan",
-                role: "Chief Tech Officer",
-                img: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80",
-              },
-              {
-                name: "Zainab Ali",
-                role: "Customer Success",
-                img: "https://images.unsplash.com/photo-1580489944761-15a19d654956?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80",
+                name: "Muhammad Hadin Khan",
+                role: "Team Member",
               },
             ].map((member, i) => (
               <div key={i} className="group text-center">
-                <div className="mx-auto mb-4 h-48 w-48 overflow-hidden rounded-full border-4 border-gray-100 shadow-sm transition-all group-hover:border-primary/20 group-hover:shadow-md">
-                  <img
-                    src={member.img}
-                    alt={member.name}
-                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
-                  />
+                <div className="mx-auto mb-6 flex h-32 w-32 items-center justify-center rounded-full bg-gradient-to-br from-primary to-orange-500 shadow-lg transition-all group-hover:shadow-xl">
+                  <span className="text-4xl font-bold text-white">
+                    {member.name
+                      .split(" ")
+                      .map((n) => n[0])
+                      .join("")}
+                  </span>
                 </div>
                 <h3 className="text-lg font-bold text-gray-900">
                   {member.name}
@@ -349,7 +342,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
               variant="outline"
               size="lg"
               onClick={() => onNavigate("contact")}
-              className="border-white text-white hover:bg-white/10 w-full sm:w-auto"
+              className="border-white bg-transparent text-white hover:bg-white hover:text-primary w-full sm:w-auto"
             >
               Contact Us
             </Button>

@@ -132,16 +132,20 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({ onNavigate }) => {
   const [totalPages, setTotalPages] = useState(1);
   const limit = 12;
 
-  // Load categories on mount and set initial category and page from URL
+  // Load categories on mount and set initial category, page, and search from URL
   useEffect(() => {
     loadCategories();
     const categoryFromUrl = searchParams.get("categoryId");
     const pageFromUrl = searchParams.get("page");
+    const searchFromUrl = searchParams.get("search");
     if (categoryFromUrl) {
       setSelectedCategory(categoryFromUrl);
     }
     if (pageFromUrl) {
       setCurrentPage(parseInt(pageFromUrl, 10));
+    }
+    if (searchFromUrl) {
+      setSearchTerm(searchFromUrl);
     }
   }, []);
 
