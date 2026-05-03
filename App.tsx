@@ -5,6 +5,7 @@ import {
   useNavigate,
   Navigate,
   useParams,
+  useLocation,
 } from "react-router-dom";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -27,6 +28,7 @@ import { TermsPage } from "./pages/TermsPage";
 import { PrivacyPage } from "./pages/PrivacyPage";
 import { FAQPage } from "./pages/FAQPage";
 import { ServicesPage } from "./pages/ServicesPage";
+import { NotificationPage } from "./pages/NotificationPage";
 import { productService } from "./src/services/productService";
 import { cartService } from "./src/services/cartService";
 
@@ -57,6 +59,17 @@ const ProductDetailWrapper: React.FC<{
       if (!id) return;
       try {
         const apiProduct = await productService.getProductById(id);
+        const productImages = (apiProduct.product_images || [])
+          .filter((image) => !("product_id" in image) || image.product_id === apiProduct.id)
+          .sort((a, b) => (a.display_order || 0) - (b.display_order || 0))
+          .map((image) => ({
+            id: image.id,
+            product_id: apiProduct.id,
+            image_url: image.image_url,
+            display_order: image.display_order || 0,
+            created_at: image.created_at || "",
+          }));
+
         const converted: Product = {
           id: apiProduct.id,
           business_id: apiProduct.business_id,
@@ -77,7 +90,7 @@ const ProductDetailWrapper: React.FC<{
           is_featured: apiProduct.is_featured,
           created_at: apiProduct.created_at,
           updated_at: apiProduct.updated_at,
-          images: [],
+          images: productImages,
           author: apiProduct.businesses?.business_name || "Unknown",
           rating: apiProduct.average_rating || 0,
           sales: apiProduct.total_reviews || 0,
@@ -116,6 +129,7 @@ const ProductDetailWrapper: React.FC<{
 
 const App: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, isAuthenticated, logout } = useAuth();
   const [selectedProductId, setSelectedProductId] = useState<string | null>(
     null
@@ -468,7 +482,13 @@ const App: React.FC = () => {
 
         <Route
           path="/products"
-          element={<ProductsPage onNavigate={navigateTo} />}
+          element={
+            <ProductsPage
+              onNavigate={navigateTo}
+              initialCategory={new URLSearchParams(location.search).get("categoryId")}
+              onAddToCart={addToCart}
+            />
+          }
         />
 
         <Route
@@ -509,6 +529,15 @@ const App: React.FC = () => {
                 onUpdateQuantity={updateQuantity}
                 onClearCart={clearCart}
               />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/notifications"
+          element={
+            <ProtectedRoute>
+              <NotificationPage onNavigate={navigateTo} />
             </ProtectedRoute>
           }
         />

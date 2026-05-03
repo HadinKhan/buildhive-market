@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Icons } from "../components/Icons";
 import { Button } from "../components/Button";
 import { Product } from "../types";
@@ -18,9 +18,15 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   const [activeTab, setActiveTab] = useState("Overview");
   const [selectedImage, setSelectedImage] = useState(0);
 
-  // Gallery images from product
-  const galleryImages = product.images?.map((img) => img.image_url) || [];
-  const [mainImage, setMainImage] = useState(galleryImages[0] || "");
+  const galleryImages = useMemo(
+    () =>
+      (product.images || [])
+        .filter((img) => img.product_id === product.id && Boolean(img.image_url))
+        .sort((a, b) => a.display_order - b.display_order)
+        .map((img) => img.image_url),
+    [product.id, product.images]
+  );
+  const activeImage = galleryImages[selectedImage] || galleryImages[0] || "";
 
   const handleAddToCart = () => {
     onAddToCart(product, quantity);
@@ -60,7 +66,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           <div className="flex flex-col gap-6">
             <div className="relative aspect-square w-full overflow-hidden rounded-3xl bg-gray-100">
               <img
-                src={galleryImages[selectedImage]}
+                src={activeImage}
                 alt={product.title}
                 className="h-full w-full object-cover transition-all duration-500"
               />
@@ -128,6 +134,14 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               {product.description ||
                 "Designed for professional durability and performance, this construction essential meets all safety standards. Ideal for heavy-duty applications, providing reliability when you need it most."}
             </p>
+
+            <Button
+              className="mb-8 w-full bg-primary hover:bg-primary-hover shadow-lg shadow-primary/30 sm:w-auto"
+              size="lg"
+              onClick={handleAddToCart}
+            >
+              <Icons.Cart className="mr-2 h-5 w-5" /> Add to Cart
+            </Button>
 
             {/* Stock Status */}
             <div className="mb-8">
