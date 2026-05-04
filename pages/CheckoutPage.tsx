@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { StripeProviderWrapper } from "../src/components/StripeProviderWrapper";
 import { StripeCardForm } from "../src/components/StripeCardForm";
 import { useStripePayment } from "../src/hooks/useStripePayment";
@@ -12,6 +12,14 @@ import {
 } from "../src/services/orderService";
 import { addressService } from "../src/services/addressService";
 import { useAuth } from "../src/context/AuthContext";
+import {
+  INITIAL_FORM_DATA,
+  PAYMENT_METHODS,
+  REQUIRED_FIELDS,
+  TAX_RATE,
+  type FormData,
+} from "../src/data/checkoutPageData";
+import { checkoutPageStyles } from "../src/styles/checkoutPageStyles";
 
 interface CheckoutPageProps {
   cartItems: CartItem[];
@@ -24,6 +32,23 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   onNavigate,
   onPlaceOrder,
 }) => {
+  // Inject styles
+  useEffect(() => {
+    const styleId = "checkout-page-styles";
+    if (!document.getElementById(styleId)) {
+      const style = document.createElement("style");
+      style.id = styleId;
+      style.textContent = checkoutPageStyles;
+      document.head.appendChild(style);
+    }
+    return () => {
+      const existingStyle = document.getElementById(styleId);
+      if (existingStyle) {
+        existingStyle.remove();
+      }
+    };
+  }, []);
+
   const { user } = useAuth();
   const [paymentMethod, setPaymentMethod] = useState("cod");
   const [isProcessing, setIsProcessing] = useState(false);
@@ -35,38 +60,25 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
   const stripePayment = useStripePayment();
-  const [formData, setFormData] = useState({
-    full_name: "",
-    phone: "",
-    address_line1: "",
-    address_line2: "",
-    city: "",
-    state: "",
-    postal_code: "",
-    country: "Pakistan",
-    notes: "",
-  });
+  const [formData, setFormData] = useState<FormData>(INITIAL_FORM_DATA);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const subtotal = cartItems.reduce(
     (acc, item) => acc + (item.product?.price || 0) * item.quantity,
     0
   );
-  const tax = subtotal * 0.05;
+  const tax = subtotal * TAX_RATE;
   const total = subtotal + tax;
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
-    if (!formData.full_name.trim())
-      newErrors.full_name = "Full name is required";
-    if (!formData.phone.trim()) newErrors.phone = "Phone number is required";
-    if (!formData.address_line1.trim())
-      newErrors.address_line1 = "Address is required";
-    if (!formData.city.trim()) newErrors.city = "City is required";
-    if (!formData.state.trim()) newErrors.state = "State is required";
-    if (!formData.postal_code.trim())
-      newErrors.postal_code = "Postal code is required";
+    REQUIRED_FIELDS.forEach((field) => {
+      const value = formData[field as keyof FormData];
+      if (!value || !String(value).trim()) {
+        newErrors[field] = `${field.replace(/_/g, " ")} is required`;
+      }
+    });
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -332,11 +344,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
   if (showStripeForm && stripeConfig && clientSecret && paymentIntentId) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-4 text-center">
-        <h1 className="mb-2 text-3xl font-bold text-gray-900">
-          Enter Card Details
-        </h1>
-        <p className="mb-8 max-w-md text-gray-500">
+      <div className="stripe-form-container">
+        <h1 className="stripe-form-title">Enter Card Details</h1>
+        <p className="stripe-form-subtitle">
           Complete your payment securely using Stripe test card.
         </p>
         <StripeProviderWrapper publishableKey={stripeConfig.publishableKey}>
@@ -358,25 +368,27 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
   if (orderPlaced) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-4 text-center">
-        <div className="mb-6 rounded-full bg-green-100 p-8 shadow-sm">
-          <Icons.Check className="h-16 w-16 text-green-600" />
+      <div className="checkout-success-container">
+        <div className="success-icon-wrapper">
+          <Icons.Check className="success-icon" />
         </div>
-        <h1 className="mb-2 text-3xl font-bold text-gray-900">
-          Order Placed Successfully!
-        </h1>
-        <p className="mb-8 max-w-md text-gray-500">
+        <h1 className="success-title">Order Placed Successfully!</h1>
+        <p className="success-message">
           Thank you for shopping with BuildHive. Your order{" "}
-          <span className="font-bold text-gray-900">
+          <span className="success-order-number">
             #BH-{Math.floor(Math.random() * 100000)}
           </span>{" "}
           has been confirmed and will be shipped shortly.
         </p>
-        <div className="flex gap-4">
-          <Button onClick={() => onNavigate("home")} variant="outline">
+        <div className="success-buttons">
+          <Button
+            onClick={() => onNavigate("home")}
+            variant="outline"
+            className="success-button-outline"
+          >
             Back to Home
           </Button>
-          <Button onClick={() => onNavigate("products")}>
+          <Button onClick={() => onNavigate("products")} className="success-button-primary">
             Continue Shopping
           </Button>
         </div>
@@ -385,72 +397,62 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 py-10">
-      <div className="container mx-auto px-4 lg:px-8">
+    <div className="checkout-page">
+      <div className="checkout-container">
         {/* Breadcrumb */}
-        <nav className="mb-8 flex items-center gap-2 text-sm font-medium">
+        <nav className="breadcrumb-nav">
           <span
-            className="text-gray-500 cursor-pointer"
+            className="breadcrumb-link"
             onClick={() => onNavigate("cart")}
           >
             Cart
           </span>
-          <Icons.ChevronRight className="h-4 w-4 text-gray-400" />
-          <span className="text-primary">Checkout</span>
-          <Icons.ChevronRight className="h-4 w-4 text-gray-400" />
-          <span className="text-gray-300">Confirmation</span>
+          <Icons.ChevronRight className="breadcrumb-separator" />
+          <span className="breadcrumb-active">Checkout</span>
+          <Icons.ChevronRight className="breadcrumb-separator" />
+          <span className="breadcrumb-link">Confirmation</span>
         </nav>
 
-        <form
-          onSubmit={handlePlaceOrder}
-          className="flex flex-col gap-8 lg:flex-row"
-        >
+        <form onSubmit={handlePlaceOrder} className="checkout-form-wrapper">
           {/* Left Column - Form */}
-          <div className="flex-grow space-y-6">
+          <div className="checkout-form-main">
             {/* Contact Info */}
-            <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-              <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-gray-900">
-                <Icons.User className="h-5 w-5 text-primary" /> Contact
+            <div className="checkout-form-section">
+              <h2 className="section-title">
+                <Icons.User className="section-title-icon" /> Contact
                 Information
               </h2>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-gray-700">
-                    Email Address
-                  </label>
+              <div className="form-group">
+                <div className="form-field">
+                  <label className="form-label">Email Address</label>
                   <input
                     required
                     type="email"
                     placeholder="john@example.com"
-                    className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                    className="form-input"
                   />
                 </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-gray-700">
-                    Phone Number
-                  </label>
+                <div className="form-field">
+                  <label className="form-label">Phone Number</label>
                   <input
                     required
                     type="tel"
                     placeholder="0300 1234567"
-                    className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                    className="form-input"
                   />
                 </div>
               </div>
             </div>
 
             {/* Shipping Address */}
-            <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-              <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-gray-900">
-                <Icons.MapPin className="h-5 w-5 text-primary" /> Shipping
-                Address
+            <div className="checkout-form-section">
+              <h2 className="section-title">
+                <Icons.MapPin className="section-title-icon" /> Shipping Address
               </h2>
               <div className="space-y-4">
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-gray-700">
-                      Full Name *
-                    </label>
+                <div className="form-group">
+                  <div className="form-field">
+                    <label className="form-label">Full Name *</label>
                     <input
                       required
                       type="text"
@@ -459,18 +461,16 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       onChange={handleInputChange}
                       placeholder="John Doe"
                       aria-label="Full Name"
-                      className={`w-full rounded-lg border ${
-                        errors.full_name ? "border-red-500" : "border-gray-200"
-                      } bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary`}
+                      className={`form-input ${
+                        errors.full_name ? "error" : ""
+                      }`}
                     />
                     {errors.full_name && (
-                      <p className="text-xs text-red-500">{errors.full_name}</p>
+                      <p className="form-error">{errors.full_name}</p>
                     )}
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-gray-700">
-                      Phone Number *
-                    </label>
+                  <div className="form-field">
+                    <label className="form-label">Phone Number *</label>
                     <input
                       required
                       type="tel"
@@ -479,19 +479,15 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       onChange={handleInputChange}
                       placeholder="0300 1234567"
                       aria-label="Phone"
-                      className={`w-full rounded-lg border ${
-                        errors.phone ? "border-red-500" : "border-gray-200"
-                      } bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary`}
+                      className={`form-input ${errors.phone ? "error" : ""}`}
                     />
                     {errors.phone && (
-                      <p className="text-xs text-red-500">{errors.phone}</p>
+                      <p className="form-error">{errors.phone}</p>
                     )}
                   </div>
                 </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-gray-700">
-                    Street Address *
-                  </label>
+                <div className="form-field">
+                  <label className="form-label">Street Address *</label>
                   <input
                     required
                     type="text"
@@ -500,20 +496,16 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                     onChange={handleInputChange}
                     placeholder="House # 123, Street Name"
                     aria-label="Address Line 1"
-                    className={`w-full rounded-lg border ${
-                      errors.address_line1
-                        ? "border-red-500"
-                        : "border-gray-200"
-                    } bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary`}
+                    className={`form-input ${
+                      errors.address_line1 ? "error" : ""
+                    }`}
                   />
                   {errors.address_line1 && (
-                    <p className="text-xs text-red-500">
-                      {errors.address_line1}
-                    </p>
+                    <p className="form-error">{errors.address_line1}</p>
                   )}
                 </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-gray-700">
+                <div className="form-field">
+                  <label className="form-label">
                     Apartment, Suite, etc. (optional)
                   </label>
                   <input
@@ -523,14 +515,12 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                     onChange={handleInputChange}
                     placeholder="Apartment 4B"
                     aria-label="Address Line 2"
-                    className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                    className="form-input"
                   />
                 </div>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-gray-700">
-                      City *
-                    </label>
+                <div className="form-group-3col">
+                  <div className="form-field">
+                    <label className="form-label">City *</label>
                     <input
                       required
                       type="text"
@@ -539,18 +529,14 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       onChange={handleInputChange}
                       placeholder="Karachi"
                       aria-label="City"
-                      className={`w-full rounded-lg border ${
-                        errors.city ? "border-red-500" : "border-gray-200"
-                      } bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary`}
+                      className={`form-input ${errors.city ? "error" : ""}`}
                     />
                     {errors.city && (
-                      <p className="text-xs text-red-500">{errors.city}</p>
+                      <p className="form-error">{errors.city}</p>
                     )}
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-gray-700">
-                      State/Province *
-                    </label>
+                  <div className="form-field">
+                    <label className="form-label">State/Province *</label>
                     <input
                       required
                       type="text"
@@ -559,18 +545,14 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       onChange={handleInputChange}
                       placeholder="Sindh"
                       aria-label="State"
-                      className={`w-full rounded-lg border ${
-                        errors.state ? "border-red-500" : "border-gray-200"
-                      } bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary`}
+                      className={`form-input ${errors.state ? "error" : ""}`}
                     />
                     {errors.state && (
-                      <p className="text-xs text-red-500">{errors.state}</p>
+                      <p className="form-error">{errors.state}</p>
                     )}
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-gray-700">
-                      Postal Code *
-                    </label>
+                  <div className="form-field">
+                    <label className="form-label">Postal Code *</label>
                     <input
                       required
                       type="text"
@@ -579,21 +561,17 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       onChange={handleInputChange}
                       placeholder="75500"
                       aria-label="Postal Code"
-                      className={`w-full rounded-lg border ${
-                        errors.postal_code
-                          ? "border-red-500"
-                          : "border-gray-200"
-                      } bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary`}
+                      className={`form-input ${
+                        errors.postal_code ? "error" : ""
+                      }`}
                     />
                     {errors.postal_code && (
-                      <p className="text-xs text-red-500">
-                        {errors.postal_code}
-                      </p>
+                      <p className="form-error">{errors.postal_code}</p>
                     )}
                   </div>
                 </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-gray-700">
+                <div className="form-field">
+                  <label className="form-label">
                     Order Notes (optional)
                   </label>
                   <textarea
@@ -602,39 +580,24 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                     onChange={handleInputChange}
                     rows={3}
                     placeholder="Any special instructions for delivery..."
-                    className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary resize-none"
+                    className="form-textarea"
                   />
                 </div>
               </div>
             </div>
 
             {/* Payment Method */}
-            <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-              <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-gray-900">
-                <Icons.CreditCard className="h-5 w-5 text-primary" /> Payment
+            <div className="checkout-form-section">
+              <h2 className="section-title">
+                <Icons.CreditCard className="section-title-icon" /> Payment
                 Method
               </h2>
-              <div className="space-y-3">
-                {[
-                  {
-                    id: "cod",
-                    name: "Cash on Delivery",
-                    icon: Icons.Cash,
-                    desc: "Pay when you receive your order",
-                  },
-                  {
-                    id: "card",
-                    name: "Credit / Debit Card",
-                    icon: Icons.CreditCard,
-                    desc: "Secure payment via Stripe",
-                  },
-                ].map((method) => (
+              <div className="payment-methods">
+                {PAYMENT_METHODS.map((method) => (
                   <label
                     key={method.id}
-                    className={`flex cursor-pointer items-center gap-4 rounded-xl border p-4 transition-all ${
-                      paymentMethod === method.id
-                        ? "border-primary bg-primary/5 ring-1 ring-primary"
-                        : "border-gray-200 hover:bg-gray-50"
+                    className={`payment-method-label ${
+                      paymentMethod === method.id ? "active" : ""
                     }`}
                   >
                     <input
@@ -643,16 +606,20 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       value={method.id}
                       checked={paymentMethod === method.id}
                       onChange={(e) => setPaymentMethod(e.target.value)}
-                      className="h-4 w-4 text-primary border-gray-300 focus:ring-primary"
+                      className="form-radio"
                     />
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-600 shadow-sm">
-                      <method.icon className="h-5 w-5" />
+                    <div className="payment-method-icon-wrapper">
+                      {method.id === "cod" ? (
+                        <Icons.Cash className="payment-method-icon" />
+                      ) : (
+                        <Icons.CreditCard className="payment-method-icon" />
+                      )}
                     </div>
-                    <div>
-                      <div className="font-bold text-gray-900">
+                    <div className="payment-method-content">
+                      <div className="payment-method-name">
                         {method.name}
                       </div>
-                      <div className="text-xs text-gray-500">{method.desc}</div>
+                      <div className="payment-method-desc">{method.desc}</div>
                     </div>
                   </label>
                 ))}
@@ -661,29 +628,25 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
           </div>
 
           {/* Right Column - Order Summary */}
-          <div className="w-full lg:w-96">
-            <div className="sticky top-24 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-              <h2 className="mb-6 text-xl font-bold text-gray-900">
-                Order Summary
-              </h2>
+          <div className="order-summary-container">
+            <div className="order-summary-sticky">
+              <h2 className="order-summary-title">Order Summary</h2>
 
-              <div className="mb-6 max-h-60 overflow-y-auto pr-2 space-y-4 no-scrollbar">
+              <div className="order-items-scroll no-scrollbar">
                 {cartItems.map((item) => (
-                  <div key={item.id} className="flex gap-3">
-                    <div className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100 border border-gray-200">
+                  <div key={item.id} className="order-item">
+                    <div className="order-item-image-wrapper">
                       <img
                         src={item.image}
                         alt=""
-                        className="h-full w-full object-cover"
+                        className="order-item-image"
                       />
                     </div>
-                    <div className="flex-1">
-                      <h4 className="text-sm font-medium text-gray-900 line-clamp-1">
-                        {item.title}
-                      </h4>
-                      <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <div className="order-item-details">
+                      <h4 className="order-item-title">{item.title}</h4>
+                      <div className="order-item-meta">
                         <span>Qty: {item.quantity}</span>
-                        <span className="font-medium text-gray-900">
+                        <span className="order-item-price">
                           PKR {(item.price * item.quantity).toLocaleString()}
                         </span>
                       </div>
@@ -692,43 +655,37 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 ))}
               </div>
 
-              <div className="border-t border-gray-100 pt-4 space-y-3 text-sm">
-                <div className="flex justify-between text-gray-600">
+              <div className="order-summary-divider">
+                <div className="order-summary-row">
                   <span>Subtotal</span>
-                  <span className="font-medium text-gray-900">
+                  <span className="order-summary-row-amount">
                     PKR {subtotal.toLocaleString()}
                   </span>
                 </div>
-                <div className="flex justify-between text-gray-600">
-                  {/* Shipping charges removed */}
-                </div>
-                <div className="flex justify-between text-gray-600">
+                <div className="order-summary-row">
                   <span>Tax (5%)</span>
-                  <span className="font-medium text-gray-900">
+                  <span className="order-summary-row-amount">
                     PKR {tax.toLocaleString()}
                   </span>
                 </div>
               </div>
 
-              <div className="mt-4 border-t border-gray-100 pt-4">
-                <div className="flex justify-between text-lg font-bold text-gray-900">
-                  <span>Total</span>
-                  <span>PKR {total.toLocaleString()}</span>
-                </div>
+              <div className="order-total">
+                <span>Total</span>
+                <span>PKR {total.toLocaleString()}</span>
               </div>
 
-              <Button
+              <button
                 type="submit"
-                size="lg"
-                className="mt-8 w-full shadow-lg shadow-primary/25 disabled:opacity-70"
+                className="submit-button"
                 disabled={isProcessing}
               >
                 {isProcessing ? "Processing..." : "Place Order"}
-              </Button>
+              </button>
 
-              <div className="mt-4 text-center text-xs text-gray-500">
+              <div className="terms-text">
                 By placing this order, you agree to our{" "}
-                <a href="#" className="underline">
+                <a href="#" className="terms-link">
                   Terms of Service
                 </a>
               </div>

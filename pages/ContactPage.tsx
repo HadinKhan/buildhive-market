@@ -636,37 +636,34 @@ const contactPageStyles = `
   position: relative;
   overflow: hidden;
   width: 100%;
-  padding: 16px;
-  background: linear-gradient(135deg, #7c3aed, #6d28d9);
-  color: white;
-  border: none;
-  border-radius: 14px;
-  font-size: 16px;
-  font-weight: 600;
+  min-height: 54px;
+  padding: 0 28px;
+  background: linear-gradient(180deg, rgba(196, 181, 253, 0.12), rgba(124, 58, 237, 0.06)), #1a1426;
+  color: #f5f3ff;
+  border: 1px solid rgba(167, 139, 250, 0.44);
+  border-radius: 16px;
+  font-size: 15px;
+  font-weight: 700;
   cursor: pointer;
-  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.25s ease, border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 14px 30px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(124, 58, 237, 0.22);
 }
 
 .submit-btn::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-  transition: left 0.6s ease;
+  display: none;
 }
 
-.submit-btn:hover::before { left: 100%; }
+.submit-btn:hover::before { display: none; }
 
 .submit-btn:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 15px 40px rgba(124, 58, 237, 0.4);
+  transform: translateY(-2px);
+  border-color: rgba(196, 181, 253, 0.68);
+  background: #211830;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 18px 38px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(167, 139, 250, 0.22);
 }
 
 .submit-btn:disabled {

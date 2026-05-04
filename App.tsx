@@ -18,17 +18,18 @@ import { ProductsPage } from "./pages/ProductsPage";
 import { ProductDetailPage } from "./pages/ProductDetailPage";
 import { CartPage } from "./pages/CartPage";
 import { CheckoutPage } from "./pages/CheckoutPage";
-import { CategoriesPage } from "./pages/CategoriesPage";
 import { ContactPage } from "./pages/ContactPage";
 import { AboutPage } from "./pages/AboutPage";
+import { BlogPage } from "./pages/BlogPage";
+import { BlogDetailPage } from "./pages/BlogDetailPage";
 import { SignInPage } from "./pages/SignInPage";
 import { GetStartedPage } from "./pages/GetStartedPage";
 import { AccountPage } from "./pages/AccountPage";
 import { TermsPage } from "./pages/TermsPage";
 import { PrivacyPage } from "./pages/PrivacyPage";
-import { FAQPage } from "./pages/FAQPage";
 import { ServicesPage } from "./pages/ServicesPage";
 import { NotificationPage } from "./pages/NotificationPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { productService } from "./src/services/productService";
 import { cartService } from "./src/services/cartService";
 
@@ -123,6 +124,20 @@ const ProductDetailWrapper: React.FC<{
       product={product}
       onNavigate={onNavigate}
       onAddToCart={onAddToCart}
+    />
+  );
+};
+
+const BlogDetailWrapper: React.FC<{
+  onNavigate: (page: string) => void;
+}> = ({ onNavigate }) => {
+  const { postId } = useParams<{ postId: string }>();
+
+  return (
+    <BlogDetailPage
+      postId={postId || ""}
+      onNavigate={onNavigate}
+      onBack={() => onNavigate(postId ? `blog?post=${postId}` : "blog")}
     />
   );
 };
@@ -469,9 +484,10 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-white font-sans text-gray-900">
+      {/** Keep the header highlight tied to the current router path */}
       <Header
         onNavigate={navigateTo}
-        activePage={window.location.pathname.slice(1) || "home"}
+        activePage={location.pathname.replace(/^\/+/, "").split("/")[0] || "home"}
         cartItemCount={cart.reduce((acc, item) => acc + item.quantity, 0)}
         user={user}
         onLogout={handleLogout}
@@ -491,10 +507,7 @@ const App: React.FC = () => {
           }
         />
 
-        <Route
-          path="/categories"
-          element={<CategoriesPage onNavigate={navigateTo} />}
-        />
+        {/* Categories page removed per project cleanup */}
 
         <Route
           path="/services"
@@ -507,6 +520,13 @@ const App: React.FC = () => {
         />
 
         <Route path="/about" element={<AboutPage onNavigate={navigateTo} />} />
+
+        <Route path="/blog" element={<BlogPage onNavigate={navigateTo} />} />
+
+        <Route
+          path="/blog/:postId"
+          element={<BlogDetailWrapper onNavigate={navigateTo} />}
+        />
 
         <Route
           path="/product-detail/:id"
@@ -589,7 +609,9 @@ const App: React.FC = () => {
 
         <Route path="/privacy" element={<PrivacyPage />} />
 
-        <Route path="/faq" element={<FAQPage />} />
+        {/* FAQ page removed per project cleanup */}
+
+        <Route path="/settings" element={<SettingsPage onNavigate={navigateTo} />} />
       </Routes>
 
       <Footer />

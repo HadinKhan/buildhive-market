@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { Icons } from "../components/Icons";
 import { Button } from "../components/Button";
 import { useAuth } from "../src/context/AuthContext";
+import { signInPageData } from "../src/data/signInPageData";
+import { authPageStyles } from "../src/styles/authPageStyles";
 
 interface SignInPageProps {
   onNavigate: (page: string) => void;
@@ -72,62 +74,56 @@ export const SignInPage: React.FC<SignInPageProps> = ({
   };
 
   return (
-    <div className="flex min-h-[calc(100vh-80px)] items-center justify-center bg-slate-50 px-4 py-12">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-lg border border-gray-100">
-        <div className="mb-8 text-center">
-          <h1 className="mb-2 text-2xl font-bold text-gray-900">
-            Welcome Back
-          </h1>
-          <p className="text-sm text-gray-500">
-            Sign in to access your BuildHive account
-          </p>
+    <div className="auth-root">
+      <style>{authPageStyles}</style>
+
+      <div className="auth-card signin">
+        <div className="auth-header">
+          <span className="auth-badge">{signInPageData.badge}</span>
+          <h1>{signInPageData.title}</h1>
+          <p>{signInPageData.subtitle}</p>
         </div>
 
         {error && (
-          <div className="mb-6 rounded-lg bg-red-50 border border-red-200 p-4">
-            <div className="flex items-center gap-2">
-              <Icons.AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
-              <p className="text-sm text-red-800">{error}</p>
-            </div>
+          <div className="auth-error">
+            <Icons.AlertCircle className="h-5 w-5" />
+            <span>{error}</span>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label className="mb-2 block text-sm font-medium text-gray-700">
-              Email Address
-            </label>
-            <div className="relative">
-              <Icons.Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+        <form onSubmit={handleSubmit}>
+          <div className="auth-field">
+            <label className="auth-label">{signInPageData.form.emailLabel}</label>
+            <div className="auth-input-wrap">
+              <Icons.Mail className="auth-icon" />
               <input
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="w-full rounded-lg border border-gray-300 bg-white py-2.5 pl-10 pr-4 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                placeholder={signInPageData.form.emailPlaceholder}
+                className="auth-input with-left-icon"
               />
             </div>
           </div>
 
-          <div>
-            <label className="mb-2 block text-sm font-medium text-gray-700">
-              Password
-            </label>
-            <div className="relative">
-              <Icons.Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+          <div className="auth-field">
+            <label className="auth-label">{signInPageData.form.passwordLabel}</label>
+            <div className="auth-input-wrap">
+              <Icons.Lock className="auth-icon" />
               <input
                 type={showPassword ? "text" : "password"}
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full rounded-lg border border-gray-300 bg-white py-2.5 pl-10 pr-10 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                placeholder={signInPageData.form.passwordPlaceholder}
+                className="auth-input with-left-icon with-right-icon"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                className="auth-icon-btn"
+                aria-label={showPassword ? "Hide password" : "Show password"}
               >
                 {showPassword ? (
                   <Icons.EyeOff className="h-5 w-5" />
@@ -138,39 +134,33 @@ export const SignInPage: React.FC<SignInPageProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center justify-between text-sm">
-            <label className="flex items-center gap-2 cursor-pointer">
+          <div className="auth-actions">
+            <label className="auth-check">
               <input
                 type="checkbox"
-                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
               />
-              <span className="text-gray-600">Remember me</span>
+              <span>{signInPageData.form.rememberMe}</span>
             </label>
             <button
               type="button"
               onClick={() => setShowForgotPassword(true)}
-              className="font-medium text-primary hover:text-primary-hover"
+              className="auth-link"
             >
-              Forgot Password?
+              {signInPageData.form.forgotPassword}
             </button>
           </div>
 
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Signing In..." : "Sign In"}
+            {loading ? signInPageData.form.submitLoading : signInPageData.form.submitIdle}
           </Button>
         </form>
 
-        <div className="relative my-8">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-200"></div>
-          </div>
-          <div className="relative flex justify-center">
-            <span className="bg-white px-2 text-xs text-gray-500">OR</span>
-          </div>
+        <div className="auth-divider">
+          <span>{signInPageData.dividerText}</span>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <button className="flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
+        <div className="auth-social-grid">
+          <button className="auth-social-btn">
             <svg className="h-5 w-5" viewBox="0 0 24 24">
               <path
                 d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -189,36 +179,34 @@ export const SignInPage: React.FC<SignInPageProps> = ({
                 fill="#EA4335"
               />
             </svg>
-            Google
+            {signInPageData.providers[0]}
           </button>
-          <button className="flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
-            <Icons.Facebook className="h-5 w-5 text-blue-600" />
-            Facebook
+          <button className="auth-social-btn">
+            <Icons.Facebook className="h-5 w-5 text-blue-500" />
+            {signInPageData.providers[1]}
           </button>
         </div>
 
-        <div className="mt-8 text-center text-sm text-gray-500">
-          Don't have an account?{" "}
+        <div className="auth-bottom">
+          {signInPageData.bottomText.prefix}{" "}
           <span
             onClick={() => onNavigate("get-started")}
-            className="cursor-pointer font-bold text-primary hover:underline"
+            className="auth-link"
           >
-            Get Started
+            {signInPageData.bottomText.action}
           </span>
         </div>
       </div>
 
       {/* Forgot Password Modal */}
       {showForgotPassword && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-900">
-                Reset Password
-              </h2>
+        <div className="auth-modal-backdrop">
+          <div className="auth-modal">
+            <div className="auth-modal-header">
+              <h2>{signInPageData.forgotPassword.title}</h2>
               <button
                 onClick={closeForgotPasswordModal}
-                className="text-gray-400 hover:text-gray-600"
+                className="auth-modal-close"
                 aria-label="Close modal"
               >
                 <Icons.Close className="h-6 w-6" />
@@ -226,69 +214,53 @@ export const SignInPage: React.FC<SignInPageProps> = ({
             </div>
 
             {resetSuccess ? (
-              <div className="text-center py-6">
-                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-                  <Icons.Check className="h-8 w-8 text-green-600" />
+              <div className="auth-success">
+                <div className="auth-success-icon">
+                  <Icons.Check className="h-8 w-8" />
                 </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  Email Sent!
-                </h3>
-                <p className="text-gray-600 mb-6">
-                  If an account exists with this email, you will receive
-                  password reset instructions shortly.
-                </p>
+                <h3>{signInPageData.forgotPassword.successTitle}</h3>
+                <p>{signInPageData.forgotPassword.successDescription}</p>
                 <Button onClick={closeForgotPasswordModal} className="w-full">
-                  Back to Sign In
+                  {signInPageData.forgotPassword.back}
                 </Button>
               </div>
             ) : (
               <>
-                <p className="text-gray-600 mb-6">
-                  Enter your email address and we'll send you instructions to
-                  reset your password.
-                </p>
+                <p>{signInPageData.forgotPassword.description}</p>
 
                 {resetError && (
-                  <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-4">
-                    <div className="flex items-center gap-2">
-                      <Icons.AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
-                      <p className="text-sm text-red-800">{resetError}</p>
-                    </div>
+                  <div className="auth-error">
+                    <Icons.AlertCircle className="h-5 w-5" />
+                    <span>{resetError}</span>
                   </div>
                 )}
 
-                <form onSubmit={handleForgotPassword} className="space-y-4">
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-gray-700">
-                      Email Address
-                    </label>
-                    <div className="relative">
-                      <Icons.Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <form onSubmit={handleForgotPassword}>
+                  <div className="auth-field">
+                    <label className="auth-label">{signInPageData.form.emailLabel}</label>
+                    <div className="auth-input-wrap">
+                      <Icons.Mail className="auth-icon" />
                       <input
                         type="email"
                         required
                         value={resetEmail}
                         onChange={(e) => setResetEmail(e.target.value)}
-                        placeholder="you@example.com"
-                        className="w-full rounded-lg border border-gray-300 bg-white py-2.5 pl-10 pr-4 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                        placeholder={signInPageData.form.emailPlaceholder}
+                        className="auth-input with-left-icon"
                       />
                     </div>
                   </div>
 
-                  <div className="flex gap-3">
-                    <Button
-                      type="button"
-                      onClick={closeForgotPasswordModal}
-                      className="flex-1 bg-gray-100 text-gray-700 hover:bg-gray-200"
-                    >
-                      Cancel
-                    </Button>
+                  <div className="auth-form-actions">
+                    <button type="button" onClick={closeForgotPasswordModal} className="btn-cancel">
+                      {signInPageData.forgotPassword.cancel}
+                    </button>
                     <Button
                       type="submit"
-                      className="flex-1"
+                      className="btn-submit"
                       disabled={resetLoading}
                     >
-                      {resetLoading ? "Sending..." : "Send Reset Link"}
+                      {resetLoading ? signInPageData.forgotPassword.submitLoading : signInPageData.forgotPassword.submitIdle}
                     </Button>
                   </div>
                 </form>

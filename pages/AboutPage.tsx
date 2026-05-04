@@ -126,7 +126,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
         </section>
 
         {/* Our Story Section */}
-        <section className="section">
+        <section id="story" className="section">
           <div className="story-grid">
             <div className="story-content reveal-left">
               <span className="section-label">Our Story</span>
@@ -320,8 +320,11 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
           <div className="timeline">
             <div className="timeline-line"></div>
 
-            {aboutPageData.timeline.map((item) => (
-              <div key={item.step} className="timeline-item">
+            {aboutPageData.timeline.map((item, index) => (
+              <div
+                key={item.step}
+                className={`timeline-item ${index % 2 === 0 ? "timeline-left" : "timeline-right"}`}
+              >
                 <div className={`timeline-dot ${item.active ? "active" : ""}`}>
                   {item.step}
                 </div>
@@ -376,7 +379,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
         {/* Partners Section */}
         <section className="partners-section">
           <div className="section-header reveal" style={{ marginBottom: "40px" }}>
-            <h2 className="section-title partners-title">Trusted by industry leaders</h2>
+            <span className="section-label partners-title">Trusted by industry leaders</span>
           </div>
           <div className="partners-grid">
             {aboutPageData.partners.map((partner, index) => (
@@ -395,7 +398,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
         </section>
 
         {/* Team Section */}
-        <section className="section">
+        <section id="team" className="section">
           <div className="section-header reveal">
             <span className="section-label">The People</span>
             <h2 className="section-title">Meet Our Team</h2>
@@ -457,7 +460,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
                 flexWrap: "wrap",
               }}
             >
-              <button className="btn-primary" onClick={() => onNavigate("products")}>
+              <button className="btn-primary hero-primary-button" onClick={() => onNavigate("products") }>
                 <span className="btn-label">Get Started Now</span>
                 <Icons.ArrowRight className="h-[18px] w-[18px]" />
               </button>

@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Icons } from "./Icons";
 import { Button } from "./Button";
 import { User } from "../types";
@@ -20,12 +20,15 @@ export const Header: React.FC<HeaderProps> = ({
   user: propUser,
   onLogout: propOnLogout,
 }) => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const { isAuthenticated, user: authUser, logout: authLogout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [headerSearch, setHeaderSearch] = useState("");
+  const [isDarkMode, setIsDarkMode] = useState(true);
   const dropdownTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleDropdownEnter = () => {
@@ -47,6 +50,10 @@ export const Header: React.FC<HeaderProps> = ({
   const displayName = (user as any)?.full_name || (user as any)?.fullName || "Account";
   const displayEmail = user?.email || "";
   const displayRole = (user as any)?.role || "Buyer + Seller";
+  const currentActivePage = activePage || (() => {
+    const pathname = location.pathname.replace(/^\/+/, "");
+    return pathname.split("/")[0] || "home";
+  })();
   const submenuIconToneClasses: Record<string, string> = {
     amber: "bg-gradient-to-br from-amber-500 to-amber-600",
     blue: "bg-gradient-to-br from-blue-500 to-blue-600",
@@ -68,6 +75,10 @@ export const Header: React.FC<HeaderProps> = ({
     if (page === "ai") {
       setIsAIModalOpen(true);
       setIsMobileMenuOpen(false); // Close mobile menu if open
+      return;
+    }
+    if (page === "toggle-theme") {
+      setIsDarkMode(!isDarkMode);
       return;
     }
     if (onNavigate) onNavigate(page);
@@ -151,9 +162,9 @@ export const Header: React.FC<HeaderProps> = ({
                       slug: "products",
                     },
                     { label: "About", slug: "about", submenu: [
-                        { title: "About BuildHive", desc: "Our mission & story", slug: "about-company", icon: "Building", tone: "violet" },
-                        { title: "Our Team", desc: "People behind BuildHive", slug: "about-team", icon: "Users", tone: "cyan" },
-                        { title: "Blog & Resources", desc: "Guides, news & insights", slug: "about-blog", icon: "Book", tone: "amber" },
+                        { title: "About BuildHive", desc: "Our mission & story", url: "/#/about#story", icon: "Building", tone: "violet" },
+                        { title: "Our Team", desc: "People behind BuildHive", url: "/#/about#team", icon: "Users", tone: "cyan" },
+                        { title: "Blog & Resources", desc: "Guides, news & insights", url: "http://localhost:4200/about#/blog", icon: "Book", tone: "amber" },
                       ] },
                     { label: "Contact", slug: "contact" },
                   ];
@@ -173,7 +184,7 @@ export const Header: React.FC<HeaderProps> = ({
                           <button
                             onClick={(e) => handleNav(e, item.slug)}
                             className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                              openDropdown === item.slug || activePage === item.slug
+                              openDropdown === item.slug || currentActivePage === item.slug
                                 ? "bg-violet-500/15 text-violet-300"
                                 : "text-gray-200 hover:bg-violet-500/10 hover:text-violet-300"
                             }`}
@@ -189,9 +200,33 @@ export const Header: React.FC<HeaderProps> = ({
                                   const IconComponent = (Icons as any)[s.icon] || Icons.Package;
                                   return (
                                     <a
-                                      key={s.slug}
-                                      href="#"
-                                      onClick={(e) => handleNav(e, s.slug)}
+                                      key={s.slug || s.title}
+                                      href={s.url || '#'}
+                                      onClick={(e) => {
+                                        if (s.url) {
+                                          // Internal about anchors: use SPA navigation then scroll
+                                          if (s.url.startsWith('/#/about#')) {
+                                              e.preventDefault();
+                                              // Set the full hash so browser (HashRouter) updates and native anchor scrolling occurs
+                                              const hashPart = s.url.replace('/#', ''); // yields '/about#story' -> '/about#story'
+                                              window.location.hash = hashPart;
+                                              setIsMobileMenuOpen(false);
+                                              setIsUserMenuOpen(false);
+                                            } else if (s.url.startsWith('http')) {
+                                            // External link - go full nav
+                                            // allow default behavior to follow external URL
+                                            return;
+                                          } else {
+                                            // For other internal-style urls, fall back to full assignment
+                                            e.preventDefault();
+                                            window.location.href = s.url;
+                                            setIsMobileMenuOpen(false);
+                                            setIsUserMenuOpen(false);
+                                          }
+                                        } else {
+                                          handleNav(e, s.slug);
+                                        }
+                                      }}
                                       className="group flex items-start gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-zinc-900"
                                     >
                                       <div className={`h-10 w-10 flex shrink-0 items-center justify-center rounded-xl ${submenuIconToneClasses[s.tone] || submenuIconToneClasses.violet} shadow-lg shadow-black/25 transition-transform duration-300 group-hover:scale-110`}>
@@ -235,14 +270,12 @@ export const Header: React.FC<HeaderProps> = ({
                       label: "Product",
                       slug: "products",
                     },
-                    { label: "Dashboard", slug: "account" },
-                    {
-                      label: "About",
+                    { label: "About",
                       slug: "about",
                       submenu: [
-                        { title: "About BuildHive", desc: "Our mission & story", slug: "about-company", icon: "Building", tone: "violet" },
-                        { title: "Our Team", desc: "People behind BuildHive", slug: "about-team", icon: "Users", tone: "cyan" },
-                        { title: "Blog & Resources", desc: "Guides, news & insights", slug: "about-blog", icon: "Book", tone: "amber" },
+                        { title: "About BuildHive", desc: "Our mission & story", url: "/#/about#story", icon: "Building", tone: "violet" },
+                        { title: "Our Team", desc: "People behind BuildHive", url: "/#/about#team", icon: "Users", tone: "cyan" },
+                        { title: "Blog & Resources", desc: "Guides, news & insights", url: "http://localhost:4200/about#/blog", icon: "Book", tone: "amber" },
                       ],
                     },
                     { label: "Contact", slug: "contact" },
@@ -263,7 +296,7 @@ export const Header: React.FC<HeaderProps> = ({
                           <button
                             onClick={(e) => handleNav(e, item.slug)}
                             className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                              openDropdown === item.slug || activePage === item.slug
+                              openDropdown === item.slug || currentActivePage === item.slug
                                 ? "bg-violet-500/15 text-violet-300"
                                 : "text-gray-200 hover:bg-violet-500/10 hover:text-violet-300"
                             }`}
@@ -279,9 +312,18 @@ export const Header: React.FC<HeaderProps> = ({
                                   const IconComponent = (Icons as any)[s.icon] || Icons.Package;
                                   return (
                                     <a
-                                      key={s.slug}
-                                      href="#"
-                                      onClick={(e) => handleNav(e, s.slug)}
+                                      key={s.slug || s.title}
+                                      href={s.url || '#'}
+                                      onClick={(e) => {
+                                        if (s.url) {
+                                          e.preventDefault();
+                                          window.location.href = s.url;
+                                          setIsMobileMenuOpen(false);
+                                          setIsUserMenuOpen(false);
+                                        } else {
+                                          handleNav(e, s.slug);
+                                        }
+                                      }}
                                       className="group flex items-start gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-zinc-900"
                                     >
                                       <div className={`h-10 w-10 flex shrink-0 items-center justify-center rounded-xl ${submenuIconToneClasses[s.tone] || submenuIconToneClasses.violet} shadow-lg shadow-black/25 transition-transform duration-300 group-hover:scale-110`}>
@@ -362,21 +404,21 @@ export const Header: React.FC<HeaderProps> = ({
 
                         <div className="grid gap-2">
                           {[
-                            { label: "My Profile", desc: "Portfolio & reviews", slug: "account", icon: Icons.User },
-                            { label: "Settings", desc: "Account preferences", slug: "account", icon: Icons.Settings },
-                            { label: "Billing & Payments", desc: "Refunds & history", slug: "checkout", icon: Icons.CreditCard },
+                            { label: "Dashboard", desc: "Portfolio & reviews", slug: "account", icon: Icons.Dashboard, gradient: "from-blue-500 to-blue-600" },
+                            { label: "Settings", desc: "Account preferences", slug: "settings", icon: Icons.Settings, gradient: "from-violet-500 to-violet-600" },
+                            { label: isDarkMode ? "Light Mode" : "Dark Mode", desc: "", slug: "toggle-theme", icon: isDarkMode ? Icons.Sun : Icons.Moon, gradient: "from-amber-500 to-amber-600" },
                           ].map((item) => (
                             <button
                               key={item.label}
                               onClick={(e) => handleNav(e, item.slug)}
                               className="flex items-center gap-3 rounded-2xl px-3 py-3 text-left transition-colors hover:bg-white/5"
                             >
-                              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#20192f] text-[#c8b7ff]">
-                                <item.icon className="h-5 w-5" />
+                              <div className={`flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br ${item.gradient} text-white`}>
+                                <item.icon className="h-5 w-5 stroke-[2]" />
                               </div>
                               <div>
                                 <div className="text-base font-semibold text-white">{item.label}</div>
-                                <div className="text-sm text-gray-400">{item.desc}</div>
+                                {item.desc && <div className="text-sm text-gray-400">{item.desc}</div>}
                               </div>
                             </button>
                           ))}
@@ -436,7 +478,6 @@ export const Header: React.FC<HeaderProps> = ({
                       { label: "Categories", slug: "categories" },
                       { label: "Services", slug: "services" },
                       { label: "AI", slug: "ai" },
-                      { label: "Dashboard", slug: "account" },
                       { label: "About Us", slug: "about" },
                       { label: "Contact", slug: "contact" },
                     ]
@@ -614,17 +655,17 @@ const footerColumns: FooterColumn[] = [
       { label: "Home", path: "home" },
       { label: "Services", path: "services" },
       { label: "Products", path: "products" },
-      { label: "Dashboard", path: "account" },
       { label: "About", path: "about" },
       { label: "Contact", path: "contact" },
     ],
   },
   {
-    title: "AI Tools",
+    title: "Useful Links",
     links: [
-      { label: "AI Chatbot", path: "chatbot" },
-      { label: "Cost Estimator", path: "cost-estimate" },
-      { label: "Smart Recommendations", path: "ai-recommend" },
+      { label: "Dashboard", path: "account" },
+      { label: "Settings", path: "settings" },
+      { label: "Notifications", path: "notifications" },
+      { label: "Cart", path: "cart" },
     ],
   },
   {
@@ -648,7 +689,8 @@ export const Footer = () => {
   const navigate = useNavigate();
 
   const onNavigate = (slug: string) => {
-    navigate(`/${slug}`);
+    navigate(slug === "home" ? "/" : `/${slug}`);
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   };
 
   return (
@@ -666,7 +708,7 @@ export const Footer = () => {
           margin: 0 auto;
           padding: 56px 24px 36px;
           display: grid;
-          grid-template-columns: 1.35fr repeat(4, minmax(145px, 1fr));
+          grid-template-columns: 1.35fr repeat(4, minmax(170px, 1fr));
           gap: 48px;
           align-items: start;
         }
@@ -695,6 +737,8 @@ export const Footer = () => {
           line-height: 1.7;
           color: #64748b;
           margin: 0 0 20px;
+          text-align: justify;
+          text-justify: inter-word;
         }
 
         .footer-contact {
@@ -751,6 +795,7 @@ export const Footer = () => {
           border: none;
           padding: 0;
           font-family: inherit;
+          white-space: nowrap;
         }
 
         .footer-link:hover {

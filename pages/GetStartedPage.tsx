@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { Icons } from "../components/Icons";
 import { Button } from "../components/Button";
 import { useAuth } from "../src/context/AuthContext";
+import { getStartedPageData } from "../src/data/getStartedPageData";
+import { authPageStyles } from "../src/styles/authPageStyles";
 
 interface GetStartedPageProps {
   onNavigate: (page: string) => void;
@@ -64,144 +66,134 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
   };
 
   return (
-    <div className="flex min-h-[calc(100vh-80px)] items-center justify-center bg-slate-50 px-4 py-12">
-      <div className="w-full max-w-lg rounded-2xl bg-white p-8 shadow-lg border border-gray-100">
-        <div className="mb-8 text-center">
-          <h1 className="mb-2 text-2xl font-bold text-gray-900">
-            Create Your Account
-          </h1>
-          <p className="text-sm text-gray-500">
-            Join BuildHive to source the best construction materials
-          </p>
+    <div className="auth-root">
+      <style>{authPageStyles}</style>
+
+      <div className="auth-card register">
+        <div className="auth-header">
+          <span className="auth-badge">{getStartedPageData.badge}</span>
+          <h1>{getStartedPageData.title}</h1>
+          <p>{getStartedPageData.subtitle}</p>
         </div>
 
         {error && (
-          <div className="mb-6 rounded-lg bg-red-50 border border-red-200 p-4">
-            <div className="flex items-center gap-2">
-              <Icons.AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
-              <p className="text-sm text-red-800">{error}</p>
-            </div>
+          <div className="auth-error">
+            <Icons.AlertCircle className="h-5 w-5" />
+            <span>{error}</span>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Full Name
-            </label>
+        <form onSubmit={handleSubmit}>
+          <div className="auth-field">
+            <label className="auth-label">{getStartedPageData.form.nameLabel}</label>
             <input
               name="name"
               type="text"
               required
               onChange={handleChange}
               aria-label="Full Name"
-              className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              className="auth-input"
             />
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                Email Address
-              </label>
+          <div className="auth-field-grid two">
+            <div className="auth-field">
+              <label className="auth-label">{getStartedPageData.form.emailLabel}</label>
               <input
                 name="email"
                 type="email"
                 required
                 onChange={handleChange}
                 aria-label="Email Address"
-                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                className="auth-input"
               />
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                Phone Number
-              </label>
+            <div className="auth-field">
+              <label className="auth-label">{getStartedPageData.form.phoneLabel}</label>
               <input
                 name="phone"
                 type="tel"
                 onChange={handleChange}
                 aria-label="Phone Number"
-                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                className="auth-input"
               />
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                Password
-              </label>
+          <div className="auth-field-grid two">
+            <div className="auth-field">
+              <label className="auth-label">{getStartedPageData.form.passwordLabel}</label>
               <input
                 name="password"
                 type="password"
                 required
                 onChange={handleChange}
                 aria-label="Password"
-                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                className="auth-input"
               />
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                Confirm Password
-              </label>
+            <div className="auth-field">
+              <label className="auth-label">{getStartedPageData.form.confirmPasswordLabel}</label>
               <input
                 name="confirmPassword"
                 type="password"
                 required
                 onChange={handleChange}
                 aria-label="Confirm Password"
-                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                className="auth-input"
               />
             </div>
           </div>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              I am a
-            </label>
+          <div className="auth-field">
+            <label className="auth-label">{getStartedPageData.form.accountTypeLabel}</label>
             <select
               name="accountType"
               onChange={handleChange}
               value={formData.accountType}
               aria-label="Account Type"
-              className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              className="auth-select"
             >
-              <option value="buyer">Buyer / Individual</option>
+              {getStartedPageData.form.accountTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </div>
 
-          <div className="flex items-start gap-2 pt-2">
+          <div className="auth-actions" style={{ justifyContent: "flex-start" }}>
             <input
               type="checkbox"
               required
               aria-label="Accept Terms and Conditions"
-              className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
             />
-            <span className="text-sm text-gray-600">
-              I agree to the{" "}
-              <a href="#" className="text-primary hover:underline">
-                Terms of Service
-              </a>{" "}
-              and{" "}
-              <a href="#" className="text-primary hover:underline">
-                Privacy Policy
-              </a>
+            <span className="auth-check" style={{ cursor: "default" }}>
+              <span>
+                {getStartedPageData.form.termsPrefix}{" "}
+                <a href="#" className="auth-link">
+                  {getStartedPageData.form.termsLink}
+                </a>{" "}
+                and{" "}
+                <a href="#" className="auth-link">
+                  {getStartedPageData.form.privacyLink}
+                </a>
+              </span>
             </span>
           </div>
 
-          <Button type="submit" className="w-full mt-4" disabled={loading}>
-            {loading ? "Creating Account..." : "Get Started"}
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? getStartedPageData.form.submitLoading : getStartedPageData.form.submitIdle}
           </Button>
         </form>
 
-        <div className="mt-8 text-center text-sm text-gray-500">
-          Already have an account?{" "}
+        <div className="auth-bottom">
+          {getStartedPageData.bottomText.prefix}{" "}
           <span
             onClick={() => onNavigate("signin")}
-            className="cursor-pointer font-bold text-primary hover:underline"
+            className="auth-link"
           >
-            Sign In
+            {getStartedPageData.bottomText.action}
           </span>
         </div>
       </div>
