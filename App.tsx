@@ -9,7 +9,7 @@ import {
 } from "react-router-dom";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { useAuth } from "./src/context/AuthContext";
+import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import { Icons } from "./components/Icons";
 import { Header, Footer } from "./components/Layout";
 import { Category, Product, CartItem, User } from "./types";
@@ -30,8 +30,11 @@ import { PrivacyPage } from "./pages/PrivacyPage";
 import { ServicesPage } from "./pages/ServicesPage";
 import { NotificationPage } from "./pages/NotificationPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { MessagesPage } from "./src/pages/Messages";
+import { SupportPage } from "./src/pages/Support";
 import { productService } from "./src/services/productService";
 import { cartService } from "./src/services/cartService";
+import api from "./src/services/api";
 
 // Protected Route wrapper
 const ProtectedRoute: React.FC<{
@@ -54,6 +57,7 @@ const ProductDetailWrapper: React.FC<{
   const { id } = useParams<{ id: string }>();
   const [product, setProduct] = React.useState<Product | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const navigate = useNavigate();
 
   React.useEffect(() => {
     const loadProduct = async () => {
@@ -61,7 +65,10 @@ const ProductDetailWrapper: React.FC<{
       try {
         const apiProduct = await productService.getProductById(id);
         const productImages = (apiProduct.product_images || [])
-          .filter((image) => !("product_id" in image) || image.product_id === apiProduct.id)
+          .filter(
+            (image) =>
+              !("product_id" in image) || image.product_id === apiProduct.id,
+          )
           .sort((a, b) => (a.display_order || 0) - (b.display_order || 0))
           .map((image) => ({
             id: image.id,
@@ -74,6 +81,10 @@ const ProductDetailWrapper: React.FC<{
         const converted: Product = {
           id: apiProduct.id,
           business_id: apiProduct.business_id,
+          seller_id:
+            apiProduct.seller_id ||
+            apiProduct.businesses?.user_id ||
+            apiProduct.businesses?.userId,
           category_id: apiProduct.category_id,
           name: apiProduct.name,
           slug: apiProduct.slug,
@@ -106,6 +117,17 @@ const ProductDetailWrapper: React.FC<{
     loadProduct();
   }, [id]);
 
+  const handleMessageSeller = async (currentProduct: Product) => {
+    const sellerId = currentProduct.seller_id;
+
+    if (!sellerId) {
+      toast.error("Seller information is unavailable right now.");
+      return;
+    }
+
+    navigate(`/messages?participantId=${encodeURIComponent(sellerId)}`);
+  };
+
   if (loading)
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -124,6 +146,7 @@ const ProductDetailWrapper: React.FC<{
       product={product}
       onNavigate={onNavigate}
       onAddToCart={onAddToCart}
+      onMessageSeller={handleMessageSeller}
     />
   );
 };
@@ -142,12 +165,12 @@ const BlogDetailWrapper: React.FC<{
   );
 };
 
-const App: React.FC = () => {
+const AppContent: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, isAuthenticated, logout } = useAuth();
   const [selectedProductId, setSelectedProductId] = useState<string | null>(
-    null
+    null,
   );
   const [cart, setCart] = useState<CartItem[]>([]);
   const [loadingCart, setLoadingCart] = useState(false);
@@ -184,7 +207,7 @@ const App: React.FC = () => {
           console.log(
             "📦 Loaded cart items from API:",
             cartItems?.length || 0,
-            "items"
+            "items",
           );
           console.log("📝 Cart items data:", cartItems);
 
@@ -193,7 +216,7 @@ const App: React.FC = () => {
             console.error(
               "⚠️ Cart items is not an array:",
               typeof cartItems,
-              cartItems
+              cartItems,
             );
             setCart([]);
             return;
@@ -215,7 +238,6 @@ const App: React.FC = () => {
                   quantity: item.product.quantity,
                   images: [],
                   author: item.product.business_name || "Unknown",
-                  business_id: "",
                   category_id: "",
                   description: "",
                   track_quantity: true,
@@ -229,6 +251,10 @@ const App: React.FC = () => {
                   updated_at: "",
                   rating: 0,
                   sales: 0,
+                  business_id:
+                    (item.product as any).business_id ||
+                    (item.product as any).businessId ||
+                    "",
                 }
               : undefined,
             created_at: item.created_at,
@@ -238,7 +264,7 @@ const App: React.FC = () => {
           console.log(
             "✅ Cart state updated:",
             transformedItems.length,
-            "items"
+            "items",
           );
         } catch (error) {
           console.error("❌ Failed to load cart:", error);
@@ -290,7 +316,7 @@ const App: React.FC = () => {
     if (!isAuthenticated) {
       // Redirect to sign in
       console.log(
-        "❌ [addToCart] User not authenticated, redirecting to signin"
+        "❌ [addToCart] User not authenticated, redirecting to signin",
       );
       toast.info("Please sign in to add items to cart");
       navigate("/signin");
@@ -298,6 +324,23 @@ const App: React.FC = () => {
     }
 
     try {
+      console.log("CART BUSINESS CHECK:", {
+        existing: cart[0]?.product?.business_id,
+        new: product.business_id,
+      });
+
+      if (
+        cart.length > 0 &&
+        cart[0]?.product?.business_id !== product.business_id
+      ) {
+        const confirmed = window.confirm(
+          "Cart has items from another seller. Clear cart and continue?",
+        );
+        if (!confirmed) return;
+        await cartService.clearCart();
+        setCart([]);
+      }
+
       console.log("📤 [addToCart] Calling API to add item...");
       const cartItem = await cartService.addToCart({
         productId: product.id,
@@ -310,17 +353,17 @@ const App: React.FC = () => {
         console.log(
           "🔄 [addToCart] Updating cart state. Previous cart:",
           prevCart.length,
-          "items"
+          "items",
         );
         const existingItem = prevCart.find(
-          (item) => item.product_id === product.id
+          (item) => item.product_id === product.id,
         );
         if (existingItem) {
           console.log("♻️ [addToCart] Item exists, updating quantity");
           return prevCart.map((item) =>
             item.product_id === product.id
               ? { ...item, quantity: item.quantity + quantity }
-              : item
+              : item,
           );
         }
         console.log("➕ [addToCart] Adding new item to cart");
@@ -331,7 +374,10 @@ const App: React.FC = () => {
             user_id: cartItem.user_id,
             product_id: product.id,
             quantity: quantity,
-            product: product,
+            product: {
+              ...product,
+              business_id: product.business_id,
+            },
             created_at: cartItem.created_at,
             updated_at: cartItem.updated_at,
           },
@@ -354,7 +400,7 @@ const App: React.FC = () => {
         error.response?.data?.error ||
         "Failed to add item to cart. Please try again.";
       toast.error(
-        `${errorMessage}${validationErrors ? ": " + validationErrors : ""}`
+        `${errorMessage}${validationErrors ? ": " + validationErrors : ""}`,
       );
     }
   };
@@ -364,7 +410,7 @@ const App: React.FC = () => {
       "🗑️ [removeFromCart] Called with cartItemId:",
       cartItemId,
       "isAuthenticated:",
-      isAuthenticated
+      isAuthenticated,
     );
     if (!isAuthenticated) return;
 
@@ -391,7 +437,6 @@ const App: React.FC = () => {
                 quantity: item.product.quantity,
                 images: [],
                 author: item.product.business_name || "Unknown",
-                business_id: "",
                 category_id: "",
                 description: "",
                 track_quantity: true,
@@ -434,15 +479,15 @@ const App: React.FC = () => {
       console.log(
         "🔄 [updateQuantity] Optimistically updating cart state. Previous:",
         prevCart.length,
-        "items"
+        "items",
       );
       const newCart = prevCart.map((item) =>
-        item.id === cartItemId ? { ...item, quantity: newQuantity } : item
+        item.id === cartItemId ? { ...item, quantity: newQuantity } : item,
       );
       console.log(
         "📦 [updateQuantity] New cart state:",
         newCart.length,
-        "items"
+        "items",
       );
       return newCart;
     });
@@ -487,7 +532,9 @@ const App: React.FC = () => {
       {/** Keep the header highlight tied to the current router path */}
       <Header
         onNavigate={navigateTo}
-        activePage={location.pathname.replace(/^\/+/, "").split("/")[0] || "home"}
+        activePage={
+          location.pathname.replace(/^\/+/, "").split("/")[0] || "home"
+        }
         cartItemCount={cart.reduce((acc, item) => acc + item.quantity, 0)}
         user={user}
         onLogout={handleLogout}
@@ -501,7 +548,9 @@ const App: React.FC = () => {
           element={
             <ProductsPage
               onNavigate={navigateTo}
-              initialCategory={new URLSearchParams(location.search).get("categoryId")}
+              initialCategory={new URLSearchParams(location.search).get(
+                "categoryId",
+              )}
               onAddToCart={addToCart}
             />
           }
@@ -609,9 +658,30 @@ const App: React.FC = () => {
 
         <Route path="/privacy" element={<PrivacyPage />} />
 
+        <Route
+          path="/support"
+          element={
+            <ProtectedRoute>
+              <SupportPage />
+            </ProtectedRoute>
+          }
+        />
+
         {/* FAQ page removed per project cleanup */}
 
-        <Route path="/settings" element={<SettingsPage onNavigate={navigateTo} />} />
+        <Route
+          path="/settings"
+          element={<SettingsPage onNavigate={navigateTo} />}
+        />
+
+        <Route
+          path="/messages"
+          element={
+            <ProtectedRoute>
+              <MessagesPage />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
 
       <Footer />
@@ -629,6 +699,14 @@ const App: React.FC = () => {
         aria-label="Notifications"
       />
     </div>
+  );
+};
+
+const App: React.FC = () => {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 };
 

@@ -11,7 +11,8 @@ import {
   type CreateOrderData,
 } from "../src/services/orderService";
 import { addressService } from "../src/services/addressService";
-import { useAuth } from "../src/context/AuthContext";
+import { useAuth } from "@/src/context/AuthContext";
+import { useLocation } from "react-router-dom";
 import {
   INITIAL_FORM_DATA,
   PAYMENT_METHODS,
@@ -19,7 +20,9 @@ import {
   TAX_RATE,
   type FormData,
 } from "../src/data/checkoutPageData";
+import { serviceMarketplaceService } from "../src/services/serviceMarketplaceService";
 import { checkoutPageStyles } from "../src/styles/checkoutPageStyles";
+import api from "../src/services/api";
 
 interface CheckoutPageProps {
   cartItems: CartItem[];
@@ -50,24 +53,137 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   }, []);
 
   const { user } = useAuth();
+  const location = useLocation();
   const [paymentMethod, setPaymentMethod] = useState("cod");
   const [isProcessing, setIsProcessing] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [orderNumber, setOrderNumber] = useState("");
   const [showStripeForm, setShowStripeForm] = useState(false);
   const [createdOrderId, setCreatedOrderId] = useState<string | null>(null);
-  const [stripeConfig, setStripeConfig] = useState<any>(null);
-  const [clientSecret, setClientSecret] = useState<string | null>(null);
-  const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
+  const [serviceCheckout, setServiceCheckout] = useState<any | null>(null);
+  const [serviceLoading, setServiceLoading] = useState(false);
   const stripePayment = useStripePayment();
   const [formData, setFormData] = useState<FormData>(INITIAL_FORM_DATA);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
+  const [selectedSavedAddressId, setSelectedSavedAddressId] = useState("");
 
-  const subtotal = cartItems.reduce(
-    (acc, item) => acc + (item.product?.price || 0) * item.quantity,
-    0
-  );
-  const tax = subtotal * TAX_RATE;
+  useEffect(() => {
+    const serviceId = new URLSearchParams(location.search).get("serviceId");
+
+    if (!serviceId) {
+      setServiceCheckout(null);
+      setServiceLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setServiceLoading(true);
+    serviceMarketplaceService
+      .getServiceById(serviceId)
+      .then((service) => {
+        if (!cancelled) {
+          setServiceCheckout(service);
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to load service checkout details:", error);
+        if (!cancelled) {
+          setServiceCheckout(null);
+          toast.error("Unable to load the selected service checkout.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setServiceLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [location.search]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    let cancelled = false;
+
+    const loadAddresses = async () => {
+      try {
+        const res = await api.get(`/users/${user.id}/addresses`);
+        console.log("ADDRESSES:", res.data);
+        const addrs = Array.isArray(res.data) ? res.data : res.data?.data || [];
+        const next = addrs.map((address: any) => ({
+          id: address.id,
+          full_name: address.full_name || address.fullName || "",
+          phone: address.phone || "",
+          address_line1: address.address_line1 || address.addressLine1 || "",
+          address_line2: address.address_line2 || address.addressLine2 || "",
+          city: address.city || "",
+          state: address.state || "",
+          postal_code: address.postal_code || address.postalCode || "",
+          country: address.country || "Pakistan",
+          is_default: Boolean(address.is_default ?? address.isDefault),
+        }));
+
+        if (cancelled) return;
+
+        setSavedAddresses(next);
+        const defaultAddress =
+          next.find((address: any) => address.is_default) || next[0];
+        if (defaultAddress) {
+          setSelectedSavedAddressId(defaultAddress.id);
+          setFormData((prev) => ({
+            ...prev,
+            full_name: defaultAddress.full_name,
+            phone: defaultAddress.phone,
+            address_line1: defaultAddress.address_line1,
+            address_line2: defaultAddress.address_line2,
+            city: defaultAddress.city,
+            state: defaultAddress.state,
+            postal_code: defaultAddress.postal_code,
+            country: defaultAddress.country,
+          }));
+        }
+      } catch (error) {
+        console.error("Failed to load saved addresses:", error);
+        if (!cancelled) {
+          setSavedAddresses([]);
+        }
+      }
+    };
+
+    loadAddresses();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  const applySavedAddress = (addressId: string) => {
+    const address = savedAddresses.find((item) => item.id === addressId);
+    if (!address) return;
+    setSelectedSavedAddressId(addressId);
+    setFormData((prev) => ({
+      ...prev,
+      full_name: address.full_name,
+      phone: address.phone,
+      address_line1: address.address_line1,
+      address_line2: address.address_line2,
+      city: address.city,
+      state: address.state,
+      postal_code: address.postal_code,
+      country: address.country,
+    }));
+  };
+
+  const subtotal = serviceCheckout
+    ? Number(serviceCheckout.price || 0)
+    : cartItems.reduce(
+        (acc: number, item: CartItem) =>
+          acc + (item.product?.price || 0) * item.quantity,
+        0,
+      );
+  const tax = subtotal * 0.05;
   const total = subtotal + tax;
 
   const validateForm = (): boolean => {
@@ -92,7 +208,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       return;
     }
 
-    if (cartItems.length === 0) {
+    if (!serviceCheckout && cartItems.length === 0) {
       alert("Your cart is empty");
       return;
     }
@@ -100,18 +216,22 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     setIsProcessing(true);
 
     try {
-      console.log("📦 [Checkout] Cart items before order:", cartItems);
+      if (serviceCheckout) {
+        console.log("🛠️ [Checkout] Service checkout details:", serviceCheckout);
+      } else {
+        console.log("📦 [Checkout] Cart items before order:", cartItems);
 
-      // Validate cart items have product data
-      const invalidItems = cartItems.filter(
-        (item) => !item.product || !item.product.price
-      );
-      if (invalidItems.length > 0) {
-        console.error("❌ [Checkout] Invalid cart items:", invalidItems);
-        toast.error(
-          "Cart data is incomplete. Please refresh the page and try again."
+        // Validate cart items have product data
+        const invalidItems = cartItems.filter(
+          (item: CartItem) => !item.product || !item.product.price,
         );
-        return;
+        if (invalidItems.length > 0) {
+          console.error("❌ [Checkout] Invalid cart items:", invalidItems);
+          toast.error(
+            "Cart data is incomplete. Please refresh the page and try again.",
+          );
+          return;
+        }
       }
 
       // Step 1: Create address first
@@ -134,9 +254,33 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       console.log("📤 [Checkout] Address payload:", addressPayload);
       const address = await addressService.createAddress(
         user.id,
-        addressPayload
+        addressPayload,
       );
       console.log("✅ [Checkout] Address created:", address.id);
+
+      if (serviceCheckout) {
+        const serviceOrder = await serviceMarketplaceService.createServiceOrder(
+          serviceCheckout.id,
+          {
+            title: `${serviceCheckout.name} service order`,
+            description: formData.notes || serviceCheckout.description,
+            budget: Number(serviceCheckout.price || 0),
+          },
+        );
+
+        const serviceOrderNumber =
+          serviceOrder.order_number ||
+          serviceOrder.orderNumber ||
+          serviceOrder.id;
+        setCreatedOrderId(String(serviceOrderNumber || serviceCheckout.id));
+        setOrderNumber(String(serviceOrderNumber || serviceCheckout.id));
+        setOrderPlaced(true);
+        onPlaceOrder();
+        toast.success(
+          `Service checkout completed! Order #${serviceOrderNumber}`,
+        );
+        return;
+      }
 
       // Step 2: Create order with address ID
       const orderData: CreateOrderData = {
@@ -156,7 +300,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       console.log("Shipping Address ID:", orderData.shippingAddressId);
       console.log("Items:", orderData.items);
 
-      let orderResponse;
+      let orderResponse: any;
       try {
         orderResponse = await orderService.createOrder(orderData);
         console.log("✅ [OrderService] Order response:", orderResponse);
@@ -165,75 +309,41 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         throw orderError;
       }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      // Extract order from array if needed
-      const order = orderResponse.orders
-        ? orderResponse.orders[0]
-        : orderResponse;
-      setCreatedOrderId(order.id);
+      // Extract order object safely from possible array / wrapper shapes
+      const order =
+        orderResponse?.orders?.[0] ||
+        orderResponse?.data?.orders?.[0] ||
+        orderResponse;
+      const orderId = order?.id;
+      console.log("extracted orderId:", orderId);
+      setCreatedOrderId(orderId);
       console.log("[Checkout] Extracted order:", order);
 
       if (paymentMethod === "card") {
         // Stripe payment flow
-         // Stripe payment flow
         console.log(
           "[Checkout] Starting Stripe payment flow for order:",
-          order.id
+          orderId,
         );
-        const configRes = await stripePayment.fetchStripeConfig();
-        const intentRes = await stripePayment.createPaymentIntent(order.id);
-        
-        // Extract nested data correctly - API returns {success, message, data: {...}}
-        const newStripeConfig = configRes?.data || configRes;
-        const newClientSecret = intentRes?.data?.clientSecret || intentRes?.clientSecret;
-        const newPaymentIntentId = intentRes?.data?.paymentIntentId || intentRes?.paymentIntentId;
-        
-        console.log("[Checkout] Extracted Stripe data:", {
-          configRes,
-          intentRes,
-          newStripeConfig,
-          newClientSecret,
-          newPaymentIntentId,
+        stripePayment.resetStripeState();
+        const stripeConfigData = await stripePayment.fetchStripeConfig();
+        const intentData = await stripePayment.createPaymentIntent(
+          orderId as string,
+        );
+
+        console.log("[Checkout] Stripe data ready:", {
+          stripeConfigData,
+          intentData,
+          stateStripeConfig: stripePayment.stripeConfig,
+          stateClientSecret: stripePayment.clientSecret,
+          statePaymentIntentId: stripePayment.paymentIntentId,
         });
-        
-        setStripeConfig(newStripeConfig);
-        setClientSecret(newClientSecret);
-        setPaymentIntentId(newPaymentIntentId);
-        console.log("[Checkout] Stripe local state after payment intent:", {
-          newStripeConfig,
-          newClientSecret,
-          newPaymentIntentId,
-        });
-        if (newStripeConfig && newClientSecret && newPaymentIntentId) {
+
+        if (
+          stripeConfigData.publishableKey &&
+          intentData.clientSecret &&
+          intentData.paymentIntentId
+        ) {
           setShowStripeForm(true);
           console.log("[Checkout] Stripe form should now be shown.");
         } else {
@@ -252,53 +362,14 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       console.error("Failed to place order:", error);
       console.error(
         "❌ [Checkout] Backend error response:",
-        error.response?.data
+        error.response?.data,
       );
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
       // Log detailed validation errors
       if (error.response?.data?.errors) {
         console.error(
           "🔴 [Checkout] Validation errors:",
-          error.response.data.errors
+          error.response.data.errors,
         );
         if (Array.isArray(error.response.data.errors)) {
           error.response.data.errors.forEach((err: any, index: number) => {
@@ -306,7 +377,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
             if (typeof err === "object") {
               console.error(
                 `     - Field:`,
-                err.field || err.path || "unknown"
+                err.field || err.path || "unknown",
               );
               console.error(`     - Message:`, err.message || err.msg || err);
             }
@@ -319,12 +390,12 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
       console.log(
         "📋 Full error response object:",
-        JSON.stringify(error.response?.data, null, 2)
+        JSON.stringify(error.response?.data, null, 2),
       );
 
       toast.error(
         error.response?.data?.message ||
-          "Failed to place order. Please try again."
+          "Failed to place order. Please try again.",
       );
     } finally {
       setIsProcessing(false);
@@ -332,7 +403,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   };
 
   const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -342,21 +413,29 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     }
   };
 
-  if (showStripeForm && stripeConfig && clientSecret && paymentIntentId) {
+  if (
+    showStripeForm &&
+    stripePayment.stripeConfig &&
+    stripePayment.clientSecret &&
+    stripePayment.paymentIntentId
+  ) {
     return (
       <div className="stripe-form-container">
         <h1 className="stripe-form-title">Enter Card Details</h1>
         <p className="stripe-form-subtitle">
           Complete your payment securely using Stripe test card.
         </p>
-        <StripeProviderWrapper publishableKey={stripeConfig.publishableKey}>
+        <StripeProviderWrapper
+          publishableKey={stripePayment.stripeConfig.publishableKey}
+        >
           <StripeCardForm
-            clientSecret={clientSecret}
-            paymentIntentId={paymentIntentId}
-            onPaymentSuccess={async (paymentIntentId) => {
+            clientSecret={stripePayment.clientSecret}
+            paymentIntentId={stripePayment.paymentIntentId}
+            onPaymentSuccess={async (paymentIntentId: string) => {
               await stripePayment.confirmPaymentToBackend(paymentIntentId);
               setOrderPlaced(true);
               setShowStripeForm(false);
+              stripePayment.resetStripeState();
               onPlaceOrder();
               toast.success("Payment successful! Your order is confirmed.");
             }}
@@ -372,13 +451,21 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         <div className="success-icon-wrapper">
           <Icons.Check className="success-icon" />
         </div>
-        <h1 className="success-title">Order Placed Successfully!</h1>
+        <h1 className="success-title">
+          {serviceCheckout
+            ? "Service Checkout Completed!"
+            : "Order Placed Successfully!"}
+        </h1>
         <p className="success-message">
-          Thank you for shopping with BuildHive. Your order{" "}
+          {serviceCheckout
+            ? `Thank you for booking ${serviceCheckout.name}. Your service order `
+            : "Thank you for shopping with BuildHive. Your order "}
           <span className="success-order-number">
-            #BH-{Math.floor(Math.random() * 100000)}
+            #{orderNumber || `BH-${Math.floor(Math.random() * 100000)}`}
           </span>{" "}
-          has been confirmed and will be shipped shortly.
+          {serviceCheckout
+            ? "has been confirmed and the provider will contact you shortly."
+            : "has been confirmed and will be shipped shortly."}
         </p>
         <div className="success-buttons">
           <Button
@@ -388,7 +475,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
           >
             Back to Home
           </Button>
-          <Button onClick={() => onNavigate("products")} className="success-button-primary">
+          <Button
+            onClick={() => onNavigate("products")}
+            className="success-button-primary"
+          >
             Continue Shopping
           </Button>
         </div>
@@ -403,9 +493,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         <nav className="breadcrumb-nav">
           <span
             className="breadcrumb-link"
-            onClick={() => onNavigate("cart")}
+            onClick={() => onNavigate(serviceCheckout ? "services" : "cart")}
           >
-            Cart
+            {serviceCheckout ? "Services" : "Cart"}
           </span>
           <Icons.ChevronRight className="breadcrumb-separator" />
           <span className="breadcrumb-active">Checkout</span>
@@ -450,6 +540,26 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 <Icons.MapPin className="section-title-icon" /> Shipping Address
               </h2>
               <div className="space-y-4">
+                {savedAddresses.length > 0 && (
+                  <div className="form-field">
+                    <label className="form-label">Select saved address</label>
+                    <select
+                      className="form-input"
+                      aria-label="Select saved address"
+                      value={selectedSavedAddressId}
+                      onChange={(event) =>
+                        applySavedAddress(event.target.value)
+                      }
+                    >
+                      <option value="">Manual entry</option>
+                      {savedAddresses.map((address) => (
+                        <option key={address.id} value={address.id}>
+                          {address.full_name} - {address.address_line1}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div className="form-group">
                   <div className="form-field">
                     <label className="form-label">Full Name *</label>
@@ -531,9 +641,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       aria-label="City"
                       className={`form-input ${errors.city ? "error" : ""}`}
                     />
-                    {errors.city && (
-                      <p className="form-error">{errors.city}</p>
-                    )}
+                    {errors.city && <p className="form-error">{errors.city}</p>}
                   </div>
                   <div className="form-field">
                     <label className="form-label">State/Province *</label>
@@ -571,9 +679,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   </div>
                 </div>
                 <div className="form-field">
-                  <label className="form-label">
-                    Order Notes (optional)
-                  </label>
+                  <label className="form-label">Order Notes (optional)</label>
                   <textarea
                     name="notes"
                     value={formData.notes}
@@ -616,9 +722,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       )}
                     </div>
                     <div className="payment-method-content">
-                      <div className="payment-method-name">
-                        {method.name}
-                      </div>
+                      <div className="payment-method-name">{method.name}</div>
                       <div className="payment-method-desc">{method.desc}</div>
                     </div>
                   </label>
@@ -633,26 +737,66 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               <h2 className="order-summary-title">Order Summary</h2>
 
               <div className="order-items-scroll no-scrollbar">
-                {cartItems.map((item) => (
-                  <div key={item.id} className="order-item">
+                {serviceLoading && !serviceCheckout ? (
+                  <div className="order-item">
+                    <div className="order-item-details">
+                      <h4 className="order-item-title">Loading service...</h4>
+                    </div>
+                  </div>
+                ) : serviceCheckout ? (
+                  <div className="order-item">
                     <div className="order-item-image-wrapper">
                       <img
-                        src={item.image}
-                        alt=""
+                        src={serviceCheckout.image || "/Build-Hive-Logo.png"}
+                        alt={serviceCheckout.name}
                         className="order-item-image"
                       />
                     </div>
                     <div className="order-item-details">
-                      <h4 className="order-item-title">{item.title}</h4>
+                      <h4 className="order-item-title">
+                        {serviceCheckout.name}
+                      </h4>
                       <div className="order-item-meta">
-                        <span>Qty: {item.quantity}</span>
+                        <span>
+                          {serviceCheckout.provider || "Service provider"}
+                        </span>
                         <span className="order-item-price">
-                          PKR {(item.price * item.quantity).toLocaleString()}
+                          PKR{" "}
+                          {Number(serviceCheckout.price || 0).toLocaleString()}
                         </span>
                       </div>
                     </div>
                   </div>
-                ))}
+                ) : (
+                  cartItems.map((item) => {
+                    const product = item.product;
+                    const itemImage =
+                      product?.images?.[0]?.image_url || "/Build-Hive-Logo.png";
+                    const itemTitle = product?.name || "Cart item";
+                    const itemPrice = product?.price || 0;
+
+                    return (
+                      <div key={item.id} className="order-item">
+                        <div className="order-item-image-wrapper">
+                          <img
+                            src={itemImage}
+                            alt={itemTitle}
+                            className="order-item-image"
+                          />
+                        </div>
+                        <div className="order-item-details">
+                          <h4 className="order-item-title">{itemTitle}</h4>
+                          <div className="order-item-meta">
+                            <span>Qty: {item.quantity}</span>
+                            <span className="order-item-price">
+                              PKR {(itemPrice * item.quantity).toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
 
               <div className="order-summary-divider">

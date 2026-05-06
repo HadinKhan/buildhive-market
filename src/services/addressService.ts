@@ -31,16 +31,34 @@ export interface Address {
 
 export interface CreateAddressData {
   full_name?: string;
+  fullName?: string;
   label?: string;
-  address_line1: string;
+  address_line1?: string;
+  addressLine1?: string;
   address_line2?: string;
+  addressLine2?: string;
   city: string;
   state: string;
-  postal_code: string;
+  postal_code?: string;
+  postalCode?: string;
   country: string;
   phone: string;
   is_default?: boolean;
+  isDefault?: boolean;
 }
+
+const toApiAddressData = (data: CreateAddressData) => ({
+  fullName: data.full_name ?? data.fullName,
+  label: data.label,
+  addressLine1: data.address_line1 ?? data.addressLine1,
+  addressLine2: data.address_line2 ?? data.addressLine2,
+  city: data.city,
+  state: data.state,
+  postalCode: data.postal_code ?? data.postalCode,
+  country: data.country,
+  phone: data.phone,
+  isDefault: data.is_default ?? data.isDefault,
+});
 
 // =============================================
 // Address Service
@@ -51,7 +69,7 @@ class AddressService {
    */
   async createAddress(userId: string, data: CreateAddressData): Promise<Address> {
     console.log('📍 [AddressService] Creating address for user:', userId);
-    const response = await api.post<ApiResponse<Address>>(`/users/${userId}/addresses`, data);
+    const response = await api.post<ApiResponse<Address>>(`/users/${userId}/addresses`, toApiAddressData(data));
     console.log('✅ [AddressService] Address created:', response.data.data.id);
     return response.data.data;
   }

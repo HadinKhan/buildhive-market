@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { userService } from '../services/userService';
 
 export interface WishlistItem {
   productId: string;
@@ -17,16 +18,41 @@ export const useWishlist = () => {
 
   // Load wishlist from localStorage on mount
   useEffect(() => {
+    let cancelled = false;
     try {
-      const stored = localStorage.getItem(WISHLIST_KEY);
-      if (stored) {
-        setWishlist(JSON.parse(stored));
-      }
+      userService
+        .getWishlist()
+        .then((items) => {
+          if (cancelled) return;
+          setWishlist(
+            items.map((item: any) => {
+              const product = item.product || item.products || item;
+              return {
+                productId: item.product_id || product.id,
+                addedAt: item.created_at ? new Date(item.created_at) : new Date(),
+                category: product.category_id || product.category || "products",
+                productName: product.name || item.product_name || "Product",
+                image: product.product_images?.[0]?.image_url || product.images?.[0]?.image_url || product.image || "",
+                price: product.price || item.price || 0,
+              };
+            })
+          );
+        })
+        .catch(() => {
+          const stored = localStorage.getItem(WISHLIST_KEY);
+          if (stored && !cancelled) {
+            setWishlist(JSON.parse(stored));
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setIsLoading(false);
+        });
     } catch (error) {
       console.error('Failed to load wishlist:', error);
-    } finally {
-      setIsLoading(false);
     }
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Save wishlist to localStorage whenever it changes
@@ -45,6 +71,9 @@ export const useWishlist = () => {
       setWishlist((prev) => {
         const exists = prev.find((w) => w.productId === item.productId);
         if (exists) return prev;
+        userService.addToWishlist(item.productId).catch((error) => {
+          console.error('Failed to add wishlist item:', error);
+        });
         return [...prev, { ...item, addedAt: new Date() }];
       });
     },
@@ -52,6 +81,9 @@ export const useWishlist = () => {
   );
 
   const removeFromWishlist = useCallback((productId: string) => {
+    userService.removeFromWishlist(productId).catch((error) => {
+      console.error('Failed to remove wishlist item:', error);
+    });
     setWishlist((prev) => prev.filter((w) => w.productId !== productId));
   }, []);
 

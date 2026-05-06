@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Icons } from "../components/Icons";
+import api from "../src/services/api";
 
 interface HomePageProps {
   onNavigate: (page: string, productId?: string) => void;
@@ -44,133 +45,192 @@ interface ServiceProvider {
   certifications: string[];
 }
 
-const categories: Category[] = [
-  { id: "construction-materials", name: "Cement & Concrete", icon: "Package", count: 1240, color: "#60a5fa", bg: "rgba(96, 165, 250, 0.12)", route: "products?categoryId=construction-materials" },
-  { id: "tools-equipment", name: "Tools & Equipment", icon: "Tools", count: 856, color: "#a78bfa", bg: "rgba(167, 139, 250, 0.12)", route: "products?categoryId=tools-equipment" },
-  { id: "doors-windows", name: "Doors & Windows", icon: "Home", count: 643, color: "#34d399", bg: "rgba(52, 211, 153, 0.12)", route: "products?categoryId=doors-windows" },
-  { id: "interior-assets", name: "Tiles & Flooring", icon: "Grid", count: 489, color: "#fb7185", bg: "rgba(251, 113, 133, 0.12)", route: "products?categoryId=interior-assets" },
-  { id: "plumbing-sanitary", name: "Plumbing", icon: "Plumbing", count: 367, color: "#38bdf8", bg: "rgba(56, 189, 248, 0.12)", route: "products?categoryId=plumbing-sanitary" },
-  { id: "electrical-safety", name: "Electrical", icon: "Electrical", count: 412, color: "#fbbf24", bg: "rgba(251, 191, 36, 0.12)", route: "products?categoryId=electrical-safety" },
-  { id: "exterior-landscape", name: "Exterior & Landscape", icon: "Globe", count: 298, color: "#10b981", bg: "rgba(16, 185, 129, 0.12)", route: "products?categoryId=exterior-landscape" },
-  { id: "architectural-resources", name: "Blueprints & CAD", icon: "Ruler", count: 244, color: "#818cf8", bg: "rgba(129, 140, 248, 0.12)", route: "products?categoryId=architectural-resources" },
+interface FeaturedProductApi {
+  id: string;
+  name: string;
+  price: number;
+  compare_at_price?: number;
+  average_rating?: number;
+  total_reviews?: number;
+  product_images?: Array<{ image_url: string }>;
+  businesses?: { business_name: string };
+  categories?: { name?: string; slug?: string };
+  tags?: string[];
+  is_featured?: boolean;
+}
+
+interface CategoryApi {
+  id: string;
+  name: string;
+  slug?: string;
+  image?: string;
+  product_count?: number;
+  _count?: { products?: number };
+}
+
+interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  error?: string;
+  message?: string;
+  meta?: any;
+}
+
+const categoryIconNames: Array<keyof typeof Icons> = [
+  "Package",
+  "Shield",
+  "AI",
+  "Calculator",
+  "Users",
+  "Star",
+  "Message",
+  "Cart",
 ];
 
-const featuredListings: Listing[] = [
+const fallbackCategories: Category[] = [
   {
-    id: "1",
-    title: "Premium Portland Cement (50kg)",
-    seller: "Lucky Cement Ltd",
-    price: 1450,
-    originalPrice: 1650,
-    rating: 4.8,
-    reviews: 234,
-    image: "https://images.unsplash.com/photo-1596386461350-326ea77d337b?w=700&h=520&fit=crop",
-    badge: "Best Seller",
-    tag: "Cement",
+    id: "mat-01",
+    name: "Cement & Concrete",
+    icon: "Package",
+    count: 1245,
+    color: "#fff",
+    bg: "#111",
+    route: "/products?category=cement",
   },
   {
-    id: "2",
-    title: "Deformed Steel Bars Grade 60 (12mm)",
-    seller: "Amreli Steels",
-    price: 185,
-    rating: 4.9,
-    reviews: 189,
-    image: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=700&h=520&fit=crop",
-    badge: "Verified",
-    tag: "Steel",
+    id: "mat-02",
+    name: "Steel & Rebar",
+    icon: "Shield",
+    count: 432,
+    color: "#fff",
+    bg: "#111",
+    route: "/products?category=steel",
   },
   {
-    id: "3",
-    title: "Ceramic Wall Tiles (12x18)",
-    seller: "Master Tiles",
-    price: 890,
-    originalPrice: 1200,
+    id: "mat-03",
+    name: "Tiles & Flooring",
+    icon: "AI",
+    count: 867,
+    color: "#fff",
+    bg: "#111",
+    route: "/products?category=tiles",
+  },
+  {
+    id: "mat-04",
+    name: "Paint & Coatings",
+    icon: "Calculator",
+    count: 390,
+    color: "#fff",
+    bg: "#111",
+    route: "/products?category=paint",
+  },
+];
+
+const fallbackFeaturedListings: Listing[] = [
+  {
+    id: "p-1001",
+    title: "Portland Cement (50kg)",
+    seller: "Lahore Materials",
+    price: 850,
+    originalPrice: 920,
     rating: 4.6,
-    reviews: 156,
-    image: "https://images.unsplash.com/photo-1581858726788-75bc0f6a952d?w=700&h=520&fit=crop",
-    tag: "Tiles",
+    reviews: 128,
+    image:
+      "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800&h=600&fit=crop",
+    badge: "Best Seller",
+    tag: "BAGS",
   },
   {
-    id: "4",
-    title: "PVC Pipes Schedule 40 (4 inch)",
-    seller: "Pak Arab Pipes",
-    price: 320,
-    rating: 4.7,
-    reviews: 98,
-    image: "https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=700&h=520&fit=crop",
-    tag: "Plumbing",
+    id: "p-1002",
+    title: "TMT Rebar 16mm (Bundle)",
+    seller: "Karachi Steel Co.",
+    price: 12000,
+    rating: 4.4,
+    reviews: 64,
+    image:
+      "https://images.unsplash.com/photo-1581094288330-6f0b0f0d8b7a?w=800&h=600&fit=crop",
+    tag: "PER BUNDLE",
+  },
+  {
+    id: "p-1003",
+    title: "Porcelain Floor Tile 600x600",
+    seller: "Tiles & More",
+    price: 4200,
+    originalPrice: 4800,
+    rating: 4.8,
+    reviews: 34,
+    image:
+      "https://images.unsplash.com/photo-1505691723518-36a6f0e4b9d5?w=800&h=600&fit=crop",
+    badge: "New",
+    tag: "PER BOX",
   },
 ];
 
-const topProviders: ServiceProvider[] = [
+const fallbackTopProviders: ServiceProvider[] = [
   {
-    id: "1",
-    name: "Ali Construction",
+    id: "sp-1",
+    name: "Ahmed Builders",
     role: "General Contractor",
     rating: 4.9,
-    projects: 127,
-    avatar: "AC",
-    skills: ["Residential", "Commercial", "Renovation"],
-    location: "Lahore, Punjab",
-    responseTime: "< 2 hours",
-    description: "Verified general contractor for residential, commercial, and renovation projects with strong site management experience.",
-    phone: "+92-42-111-222-333",
-    email: "projects@aliconstruction.pk",
-    certifications: ["PEC Registered", "Safety Certified", "BuildHive Verified"],
+    projects: 210,
+    avatar: "AB",
+    skills: ["Masonry", "Project Management"],
+    location: "Lahore",
+    responseTime: "1h",
+    description: "Trusted contractor for residential and commercial projects.",
+    phone: "+92-300-0000000",
+    email: "contact@ahmedbuilders.example",
+    certifications: ["ISO 9001"],
   },
   {
-    id: "2",
-    name: "Karachi Builders",
-    role: "Construction Firm",
-    rating: 4.8,
-    projects: 89,
-    avatar: "KB",
-    skills: ["High-Rise", "Industrial", "Infrastructure"],
-    location: "Karachi, Sindh",
-    responseTime: "< 4 hours",
-    description: "Construction firm focused on high-rise, industrial, and infrastructure work across Sindh.",
-    phone: "+92-21-111-444-555",
-    email: "hello@karachibuilders.pk",
-    certifications: ["ISO 9001", "PEC Registered", "Quality Certified"],
-  },
-  {
-    id: "3",
-    name: "Lahore Architects",
-    role: "Design Studio",
+    id: "sp-2",
+    name: "Karachi Electrics",
+    role: "Electrical Contractor",
     rating: 4.7,
-    projects: 64,
-    avatar: "LA",
-    skills: ["Architecture", "Interior", "3D Modeling"],
-    location: "Lahore, Punjab",
-    responseTime: "< 6 hours",
-    description: "Design studio delivering architecture, interiors, visualization, and construction documentation.",
-    phone: "+92-42-111-777-888",
-    email: "studio@lahorearchitects.pk",
-    certifications: ["PCATP Registered", "Green Design Certified"],
-  },
-  {
-    id: "4",
-    name: "Islamabad Engineers",
-    role: "Structural Engineers",
-    rating: 4.9,
-    projects: 45,
-    avatar: "IE",
-    skills: ["Structural", "MEP", "Consulting"],
-    location: "Islamabad",
-    responseTime: "< 3 hours",
-    description: "Engineering consultancy for structural design, MEP coordination, inspections, and technical review.",
-    phone: "+92-51-111-999-000",
-    email: "consult@islamabadengineers.pk",
-    certifications: ["PEC Registered", "LEED Accredited", "Structural Excellence"],
+    projects: 98,
+    avatar: "KE",
+    skills: ["Electrical", "Wiring"],
+    location: "Karachi",
+    responseTime: "2h",
+    description: "Experienced electrical services for large projects.",
+    phone: "+92-300-1111111",
+    email: "info@karachielectrics.example",
+    certifications: [],
   },
 ];
 
-const stats = [
-  { value: "15,000+", label: "Products Listed" },
-  { value: "8,500+", label: "Verified Sellers" },
-  { value: "PKR 2.4B", label: "Transactions" },
-  { value: "99.2%", label: "Satisfaction Rate" },
+const fallbackStats = [
+  { value: "1.2K+", label: "Products" },
+  { value: "3.4K+", label: "Orders" },
+  { value: "980+", label: "Verified Sellers" },
 ];
+
+const mapCategory = (category: CategoryApi, index: number): Category => ({
+  id: category.id,
+  name: category.name,
+  icon: categoryIconNames[index % categoryIconNames.length],
+  count: category.product_count ?? category._count?.products ?? 0,
+  color: "#fff",
+  bg: "#111",
+  route: category.slug
+    ? `/products?category=${category.slug}`
+    : `/products?categoryId=${category.id}`,
+});
+
+const mapProduct = (product: FeaturedProductApi): Listing => ({
+  id: product.id,
+  title: product.name,
+  seller: product.businesses?.business_name || "BuildHive Seller",
+  price: product.price,
+  originalPrice: product.compare_at_price,
+  rating: product.average_rating || 0,
+  reviews: product.total_reviews || 0,
+  image:
+    product.product_images?.[0]?.image_url ||
+    "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800&h=600&fit=crop",
+  badge: product.is_featured ? "Featured" : undefined,
+  tag: product.categories?.name?.toUpperCase() || "PRODUCT",
+});
 
 const homePageStyles = `
 .home-root {
@@ -469,6 +529,13 @@ const homePageStyles = `
   gap: 16px;
 }
 
+.category-pills-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+}
+
 .category-card,
 .listing-card,
 .ai-card,
@@ -478,6 +545,35 @@ const homePageStyles = `
   backdrop-filter: blur(16px);
   transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.5s ease, background 0.5s ease, box-shadow 0.5s ease;
   cursor: pointer;
+}
+
+.category-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: 999px;
+}
+
+.category-pill .category-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+}
+
+.category-pill .category-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.category-pill .category-info h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.category-pill .category-info p {
+  margin: 2px 0 0;
+  font-size: 12px;
 }
 
 .category-card {
@@ -882,34 +978,104 @@ function StarRating({ rating }: { rating: number }) {
           }}
         />
       ))}
-      <span style={{ color: "#94a3b8", fontSize: 12, marginLeft: 4, fontWeight: 800 }}>{rating}</span>
+      <span
+        style={{
+          color: "#94a3b8",
+          fontSize: 12,
+          marginLeft: 4,
+          fontWeight: 800,
+        }}
+      >
+        {rating}
+      </span>
     </div>
   );
 }
 
 export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const [selectedProvider, setSelectedProvider] = useState<ServiceProvider | null>(null);
+  const [selectedProvider, setSelectedProvider] =
+    useState<ServiceProvider | null>(null);
+  const [categories, setCategories] = useState<Category[]>(fallbackCategories);
+  const [featuredListings, setFeaturedListings] = useState<Listing[]>(
+    fallbackFeaturedListings,
+  );
+  const [topProviders] = useState<ServiceProvider[]>(fallbackTopProviders);
+  const [stats] =
+    useState<Array<{ value: string; label: string }>>(fallbackStats);
+  const [homeError, setHomeError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadHomepageSections = async () => {
+      try {
+        const [productsResponse, categoriesResponse] = await Promise.all([
+          api.get<ApiResponse<{ products: FeaturedProductApi[] }>>(
+            "/products",
+            { params: { limit: 8 } },
+          ),
+          api.get<ApiResponse<CategoryApi[]>>("/categories"),
+        ]);
+
+        if (cancelled) return;
+
+        const products = productsResponse.data.data.products || [];
+        const categoriesData = categoriesResponse.data.data || [];
+
+        setFeaturedListings(
+          products.length > 0
+            ? products.map(mapProduct)
+            : fallbackFeaturedListings,
+        );
+        setCategories(
+          categoriesData.length > 0
+            ? categoriesData.map(mapCategory)
+            : fallbackCategories,
+        );
+      } catch (error) {
+        console.error("Failed to load homepage sections:", error);
+        if (!cancelled) {
+          setCategories(fallbackCategories);
+          setFeaturedListings(fallbackFeaturedListings);
+          setHomeError("Homepage content is unavailable right now.");
+        }
+      }
+    };
+
+    loadHomepageSections();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
 
-    const revealNodes = root.querySelectorAll<HTMLElement>(".reveal, .reveal-scale");
+    const revealNodes = root.querySelectorAll<HTMLElement>(
+      ".reveal, .reveal-scale",
+    );
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) entry.target.classList.add("active");
         });
       },
-      { threshold: 0.08 }
+      { threshold: 0.08 },
     );
 
     revealNodes.forEach((node) => observer.observe(node));
 
-    const heroReveals = root.querySelectorAll<HTMLElement>(".hero-section .reveal");
+    const heroReveals = root.querySelectorAll<HTMLElement>(
+      ".hero-section .reveal",
+    );
     const timers = Array.from(heroReveals).map((element, index) =>
-      window.setTimeout(() => element.classList.add("active"), 250 + index * 120)
+      window.setTimeout(
+        () => element.classList.add("active"),
+        250 + index * 120,
+      ),
     );
 
     return () => {
@@ -934,14 +1100,22 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               <span className="gradient-text">Build Together.</span>
             </h1>
             <p className="hero-subtitle reveal">
-              Connect with verified suppliers, discover quality materials at the best prices, and collaborate with construction professionals in one powerful platform.
+              Connect with verified suppliers, discover quality materials at the
+              best prices, and collaborate with construction professionals in
+              one powerful platform.
             </p>
             <div className="hero-cta-group reveal">
-              <button className="btn-primary" onClick={() => onNavigate("products")}>
+              <button
+                className="btn-primary"
+                onClick={() => onNavigate("products")}
+              >
                 <Icons.Package className="h-5 w-5" />
                 Browse Materials
               </button>
-              <button className="btn-secondary" onClick={() => onNavigate("services")}>
+              <button
+                className="btn-secondary"
+                onClick={() => onNavigate("services")}
+              >
                 <Icons.Users className="h-5 w-5" />
                 Find Contractors
               </button>
@@ -954,6 +1128,11 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                 </div>
               ))}
             </div>
+            {homeError && (
+              <p className="hero-subtitle reveal" style={{ marginTop: 18 }}>
+                {homeError}
+              </p>
+            )}
           </div>
         </section>
 
@@ -965,10 +1144,14 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                 A smarter marketplace for <span>construction teams</span>
               </h2>
               <p>
-                BuildHive connects builders, contractors, homeowners, and verified suppliers in one trusted platform for materials, services, and project support.
+                BuildHive connects builders, contractors, homeowners, and
+                verified suppliers in one trusted platform for materials,
+                services, and project support.
               </p>
               <p>
-                From product discovery to professional collaboration, the platform is built to make sourcing faster, clearer, and more reliable for construction work across Pakistan.
+                From product discovery to professional collaboration, the
+                platform is built to make sourcing faster, clearer, and more
+                reliable for construction work across Pakistan.
               </p>
               <div className="home-about-points">
                 <div className="home-about-point">
@@ -1005,15 +1188,18 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
           <div className="section-header reveal">
             <span className="section-label">Categories</span>
             <h2 className="section-title">Browse by Material Type</h2>
-            <p className="section-subtitle">Find exactly what you need from our construction materials catalog.</p>
+            <p className="section-subtitle">
+              Find exactly what you need from our construction materials
+              catalog.
+            </p>
           </div>
-          <div className="categories-grid">
+          <div className="category-pills-grid">
             {categories.map((category, index) => {
-              const IconComp = Icons[category.icon];
+              const IconComp = Icons[category.icon] || Icons.Package;
               return (
                 <div
                   key={category.id}
-                  className="category-card reveal-scale"
+                  className="category-card category-pill reveal-scale"
                   style={{ transitionDelay: `${index * 50}ms` }}
                   onClick={() => onNavigate(category.route)}
                 >
@@ -1035,14 +1221,27 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
             <div className="section-header reveal">
               <span className="section-label">Featured</span>
               <h2 className="section-title">Trending Materials</h2>
-              <p className="section-subtitle">Top-rated products with strong value from verified sellers.</p>
+              <p className="section-subtitle">
+                Top-rated products with strong value from verified sellers.
+              </p>
             </div>
             <div className="listings-grid">
               {featuredListings.map((listing, index) => (
-                <div key={listing.id} className="listing-card reveal" style={{ transitionDelay: `${index * 80}ms` }} onClick={() => onNavigate("products")}>
+                <div
+                  key={listing.id}
+                  className="listing-card reveal"
+                  style={{ transitionDelay: `${index * 80}ms` }}
+                  onClick={() => onNavigate("products")}
+                >
                   <div className="listing-image-wrap">
-                    <img src={listing.image} alt={listing.title} loading="lazy" />
-                    {listing.badge && <span className="listing-badge">{listing.badge}</span>}
+                    <img
+                      src={listing.image}
+                      alt={listing.title}
+                      loading="lazy"
+                    />
+                    {listing.badge && (
+                      <span className="listing-badge">{listing.badge}</span>
+                    )}
                     <span className="listing-tag">{listing.tag}</span>
                   </div>
                   <div className="listing-body">
@@ -1050,8 +1249,14 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                     <p className="listing-seller">by {listing.seller}</p>
                     <div className="listing-footer">
                       <div className="listing-price">
-                        <span className="price-current">PKR {listing.price.toLocaleString()}</span>
-                        {listing.originalPrice && <span className="price-original">PKR {listing.originalPrice.toLocaleString()}</span>}
+                        <span className="price-current">
+                          PKR {listing.price.toLocaleString()}
+                        </span>
+                        {listing.originalPrice && (
+                          <span className="price-original">
+                            PKR {listing.originalPrice.toLocaleString()}
+                          </span>
+                        )}
                       </div>
                       <StarRating rating={listing.rating} />
                     </div>
@@ -1059,8 +1264,14 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                 </div>
               ))}
             </div>
-            <div style={{ textAlign: "center", marginTop: 40 }} className="reveal">
-              <button className="btn-secondary" onClick={() => onNavigate("products")}>
+            <div
+              style={{ textAlign: "center", marginTop: 40 }}
+              className="reveal"
+            >
+              <button
+                className="btn-secondary"
+                onClick={() => onNavigate("products")}
+              >
                 View All Products
                 <Icons.ArrowRight className="h-4 w-4" />
               </button>
@@ -1072,21 +1283,52 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
           <div className="section-header reveal">
             <span className="section-label">AI-Powered</span>
             <h2 className="section-title">Smart Tools for Smart Builders</h2>
-            <p className="section-subtitle">Use intelligent tools to plan, estimate, and source with confidence.</p>
+            <p className="section-subtitle">
+              Use intelligent tools to plan, estimate, and source with
+              confidence.
+            </p>
           </div>
           <div className="ai-grid">
             {[
-              { icon: Icons.AI, tone: "icon-tone-2", title: "AI Recommendations", text: "Get material suggestions based on your project, budget, and quality preferences.", action: "Try Recommendations", route: "ai" },
-              { icon: Icons.Calculator, tone: "icon-tone-7", title: "Cost Estimation", text: "Generate itemized project cost estimates with cost-saving suggestions.", action: "Estimate Costs", route: "ai" },
-              { icon: Icons.Message, tone: "icon-tone-0", title: "AI Assistant", text: "Find products, compare options, and get instant construction marketplace help.", action: "Chat with AI", route: "ai" },
+              {
+                icon: Icons.AI,
+                tone: "icon-tone-2",
+                title: "AI Recommendations",
+                text: "Get material suggestions based on your project, budget, and quality preferences.",
+                action: "Try Recommendations",
+                route: "ai",
+              },
+              {
+                icon: Icons.Calculator,
+                tone: "icon-tone-7",
+                title: "Cost Estimation",
+                text: "Generate itemized project cost estimates with cost-saving suggestions.",
+                action: "Estimate Costs",
+                route: "ai",
+              },
+              {
+                icon: Icons.Message,
+                tone: "icon-tone-0",
+                title: "AI Assistant",
+                text: "Find products, compare options, and get instant construction marketplace help.",
+                action: "Chat with AI",
+                route: "ai",
+              },
             ].map((item, index) => (
-              <div key={item.title} className="ai-card reveal" style={{ transitionDelay: `${index * 100}ms` }}>
+              <div
+                key={item.title}
+                className="ai-card reveal"
+                style={{ transitionDelay: `${index * 100}ms` }}
+              >
                 <div className={`ai-icon ${item.tone}`}>
                   <item.icon />
                 </div>
                 <h3>{item.title}</h3>
                 <p>{item.text}</p>
-                <button className="ai-link" onClick={() => onNavigate(item.route)}>
+                <button
+                  className="ai-link"
+                  onClick={() => onNavigate(item.route)}
+                >
                   {item.action} <Icons.ArrowRight className="h-4 w-4" />
                 </button>
               </div>
@@ -1099,32 +1341,53 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
             <div className="section-header reveal">
               <span className="section-label">Professionals</span>
               <h2 className="section-title">Top Service Providers</h2>
-              <p className="section-subtitle">Connect with verified contractors, architects, and engineers.</p>
+              <p className="section-subtitle">
+                Connect with verified contractors, architects, and engineers.
+              </p>
             </div>
             <div className="providers-grid">
               {topProviders.map((provider, index) => (
-                <div key={provider.id} className="provider-card reveal-scale" style={{ transitionDelay: `${index * 80}ms` }} onClick={() => setSelectedProvider(provider)}>
+                <div
+                  key={provider.id}
+                  className="provider-card reveal-scale"
+                  style={{ transitionDelay: `${index * 80}ms` }}
+                  onClick={() => setSelectedProvider(provider)}
+                >
                   <div className="provider-avatar">{provider.avatar}</div>
                   <h3>{provider.name}</h3>
                   <p className="provider-role">{provider.role}</p>
                   <div className="provider-meta">
                     <div>
-                      <div className="provider-meta-value">{provider.rating}</div>
+                      <div className="provider-meta-value">
+                        {provider.rating}
+                      </div>
                       <div className="provider-meta-label">Rating</div>
                     </div>
                     <div>
-                      <div className="provider-meta-value">{provider.projects}</div>
+                      <div className="provider-meta-value">
+                        {provider.projects}
+                      </div>
                       <div className="provider-meta-label">Projects</div>
                     </div>
                   </div>
                   <div className="provider-skills">
-                    {provider.skills.map((skill) => <span key={skill} className="provider-skill">{skill}</span>)}
+                    {provider.skills.map((skill) => (
+                      <span key={skill} className="provider-skill">
+                        {skill}
+                      </span>
+                    ))}
                   </div>
                 </div>
               ))}
             </div>
-            <div style={{ textAlign: "center", marginTop: 40 }} className="reveal">
-              <button className="btn-secondary" onClick={() => onNavigate("services")}>
+            <div
+              style={{ textAlign: "center", marginTop: 40 }}
+              className="reveal"
+            >
+              <button
+                className="btn-secondary"
+                onClick={() => onNavigate("services")}
+              >
                 Explore All Providers
                 <Icons.ArrowRight className="h-4 w-4" />
               </button>
@@ -1135,13 +1398,29 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         <section className="cta-section">
           <div className="cta-content reveal">
             <h2>Ready to Start Building?</h2>
-            <p>Join construction professionals who trust BuildHive for material sourcing and project collaboration.</p>
-            <div style={{ display: "flex", gap: 16, justifyContent: "center", flexWrap: "wrap" }}>
-              <button className="btn-primary" onClick={() => onNavigate("get-started")}>
+            <p>
+              Join construction professionals who trust BuildHive for material
+              sourcing and project collaboration.
+            </p>
+            <div
+              style={{
+                display: "flex",
+                gap: 16,
+                justifyContent: "center",
+                flexWrap: "wrap",
+              }}
+            >
+              <button
+                className="btn-primary"
+                onClick={() => onNavigate("get-started")}
+              >
                 <Icons.User className="h-5 w-5" />
                 Create Free Account
               </button>
-              <button className="btn-secondary" onClick={() => onNavigate("about")}>
+              <button
+                className="btn-secondary"
+                onClick={() => onNavigate("about")}
+              >
                 Learn More
               </button>
             </div>
@@ -1149,19 +1428,40 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         </section>
 
         {selectedProvider && (
-          <div className="provider-modal-backdrop" onClick={() => setSelectedProvider(null)}>
-            <div className="provider-modal" onClick={(event) => event.stopPropagation()}>
+          <div
+            className="provider-modal-backdrop"
+            onClick={() => setSelectedProvider(null)}
+          >
+            <div
+              className="provider-modal"
+              onClick={(event) => event.stopPropagation()}
+            >
               <div className="provider-modal-header">
                 <h2>{selectedProvider.name}</h2>
-                <button className="provider-modal-close" onClick={() => setSelectedProvider(null)}>x</button>
+                <button
+                  className="provider-modal-close"
+                  onClick={() => setSelectedProvider(null)}
+                >
+                  x
+                </button>
               </div>
               <div className="provider-modal-body">
                 <div className="provider-profile-head">
-                  <div className="provider-profile-avatar">{selectedProvider.avatar}</div>
+                  <div className="provider-profile-avatar">
+                    {selectedProvider.avatar}
+                  </div>
                   <div>
-                    <h3 style={{ color: "#fff", margin: 0, fontSize: "1.4rem" }}>{selectedProvider.name}</h3>
-                    <p className="provider-profile-role">{selectedProvider.role}</p>
-                    <p style={{ color: "#94a3b8", margin: "6px 0 0" }}>{selectedProvider.location}</p>
+                    <h3
+                      style={{ color: "#fff", margin: 0, fontSize: "1.4rem" }}
+                    >
+                      {selectedProvider.name}
+                    </h3>
+                    <p className="provider-profile-role">
+                      {selectedProvider.role}
+                    </p>
+                    <p style={{ color: "#94a3b8", margin: "6px 0 0" }}>
+                      {selectedProvider.location}
+                    </p>
                   </div>
                 </div>
 
@@ -1192,7 +1492,8 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                 <div className="provider-profile-section">
                   <h3>Contact</h3>
                   <p>
-                    Phone: {selectedProvider.phone}<br />
+                    Phone: {selectedProvider.phone}
+                    <br />
                     Email: {selectedProvider.email}
                   </p>
                 </div>
@@ -1201,7 +1502,9 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                   <h3>Skills</h3>
                   <div className="provider-cert-list">
                     {selectedProvider.skills.map((skill) => (
-                      <span key={skill} className="provider-cert">{skill}</span>
+                      <span key={skill} className="provider-cert">
+                        {skill}
+                      </span>
                     ))}
                   </div>
                 </div>
@@ -1210,7 +1513,9 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                   <h3>Certifications</h3>
                   <div className="provider-cert-list">
                     {selectedProvider.certifications.map((certification) => (
-                      <span key={certification} className="provider-cert">{certification}</span>
+                      <span key={certification} className="provider-cert">
+                        {certification}
+                      </span>
                     ))}
                   </div>
                 </div>
@@ -1221,17 +1526,33 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                     {selectedProvider.skills.map((skill) => (
                       <div key={skill} className="provider-service-mini">
                         <h4>{skill}</h4>
-                        <p>Available through {selectedProvider.name}. Open Services to request a quote or compare providers.</p>
+                        <p>
+                          Available through {selectedProvider.name}. Open
+                          Services to request a quote or compare providers.
+                        </p>
                       </div>
                     ))}
                   </div>
                 </div>
 
-                <div style={{ display: "flex", gap: 12, marginTop: 24, flexWrap: "wrap" }}>
-                  <button className="btn-primary" onClick={() => onNavigate("services")}>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 12,
+                    marginTop: 24,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <button
+                    className="btn-primary"
+                    onClick={() => onNavigate("services")}
+                  >
                     View Services
                   </button>
-                  <button className="btn-secondary" onClick={() => setSelectedProvider(null)}>
+                  <button
+                    className="btn-secondary"
+                    onClick={() => setSelectedProvider(null)}
+                  >
                     Close
                   </button>
                 </div>

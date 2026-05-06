@@ -1,4 +1,4 @@
-import axios from "axios";
+import api from "./api";
 
 export interface ContactFormData {
   name: string;
@@ -18,15 +18,7 @@ export const sendContactMessage = async (
   data: ContactFormData
 ): Promise<ContactResponse> => {
   try {
-    const response = await axios.post<ContactResponse>(
-      "http://localhost:3010/contact",
-      data,
-      {
-        headers: {
-          "Content-Type": "application/json"
-        }
-      }
-    );
+    const response = await api.post<ContactResponse>("/contact", data);
     return response.data;
   } catch (error: any) {
     console.error("[Contact] Error:", error);

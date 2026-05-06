@@ -3,6 +3,7 @@ import { Icons } from "../components/Icons";
 import { Button } from "../components/Button";
 import { User } from "../types";
 import { useAuth } from "../src/context/AuthContext";
+import api from "../src/services/api";
 import {
   userService,
   UserProfile,
@@ -36,9 +37,24 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [orderTracking, setOrderTracking] = useState<OrderTracking | null>(
-    null
+    null,
   );
   const [trackingLoading, setTrackingLoading] = useState(false);
+  const [reviewedProducts, setReviewedProducts] = useState<
+    Record<string, boolean>
+  >({});
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [reviewTarget, setReviewTarget] = useState<{
+    productId: string;
+    productName: string;
+  } | null>(null);
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewForm, setReviewForm] = useState({
+    rating: 5,
+    title: "",
+    body: "",
+  });
 
   useEffect(() => {
     // Fetch orders for the logged-in user only
@@ -102,6 +118,14 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   const [editError, setEditError] = useState<string | null>(null);
   const [profileImageUploading, setProfileImageUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const orderStatusStep =
+    selectedOrder?.status === "processing"
+      ? 2
+      : selectedOrder?.status === "shipped"
+        ? 3
+        : selectedOrder?.status === "delivered"
+          ? 4
+          : 1;
 
   // Address state
   const [address, setAddress] = useState<Address | null>(null);
@@ -157,7 +181,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   };
 
   const handleProfileImageChange = async (
-    e: React.ChangeEvent<HTMLInputElement>
+    e: React.ChangeEvent<HTMLInputElement>,
   ) => {
     if (!e.target.files || e.target.files.length === 0) return;
     const file = e.target.files[0];
@@ -169,11 +193,11 @@ export const AccountPage: React.FC<AccountPageProps> = ({
       // If URL doesn't start with http, prepend base URL
       const imageUrl = url.startsWith("http")
         ? url
-        : `http://localhost:3000${url}`;
+        : `${import.meta.env.VITE_API_URL || "http://localhost:3000"}${url}`;
       console.log("📸 Full image URL:", imageUrl);
       setEditProfile((prev) => ({ ...prev, profile_image: imageUrl }));
       setProfile((prev) =>
-        prev ? { ...prev, profile_image: imageUrl } : prev
+        prev ? { ...prev, profile_image: imageUrl } : prev,
       );
 
       // Refresh user in AuthContext to update profile image globally
@@ -208,7 +232,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
       try {
         await refreshUser();
         console.log(
-          "✅ AuthContext user refreshed after deleting profile image"
+          "✅ AuthContext user refreshed after deleting profile image",
         );
       } catch (refreshErr) {
         console.warn("⚠️ Failed to refresh AuthContext user:", refreshErr);
@@ -254,7 +278,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   }, []);
 
   const handleAddressChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
   ) => {
     setAddressForm({ ...addressForm, [e.target.name]: e.target.value });
   };
@@ -271,7 +295,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
         const updated = await userService.updateAddress(
           user.id,
           address.id,
-          addressForm
+          addressForm,
         );
         setAddress(updated);
         setAddressSuccess("Address updated successfully!");
@@ -288,7 +312,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
       setAddressError(
         error.response?.data?.message ||
           error.response?.data?.error ||
-          "Failed to save address"
+          "Failed to save address",
       );
     } finally {
       setAddressSaving(false);
@@ -318,7 +342,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
       setAddressSuccess("Address deleted successfully!");
     } catch (error: any) {
       setAddressError(
-        error.response?.data?.message || "Failed to delete address"
+        error.response?.data?.message || "Failed to delete address",
       );
     }
   };
@@ -376,7 +400,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
       const { authService } = await import("../src/services/authService");
       await authService.changePassword(
         passwordForm.currentPassword,
-        passwordForm.newPassword
+        passwordForm.newPassword,
       );
       setPasswordSuccess("Password updated successfully!");
       setPasswordForm({
@@ -388,7 +412,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
       setPasswordError(
         error.response?.data?.message ||
           error.response?.data?.error ||
-          "Failed to update password"
+          "Failed to update password",
       );
     } finally {
       setPasswordLoading(false);
@@ -416,13 +440,88 @@ export const AccountPage: React.FC<AccountPageProps> = ({
     }
   };
 
+  const canCancelOrder = (order: Order) =>
+    order.status !== "delivered" &&
+    order.status !== "refunded" &&
+    order.status !== "shipped";
+
+  const handleCancelOrder = async (order: Order) => {
+    const confirmed = window.confirm(`Cancel order #${order.order_number}?`);
+    if (!confirmed) return;
+
+    try {
+      const updatedOrder = await orderService.cancelOrder(order.id);
+      setOrders((current) =>
+        current.map((item) =>
+          item.id === order.id ? { ...item, ...updatedOrder } : item,
+        ),
+      );
+      if (selectedOrder?.id === order.id) {
+        setSelectedOrder((current) =>
+          current ? { ...current, ...updatedOrder } : current,
+        );
+      }
+    } catch (error) {
+      console.error("Failed to cancel order:", error);
+      window.alert("Failed to cancel order. Please try again.");
+    }
+  };
+
+  const openReviewModal = (productId: string, productName: string) => {
+    setReviewTarget({ productId, productName });
+    setReviewForm({ rating: 5, title: "", body: "" });
+    setReviewError(null);
+    setReviewModalOpen(true);
+  };
+
+  const closeReviewModal = () => {
+    setReviewModalOpen(false);
+    setReviewTarget(null);
+    setReviewError(null);
+  };
+
+  const closeInvoiceModal = () => {
+    setShowInvoiceModal(false);
+    closeReviewModal();
+  };
+
+  const submitReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reviewTarget) return;
+
+    setReviewSubmitting(true);
+    setReviewError(null);
+
+    try {
+      const response = await api.post(
+        `/products/${reviewTarget.productId}/reviews`,
+        {
+          rating: reviewForm.rating,
+          title: reviewForm.title,
+          body: reviewForm.body,
+        },
+      );
+      console.log("REVIEW POST:", response.data);
+      setReviewedProducts((prev) => ({
+        ...prev,
+        [reviewTarget.productId]: true,
+      }));
+      closeReviewModal();
+    } catch (error) {
+      console.error("Failed to submit review:", error);
+      setReviewError("Failed to submit review. Please try again.");
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
+
   // Calculate dashboard stats
   const totalOrders = orders.length;
   const pendingOrders = orders.filter(
     (o) =>
       o.status === "pending_payment" ||
       o.status === "pending" ||
-      o.status === "processing"
+      o.status === "processing",
   ).length;
   const totalSpent = orders.reduce((sum, o) => sum + (o.total_amount || 0), 0);
 
@@ -504,7 +603,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                         <td className="px-4 py-3 text-gray-500">
                           {new Date(order.created_at).toLocaleDateString(
                             "en-US",
-                            { month: "short", day: "numeric", year: "numeric" }
+                            { month: "short", day: "numeric", year: "numeric" },
                           )}
                         </td>
                         <td className="px-4 py-3">
@@ -513,8 +612,8 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                               order.status === "delivered"
                                 ? "bg-green-100 text-green-700"
                                 : order.status === "processing"
-                                ? "bg-blue-100 text-blue-700"
-                                : "bg-yellow-100 text-yellow-700"
+                                  ? "bg-blue-100 text-blue-700"
+                                  : "bg-yellow-100 text-yellow-700"
                             }`}
                           >
                             {order.status.charAt(0).toUpperCase() +
@@ -525,12 +624,22 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                           PKR {(order.total_amount || 0).toLocaleString()}
                         </td>
                         <td className="px-4 py-3">
-                          <button
-                            onClick={() => handleViewOrder(order)}
-                            className="text-primary hover:underline"
-                          >
-                            View
-                          </button>
+                          <div className="flex items-center justify-end gap-3">
+                            <button
+                              onClick={() => handleViewOrder(order)}
+                              className="text-primary hover:underline"
+                            >
+                              View
+                            </button>
+                            {canCancelOrder(order) && (
+                              <button
+                                onClick={() => handleCancelOrder(order)}
+                                className="text-red-600 hover:underline"
+                              >
+                                Cancel
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -585,7 +694,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       <td className="px-6 py-4 text-gray-500">
                         {new Date(order.created_at).toLocaleDateString(
                           "en-US",
-                          { month: "short", day: "numeric", year: "numeric" }
+                          { month: "short", day: "numeric", year: "numeric" },
                         )}
                       </td>
                       <td className="px-6 py-4">
@@ -594,8 +703,8 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                             order.status === "delivered"
                               ? "bg-green-100 text-green-700"
                               : order.status === "processing"
-                              ? "bg-blue-100 text-blue-700"
-                              : "bg-yellow-100 text-yellow-700"
+                                ? "bg-blue-100 text-blue-700"
+                                : "bg-yellow-100 text-yellow-700"
                           }`}
                         >
                           {order.status.charAt(0).toUpperCase() +
@@ -606,13 +715,25 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                         PKR {(order.total_amount || 0).toLocaleString()}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleViewOrder(order)}
-                        >
-                          View Invoice
-                        </Button>
+                        <div className="flex items-center justify-end gap-3">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleViewOrder(order)}
+                          >
+                            View Invoice
+                          </Button>
+                          {canCancelOrder(order) && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleCancelOrder(order)}
+                              className="border-red-200 text-red-600 hover:border-red-300 hover:bg-red-50"
+                            >
+                              Cancel Order
+                            </Button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -889,8 +1010,8 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       {addressSaving
                         ? "Saving..."
                         : address
-                        ? "Update Address"
-                        : "Add Address"}
+                          ? "Update Address"
+                          : "Add Address"}
                     </Button>
                     {address && (
                       <Button
@@ -1024,6 +1145,103 @@ export const AccountPage: React.FC<AccountPageProps> = ({
 
   return (
     <>
+      {/* Review Modal */}
+      {reviewModalOpen && reviewTarget && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl">
+            <div className="border-b border-gray-200 p-6 flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">
+                  Write Review
+                </h2>
+                <p className="text-sm text-gray-500">
+                  {reviewTarget.productName}
+                </p>
+              </div>
+              <button
+                onClick={closeReviewModal}
+                className="text-gray-400 hover:text-gray-600"
+                aria-label="Close review modal"
+              >
+                <Icons.Close className="h-6 w-6" />
+              </button>
+            </div>
+            <form onSubmit={submitReview} className="space-y-5 p-6">
+              <div>
+                <p className="mb-2 text-sm font-medium text-gray-700">Rating</p>
+                <div className="flex gap-2">
+                  {[1, 2, 3, 4, 5].map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() =>
+                        setReviewForm((prev) => ({ ...prev, rating: value }))
+                      }
+                      className={`h-10 w-10 rounded-full border text-sm font-bold transition-colors ${
+                        reviewForm.rating >= value
+                          ? "border-yellow-400 bg-yellow-400 text-white"
+                          : "border-gray-300 bg-white text-gray-400 hover:border-yellow-300"
+                      }`}
+                    >
+                      {value}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  Title
+                </label>
+                <input
+                  type="text"
+                  value={reviewForm.title}
+                  onChange={(e) =>
+                    setReviewForm((prev) => ({
+                      ...prev,
+                      title: e.target.value,
+                    }))
+                  }
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  placeholder="Short review title"
+                  required
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  Review
+                </label>
+                <textarea
+                  value={reviewForm.body}
+                  onChange={(e) =>
+                    setReviewForm((prev) => ({ ...prev, body: e.target.value }))
+                  }
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  placeholder="Tell others what you think"
+                  rows={5}
+                  required
+                />
+              </div>
+              {reviewError && (
+                <p className="text-sm text-red-600">{reviewError}</p>
+              )}
+              <div className="flex justify-end gap-3">
+                <Button
+                  variant="outline"
+                  type="button"
+                  onClick={closeReviewModal}
+                  disabled={reviewSubmitting}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={reviewSubmitting}>
+                  {reviewSubmitting ? "Submitting..." : "Submit Review"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Invoice Modal */}
       {showInvoiceModal && selectedOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -1034,7 +1252,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                   Order Invoice
                 </h2>
                 <button
-                  onClick={() => setShowInvoiceModal(false)}
+                  onClick={closeInvoiceModal}
                   className="text-gray-400 hover:text-gray-600"
                   aria-label="Close invoice modal"
                 >
@@ -1054,14 +1272,14 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                 <div>
                   <p className="text-sm text-gray-500">Order Date</p>
                   <p className="font-semibold text-gray-900">
-                    {new Date(selectedOrder.created_at).toLocaleDateString(
-                      "en-US",
-                      {
-                        month: "long",
-                        day: "numeric",
-                        year: "numeric",
-                      }
-                    )}
+                    {new Date(
+                      (selectedOrder as any).createdAt ||
+                        selectedOrder.created_at,
+                    ).toLocaleDateString("en-US", {
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    })}
                   </p>
                 </div>
                 <div>
@@ -1071,8 +1289,8 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       selectedOrder.status === "delivered"
                         ? "bg-green-100 text-green-700"
                         : selectedOrder.status === "processing"
-                        ? "bg-blue-100 text-blue-700"
-                        : "bg-yellow-100 text-yellow-700"
+                          ? "bg-blue-100 text-blue-700"
+                          : "bg-yellow-100 text-yellow-700"
                     }`}
                   >
                     {selectedOrder.status.charAt(0).toUpperCase() +
@@ -1119,6 +1337,65 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                 </div>
               )}
 
+              {/* Order Status Progression */}
+              <div className="border-t pt-4">
+                <h3 className="font-semibold text-gray-900 mb-4">
+                  Order Status Progression
+                </h3>
+                <div className="grid grid-cols-4 gap-3">
+                  {[
+                    "Payment Received",
+                    "Processing",
+                    "Shipped",
+                    "Delivered",
+                  ].map((stepLabel, index) => {
+                    const stepNumber = index + 1;
+                    const isCompleted = stepNumber < orderStatusStep;
+                    const isCurrent = stepNumber === orderStatusStep;
+                    const isFuture = stepNumber > orderStatusStep;
+
+                    return (
+                      <div
+                        key={stepLabel}
+                        className="relative flex flex-col items-center"
+                      >
+                        {index < 3 && (
+                          <div
+                            className={`absolute left-1/2 top-3.5 h-0.5 w-full translate-x-1/2 ${
+                              stepNumber <= orderStatusStep
+                                ? "bg-green-500"
+                                : "bg-gray-300"
+                            }`}
+                          />
+                        )}
+                        <div
+                          className={`relative z-10 flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-bold ${
+                            isCompleted
+                              ? "border-green-500 bg-green-500 text-white"
+                              : isCurrent
+                                ? "border-blue-500 bg-blue-500 text-white"
+                                : "border-gray-300 bg-white text-gray-400"
+                          }`}
+                        >
+                          {stepNumber}
+                        </div>
+                        <p
+                          className={`mt-2 text-center text-xs font-medium leading-tight ${
+                            isCompleted
+                              ? "text-green-700"
+                              : isCurrent
+                                ? "text-blue-700"
+                                : "text-gray-400"
+                          }`}
+                        >
+                          {stepLabel}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Tracking Information */}
               {(selectedOrder.status === "shipped" ||
                 selectedOrder.status === "delivered") && (
@@ -1158,7 +1435,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                               </span>
                               <p className="font-semibold text-gray-900">
                                 {new Date(
-                                  orderTracking.estimated_delivery
+                                  orderTracking.estimated_delivery,
                                 ).toLocaleDateString()}
                               </p>
                             </div>
@@ -1219,12 +1496,12 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                                       )}
                                       <p className="text-xs text-gray-400 mt-1">
                                         {new Date(
-                                          event.timestamp
+                                          event.timestamp,
                                         ).toLocaleString()}
                                       </p>
                                     </div>
                                   </div>
-                                )
+                                ),
                               )}
                             </div>
                           </div>
@@ -1251,25 +1528,53 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                   <h3 className="font-semibold text-gray-900 mb-3">
                     Order Items
                   </h3>
-                  <div className="space-y-2">
-                    {selectedOrder.items.map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex justify-between items-center"
-                      >
-                        <div>
-                          <p className="font-medium text-gray-900">
-                            {item.product?.name || "Product"}
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            Qty: {item.quantity}
-                          </p>
+                  <div className="space-y-3">
+                    {selectedOrder.items.map((item) => {
+                      const isReviewed = reviewedProducts[item.product_id];
+                      const canReview = selectedOrder.status === "delivered";
+                      return (
+                        <div
+                          key={item.id}
+                          className="rounded-lg border border-gray-100 p-4"
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <p className="font-medium text-gray-900">
+                                {item.product?.name || "Product"}
+                              </p>
+                              <p className="text-sm text-gray-500">
+                                Qty: {item.quantity}
+                              </p>
+                            </div>
+                            <p className="font-semibold text-gray-900">
+                              PKR {item.subtotal.toLocaleString()}
+                            </p>
+                          </div>
+                          {canReview && (
+                            <div className="mt-3 flex justify-end">
+                              {isReviewed ? (
+                                <span className="inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+                                  Reviewed ✓
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    openReviewModal(
+                                      item.product_id,
+                                      item.product?.name || "Product",
+                                    )
+                                  }
+                                  className="inline-flex items-center rounded-full bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700"
+                                >
+                                  Write Review
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </div>
-                        <p className="font-semibold text-gray-900">
-                          PKR {item.subtotal.toLocaleString()}
-                        </p>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -1283,9 +1588,12 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Tax</span>
+                  <span className="text-gray-600">Tax (5%)</span>
                   <span className="font-medium text-gray-900">
-                    PKR {(selectedOrder.tax_amount || 0).toLocaleString()}
+                    PKR{" "}
+                    {(
+                      selectedOrder.tax_amount ?? selectedOrder.subtotal * 0.05
+                    ).toLocaleString()}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">

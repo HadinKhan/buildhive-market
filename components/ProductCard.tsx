@@ -19,6 +19,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const isDark = variant === "dark";
   const isGrid = variant === "grid";
 
+  const resolveProductImage = () => {
+    const images =
+      (product as any).images || (product as any).product_images || [];
+
+    const firstImage = images.find((image: any) => Boolean(image?.image_url));
+    return firstImage?.image_url || (product as any).image || "";
+  };
+
   const handleExplore = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (onNavigate) {
@@ -26,12 +34,30 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     }
   };
 
+  const handleContactSeller = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    console.log("CHAT START:", (product as any).business);
+
+    const participantId =
+      (product as any).business?.user_id ||
+      (product as any).business?.userId ||
+      product.seller_id;
+
+    if (!participantId) {
+      console.log(
+        "MISSING PARTICIPANT_ID for product.business",
+        (product as any).business,
+      );
+      return;
+    }
+
+    window.location.href =
+      "/messages?participantId=" + encodeURIComponent(participantId);
+  };
+
   // Specific style for the All Products Grid
   if (isGrid) {
-    const imageUrl =
-      product.images && product.images.length > 0
-        ? product.images[0].image_url
-        : null;
+    const imageUrl = resolveProductImage();
     return (
       <div
         onClick={() => onNavigate && onNavigate("product-detail", product.id)}
@@ -84,14 +110,24 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 {product.sales || 0} Sales
               </span>
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 px-3 text-xs bg-white hover:bg-gray-50"
-              onClick={handleExplore}
-            >
-              Explore
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 px-3 text-xs bg-white hover:bg-gray-50"
+                onClick={handleContactSeller}
+              >
+                Contact
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 px-3 text-xs bg-white hover:bg-gray-50"
+                onClick={handleExplore}
+              >
+                Explore
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -99,10 +135,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   }
 
   // Default / Dark variants
-  const imageUrl =
-    product.images && product.images.length > 0
-      ? product.images[0].image_url
-      : null;
+  const imageUrl = resolveProductImage();
   return (
     <div
       onClick={() => onNavigate && onNavigate("product-detail", product.id)}
@@ -195,6 +228,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           >
             {product.sales || 0} Sales
           </span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 px-3 text-xs"
+            onClick={handleContactSeller}
+          >
+            <Icons.Message className="h-4 w-4 mr-1" /> Contact
+          </Button>
         </div>
       </div>
     </div>

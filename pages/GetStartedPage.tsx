@@ -22,6 +22,7 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
     password: "",
     confirmPassword: "",
     accountType: "buyer",
+    termsAccepted: false,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +50,7 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
         fullName: formData.name,
         phone: formData.phone || undefined,
         role: formData.accountType as "buyer" | "contractor" | "supplier",
+        termsAccepted: formData.termsAccepted,
       });
       // Success - User is now logged in
       onNavigate("home");
@@ -60,7 +62,7 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
   };
 
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
   ) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
@@ -85,7 +87,9 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
 
         <form onSubmit={handleSubmit}>
           <div className="auth-field">
-            <label className="auth-label">{getStartedPageData.form.nameLabel}</label>
+            <label className="auth-label">
+              {getStartedPageData.form.nameLabel}
+            </label>
             <input
               name="name"
               type="text"
@@ -98,7 +102,9 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
 
           <div className="auth-field-grid two">
             <div className="auth-field">
-              <label className="auth-label">{getStartedPageData.form.emailLabel}</label>
+              <label className="auth-label">
+                {getStartedPageData.form.emailLabel}
+              </label>
               <input
                 name="email"
                 type="email"
@@ -109,7 +115,9 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
               />
             </div>
             <div className="auth-field">
-              <label className="auth-label">{getStartedPageData.form.phoneLabel}</label>
+              <label className="auth-label">
+                {getStartedPageData.form.phoneLabel}
+              </label>
               <input
                 name="phone"
                 type="tel"
@@ -122,7 +130,9 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
 
           <div className="auth-field-grid two">
             <div className="auth-field">
-              <label className="auth-label">{getStartedPageData.form.passwordLabel}</label>
+              <label className="auth-label">
+                {getStartedPageData.form.passwordLabel}
+              </label>
               <input
                 name="password"
                 type="password"
@@ -133,7 +143,9 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
               />
             </div>
             <div className="auth-field">
-              <label className="auth-label">{getStartedPageData.form.confirmPasswordLabel}</label>
+              <label className="auth-label">
+                {getStartedPageData.form.confirmPasswordLabel}
+              </label>
               <input
                 name="confirmPassword"
                 type="password"
@@ -146,7 +158,9 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
           </div>
 
           <div className="auth-field">
-            <label className="auth-label">{getStartedPageData.form.accountTypeLabel}</label>
+            <label className="auth-label">
+              {getStartedPageData.form.accountTypeLabel}
+            </label>
             <select
               name="accountType"
               onChange={handleChange}
@@ -162,10 +176,18 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
             </select>
           </div>
 
-          <div className="auth-actions" style={{ justifyContent: "flex-start" }}>
+          <div
+            className="auth-actions"
+            style={{ justifyContent: "flex-start" }}
+          >
             <input
+              name="termsAccepted"
               type="checkbox"
               required
+              checked={formData.termsAccepted}
+              onChange={(e) =>
+                setFormData({ ...formData, termsAccepted: e.target.checked })
+              }
               aria-label="Accept Terms and Conditions"
             />
             <span className="auth-check" style={{ cursor: "default" }}>
@@ -183,16 +205,15 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
           </div>
 
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? getStartedPageData.form.submitLoading : getStartedPageData.form.submitIdle}
+            {loading
+              ? getStartedPageData.form.submitLoading
+              : getStartedPageData.form.submitIdle}
           </Button>
         </form>
 
         <div className="auth-bottom">
           {getStartedPageData.bottomText.prefix}{" "}
-          <span
-            onClick={() => onNavigate("signin")}
-            className="auth-link"
-          >
+          <span onClick={() => onNavigate("signin")} className="auth-link">
             {getStartedPageData.bottomText.action}
           </span>
         </div>

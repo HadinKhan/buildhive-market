@@ -179,12 +179,15 @@ class OrderService {
   async createOrder(orderData: CreateOrderData): Promise<Order> {
     console.log('📦 [OrderService] Creating order...');
     console.log('📝 [OrderService] Order data:', JSON.stringify(orderData, null, 2));
-    
-    const response = await api.post<ApiResponse<Order>>('/orders', orderData);
-    
-    console.log('✅ [OrderService] Order created:', response.data.data.order_number);
-    
-    return response.data.data;
+
+    const response = await api.post<ApiResponse<any>>('/orders', orderData);
+
+    // Map potential response shapes where order is returned inside an orders array
+    const order = response.data?.orders?.[0] || response.data?.data?.orders?.[0] || response.data?.data || response.data?.orders?.[0] || response.data;
+    console.log('mapped order:', order);
+
+    // Ensure we return the order object (cast to Order for typing)
+    return order as Order;
   }
 
   /**
@@ -193,7 +196,7 @@ class OrderService {
   async cancelOrder(id: string, reason?: string): Promise<Order> {
     console.log('❌ [OrderService] Cancelling order:', id);
     
-    const response = await api.put<ApiResponse<Order>>(`/orders/${id}/cancel`, { reason });
+    const response = await api.post<ApiResponse<Order>>(`/orders/${id}/cancel`, { reason });
     
     console.log('✅ [OrderService] Order cancelled');
     

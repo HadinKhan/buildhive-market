@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { Icons } from "../components/Icons";
 import { settingsPageStyles } from "../src/styles/settingsPageStyles";
 import { settingsPageData } from "../src/data/settingsPageData";
+import { settingsService } from "../src/services/settingsService";
 
 interface SettingsPageProps {
   onNavigate: (page: string) => void;
@@ -19,6 +20,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
   // Track which sections have unsaved changes
   const [unsavedSections, setUnsavedSections] = useState<Set<string>>(new Set());
   const [savedSections, setSavedSections] = useState<Set<string>>(new Set());
+  const [settingsError, setSettingsError] = useState<string | null>(null);
 
   // Scroll reveal
   useEffect(() => {
@@ -56,6 +58,27 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    settingsService
+      .getSettings()
+      .then((settings) => {
+        if (cancelled) return;
+        if (settings.notifications) setNotifications((current) => ({ ...current, ...settings.notifications }));
+        if (settings.privacy) setPrivacy((current) => ({ ...current, ...settings.privacy }));
+        if (settings.preferences) setPreferences((current) => ({ ...current, ...settings.preferences }));
+        if (settings.security) setSecurity((current) => ({ ...current, ...settings.security }));
+        setSettingsError(null);
+      })
+      .catch((error) => {
+        console.error("Failed to load settings:", error);
+        if (!cancelled) setSettingsError("Settings are unavailable right now.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Mark section as unsaved when any value changes
   const markUnsaved = (section: string) => {
     setUnsavedSections((prev) => new Set(prev).add(section));
@@ -68,7 +91,16 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
 
   // Save handler per section
   const handleSave = (section: string) => {
-    // In real app: API call here
+    const payload = {
+      notifications,
+      privacy,
+      preferences,
+      security,
+    };
+    settingsService.updateSettings({ [section]: payload[section as keyof typeof payload] }).catch((error) => {
+      console.error("Failed to save settings:", error);
+      setSettingsError("Failed to save settings. Please try again.");
+    });
     setUnsavedSections((prev) => {
       const next = new Set(prev);
       next.delete(section);
@@ -176,6 +208,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
               Customize notifications, privacy, security, and app behavior 
               to tailor BuildHive to your workflow.
             </p>
+            {settingsError && <p className="reveal stagger-2">{settingsError}</p>}
           </div>
         </section>
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { Icons } from "../components/Icons";
+import { useLocation } from "react-router-dom";
 import { aboutPageStyles } from "../src/styles/aboutPageStyles";
 import { aboutPageData } from "../src/data/aboutPageData";
 
@@ -10,13 +11,14 @@ interface AboutPageProps {
 export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
   // Refactored: modular styles and data architecture
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const location = useLocation();
 
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
 
     const revealNodes = root.querySelectorAll<HTMLElement>(
-      ".reveal, .reveal-left, .reveal-right, .reveal-scale"
+      ".reveal, .reveal-left, .reveal-right, .reveal-scale",
     );
 
     const animateCounters = (container: Element) => {
@@ -55,7 +57,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
           }
         });
       },
-      { root: null, rootMargin: "0px", threshold: 0.1 }
+      { root: null, rootMargin: "0px", threshold: 0.1 },
     );
 
     revealNodes.forEach((node) => observer.observe(node));
@@ -63,9 +65,12 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
     const heroReveals = root.querySelectorAll<HTMLElement>(".hero .reveal");
     const timers: number[] = [];
     heroReveals.forEach((el, index) => {
-      const id = window.setTimeout(() => {
-        el.classList.add("active");
-      }, 200 + index * 150);
+      const id = window.setTimeout(
+        () => {
+          el.classList.add("active");
+        },
+        200 + index * 150,
+      );
       timers.push(id);
     });
 
@@ -74,6 +79,18 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
       timers.forEach((id) => window.clearTimeout(id));
     };
   }, []);
+
+  useEffect(() => {
+    const section = new URLSearchParams(location.search).get("section");
+    if (!section) return;
+
+    const target = document.getElementById(section);
+    if (target) {
+      window.requestAnimationFrame(() => {
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+  }, [location.search]);
 
   return (
     <div ref={rootRef}>
@@ -88,9 +105,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
           <div className="hero-grid"></div>
 
           <div className="hero-content">
-            <div className="hero-badge reveal">
-              About BuildHive
-            </div>
+            <div className="hero-badge reveal">About BuildHive</div>
 
             <h1 className="reveal stagger-1">
               Revolutionizing
@@ -105,7 +120,10 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
             </p>
 
             <div className="hero-buttons reveal stagger-3">
-              <button className="btn-primary hero-primary-button" onClick={() => onNavigate("products")}>
+              <button
+                className="btn-primary hero-primary-button"
+                onClick={() => onNavigate("products")}
+              >
                 <span className="btn-label">Browse Products</span>
                 <Icons.ArrowRight className="h-[18px] w-[18px]" />
               </button>
@@ -114,7 +132,11 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
             <div className="hero-stats reveal stagger-4">
               {aboutPageData.stats.map((stat) => (
                 <div key={stat.label} className="stat-item">
-                  <h3 className="counter" data-target={stat.target} data-suffix={stat.suffix || ""}>
+                  <h3
+                    className="counter"
+                    data-target={stat.target}
+                    data-suffix={stat.suffix || ""}
+                  >
                     0
                   </h3>
                   <p>{stat.label}</p>
@@ -122,7 +144,6 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
               ))}
             </div>
           </div>
-
         </section>
 
         {/* Our Story Section */}
@@ -143,8 +164,8 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
               <p>
                 We bridge this gap by creating a transparent, user-friendly
                 ecosystem that empowers architects, engineers, contractors, and
-                interior designers to buy, sell, and collaborate on
-                construction projects with confidence and ease.
+                interior designers to buy, sell, and collaborate on construction
+                projects with confidence and ease.
               </p>
               <p>
                 Today, BuildHive is more than a marketplace. It's a movement to
@@ -185,7 +206,13 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
             </div>
 
             <div className="story-image reveal-right">
-              <div style={{ position: "relative", overflow: "hidden", borderRadius: "24px" }}>
+              <div
+                style={{
+                  position: "relative",
+                  overflow: "hidden",
+                  borderRadius: "24px",
+                }}
+              >
                 <img
                   src="https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=800&h=600&fit=crop"
                   alt="Construction Site"
@@ -199,7 +226,13 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
                     <Icons.Award />
                   </div>
                   <div>
-                    <div style={{ color: "white", fontWeight: 600, fontSize: "15px" }}>
+                    <div
+                      style={{
+                        color: "white",
+                        fontWeight: 600,
+                        fontSize: "15px",
+                      }}
+                    >
                       Top Rated
                     </div>
                     <div style={{ color: "#94a3b8", fontSize: "13px" }}>
@@ -207,11 +240,19 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
                     </div>
                   </div>
                 </div>
-                <div style={{ display: "flex", gap: "3px", alignItems: "center" }}>
+                <div
+                  style={{ display: "flex", gap: "3px", alignItems: "center" }}
+                >
                   <span style={{ color: "#fbbf24", fontSize: "16px" }}>
                     ★★★★★
                   </span>
-                  <span style={{ color: "#64748b", fontSize: "13px", marginLeft: "6px" }}>
+                  <span
+                    style={{
+                      color: "#64748b",
+                      fontSize: "13px",
+                      marginLeft: "6px",
+                    }}
+                  >
                     4.9/5
                   </span>
                 </div>
@@ -234,10 +275,10 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
               </div>
               <h3>Our Mission</h3>
               <p>
-                To connect construction professionals with quality materials
-                and services through a transparent, reliable, and
-                technologically advanced platform that reduces costs,
-                minimizes waste, and accelerates project timelines.
+                To connect construction professionals with quality materials and
+                services through a transparent, reliable, and technologically
+                advanced platform that reduces costs, minimizes waste, and
+                accelerates project timelines.
               </p>
               <div className="mission-tags">
                 <span className="mission-tag">Transparency</span>
@@ -275,7 +316,10 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
             {aboutPageData.values.map((value, index) => {
               const IconComp = value.icon;
               return (
-                <div key={value.title} className={`value-card reveal-scale stagger-${index + 1}`}>
+                <div
+                  key={value.title}
+                  className={`value-card reveal-scale stagger-${index + 1}`}
+                >
                   <div className={`value-icon ${value.tone}`}>
                     <IconComp />
                   </div>
@@ -298,7 +342,10 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
             {aboutPageData.offers.map((offer, index) => {
               const IconComp = offer.icon;
               return (
-                <div key={offer.title} className={`offer-card reveal stagger-${index + 1}`}>
+                <div
+                  key={offer.title}
+                  className={`offer-card reveal stagger-${index + 1}`}
+                >
                   <div className={`offer-icon ${offer.tone}`}>
                     <IconComp />
                   </div>
@@ -330,7 +377,11 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
                 </div>
                 <div
                   className="timeline-content"
-                  style={item.active ? { borderColor: "rgba(139, 92, 246, 0.25)" } : {}}
+                  style={
+                    item.active
+                      ? { borderColor: "rgba(139, 92, 246, 0.25)" }
+                      : {}
+                  }
                 >
                   <div className="timeline-date">{item.date}</div>
                   <h3>{item.title}</h3>
@@ -350,7 +401,10 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
 
           <div className="testimonials-grid">
             {aboutPageData.testimonials.map((testimonial, index) => (
-              <div key={testimonial.name} className={`testimonial-card reveal stagger-${index + 1}`}>
+              <div
+                key={testimonial.name}
+                className={`testimonial-card reveal stagger-${index + 1}`}
+              >
                 <div className="stars">
                   {Array.from({ length: 5 }).map((_, starIndex) => (
                     <span
@@ -378,12 +432,20 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
 
         {/* Partners Section */}
         <section className="partners-section">
-          <div className="section-header reveal" style={{ marginBottom: "40px" }}>
-            <span className="section-label partners-title">Trusted by industry leaders</span>
+          <div
+            className="section-header reveal"
+            style={{ marginBottom: "40px" }}
+          >
+            <span className="section-label partners-title">
+              Trusted by industry leaders
+            </span>
           </div>
           <div className="partners-grid">
             {aboutPageData.partners.map((partner, index) => (
-              <div key={partner.left + partner.right} className={`partner-item reveal-scale stagger-${index + 1}`}>
+              <div
+                key={partner.left + partner.right}
+                className={`partner-item reveal-scale stagger-${index + 1}`}
+              >
                 {partner.right ? (
                   <>
                     {partner.left}
@@ -402,7 +464,16 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
           <div className="section-header reveal">
             <span className="section-label">The People</span>
             <h2 className="section-title">Meet Our Team</h2>
-            <p style={{ color: "#64748b", marginTop: "16px", maxWidth: "500px", marginLeft: "auto", marginRight: "auto", lineHeight: 1.7 }}>
+            <p
+              style={{
+                color: "#64748b",
+                marginTop: "16px",
+                maxWidth: "500px",
+                marginLeft: "auto",
+                marginRight: "auto",
+                lineHeight: 1.7,
+              }}
+            >
               Passionate professionals dedicated to transforming Pakistan's
               construction industry.
             </p>
@@ -410,7 +481,10 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
 
           <div className="team-grid">
             {aboutPageData.team.map((member, index) => (
-              <div key={member.name} className={`team-card reveal-scale stagger-${index + 1}`}>
+              <div
+                key={member.name}
+                className={`team-card reveal-scale stagger-${index + 1}`}
+              >
                 <div className="team-avatar-wrap">
                   <div className={`team-avatar ${member.tone}`}>
                     {member.initials}
@@ -460,7 +534,10 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
                 flexWrap: "wrap",
               }}
             >
-              <button className="btn-primary hero-primary-button" onClick={() => onNavigate("products") }>
+              <button
+                className="btn-primary hero-primary-button"
+                onClick={() => onNavigate("products")}
+              >
                 <span className="btn-label">Get Started Now</span>
                 <Icons.ArrowRight className="h-[18px] w-[18px]" />
               </button>

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Icons } from "../components/Icons";
+import { userService } from "../src/services/userService";
 
 interface NotificationPageProps {
   onNavigate: (page: string) => void;
@@ -17,117 +18,6 @@ interface Notification {
   actionLabel?: string;
   initials?: string;
 }
-
-const mockNotifications: Notification[] = [
-  {
-    id: "1",
-    type: "order",
-    title: "Order Shipped",
-    description: "Your order #ORD-2847 (Cement Bags x50) has been shipped via TCS Logistics. Expected delivery: May 2, 2026.",
-    timestamp: "2026-04-30T18:30:00",
-    read: false,
-    actionable: true,
-    actionLabel: "Track Order",
-    initials: "PK",
-  },
-  {
-    id: "2",
-    type: "message",
-    title: "New Message from Ali Construction",
-    description: "Hi, we have a bulk discount available for the steel rods you inquired about. Let me know if you're interested!",
-    timestamp: "2026-04-30T17:15:00",
-    read: false,
-    actionable: true,
-    actionLabel: "Reply",
-    initials: "AC",
-  },
-  {
-    id: "3",
-    type: "system",
-    title: "Account Verified",
-    description: "Congratulations! Your seller account has been verified. You can now list products and receive payments.",
-    timestamp: "2026-04-30T14:00:00",
-    read: false,
-    actionable: false,
-    initials: "BH",
-  },
-  {
-    id: "4",
-    type: "alert",
-    title: "Price Drop Alert",
-    description: "The Ceramic Tiles (24x24) you saved to your wishlist dropped by 12%. Now PKR 1,450 per piece.",
-    timestamp: "2026-04-30T11:20:00",
-    read: true,
-    actionable: true,
-    actionLabel: "View Deal",
-    initials: "PD",
-  },
-  {
-    id: "5",
-    type: "payment",
-    title: "Payment Received",
-    description: "PKR 125,000 has been credited to your wallet from order #ORD-2812. Transaction ID: TXN-998234.",
-    timestamp: "2026-04-29T22:45:00",
-    read: true,
-    actionable: true,
-    actionLabel: "View Receipt",
-    initials: "PK",
-  },
-  {
-    id: "6",
-    type: "review",
-    title: "New Review Received",
-    description: "Your product 'Premium Portland Cement' received a 5-star review from Karachi Builders Co.",
-    timestamp: "2026-04-29T16:30:00",
-    read: true,
-    actionable: true,
-    actionLabel: "See Review",
-    initials: "KB",
-  },
-  {
-    id: "7",
-    type: "system",
-    title: "Platform Maintenance",
-    description: "Scheduled maintenance on May 3, 2026 from 2:00 AM to 4:00 AM PKT. Some features may be unavailable.",
-    timestamp: "2026-04-29T10:00:00",
-    read: true,
-    actionable: false,
-    initials: "BH",
-  },
-  {
-    id: "8",
-    type: "order",
-    title: "Order Delivered",
-    description: "Your order #ORD-2791 (PVC Pipes x100) has been delivered. Please confirm receipt and leave a review.",
-    timestamp: "2026-04-28T15:20:00",
-    read: true,
-    actionable: true,
-    actionLabel: "Confirm Receipt",
-    initials: "PK",
-  },
-  {
-    id: "9",
-    type: "message",
-    title: "New Message from BuildHive Support",
-    description: "Your dispute ticket #DSP-442 has been resolved. The refund of PKR 8,500 will be processed within 3-5 business days.",
-    timestamp: "2026-04-28T09:10:00",
-    read: true,
-    actionable: true,
-    actionLabel: "View Ticket",
-    initials: "BH",
-  },
-  {
-    id: "10",
-    type: "alert",
-    title: "Low Stock Warning",
-    description: "Your listing 'Galvanized Steel Sheets' is running low on stock (only 5 units remaining). Restock soon to avoid losing sales.",
-    timestamp: "2026-04-27T20:00:00",
-    read: true,
-    actionable: true,
-    actionLabel: "Restock Now",
-    initials: "LS",
-  },
-];
 
 const typeConfig: Record<Notification["type"], { icon: keyof typeof Icons; color: string; bg: string; border: string }> = {
   order: { icon: "Package", color: "#ffffff", bg: "linear-gradient(135deg, #3b82f6, #2563eb)", border: "rgba(96, 165, 250, 0.35)" },
@@ -579,10 +469,45 @@ const notificationStyles = `
 
 export const NotificationPage: React.FC<NotificationPageProps> = ({ onNavigate }) => {
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const [notifications, setNotifications] = useState<Notification[]>(mockNotifications);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notificationsError, setNotificationsError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "unread" | "starred" | "orders" | "messages" | "system">("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectMode, setSelectMode] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    userService
+      .getNotifications(1, 50)
+      .then(({ notifications: apiNotifications }) => {
+        if (cancelled) return;
+        setNotifications(
+          apiNotifications.map((notification: any) => ({
+            id: notification.id,
+            type: notification.type || "system",
+            title: notification.title || "Notification",
+            description: notification.description || notification.message || "",
+            timestamp: notification.created_at || notification.timestamp || new Date().toISOString(),
+            read: Boolean(notification.read),
+            starred: Boolean(notification.starred),
+            actionable: Boolean(notification.actionable),
+            actionLabel: notification.actionLabel || notification.action_label,
+            initials: notification.initials || "BH",
+          }))
+        );
+        setNotificationsError(null);
+      })
+      .catch((error) => {
+        console.error("Failed to load notifications:", error);
+        if (!cancelled) {
+          setNotifications([]);
+          setNotificationsError("Notifications are unavailable right now.");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filteredNotifications = notifications.filter((notification) => {
     if (filter === "all") return true;
@@ -598,12 +523,18 @@ export const NotificationPage: React.FC<NotificationPageProps> = ({ onNavigate }
   const starredCount = notifications.filter((notification) => notification.starred).length;
 
   const markAsRead = useCallback((id: string) => {
+    userService.markNotificationRead(id).catch((error) => {
+      console.error("Failed to mark notification read:", error);
+    });
     setNotifications((current) =>
       current.map((notification) => notification.id === id ? { ...notification, read: true } : notification)
     );
   }, []);
 
   const markAllAsRead = useCallback(() => {
+    userService.markAllNotificationsRead().catch((error) => {
+      console.error("Failed to mark all notifications read:", error);
+    });
     setNotifications((current) => current.map((notification) => ({ ...notification, read: true })));
   }, []);
 
@@ -748,7 +679,7 @@ export const NotificationPage: React.FC<NotificationPageProps> = ({ onNavigate }
                 <Icons.Bell className="h-10 w-10" />
               </div>
               <h3>No notifications</h3>
-              <p>You are all caught up. Check back later for updates.</p>
+              <p>{notificationsError || "You are all caught up. Check back later for updates."}</p>
             </div>
           ) : (
             filteredNotifications.map((notification, index) => {

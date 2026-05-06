@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
-import { Product } from '../pages/ProductsPage';
+import type { Product } from '../../pages/ProductsPage';
 
 export interface FilterState {
   materialTypes: string[];
@@ -124,18 +124,18 @@ export const useFilters = (allProducts: Product[]) => {
   const totalPages = Math.ceil(filteredProducts.length / filters.itemsPerPage);
 
   const updateFilter = useCallback(
-    (key: keyof FilterState, value: any) => {
-      setFilters((prev) => ({
+    <K extends keyof FilterState>(key: K, value: FilterState[K]) => {
+      setFilters((prev: FilterState) => ({
         ...prev,
         [key]: value,
-        page: key === 'page' ? value : 1,
+        page: key === 'page' ? (value as number) : 1,
       }));
     },
     []
   );
 
   const updatePriceRange = useCallback((range: [number, number]) => {
-    setFilters((prev) => ({
+    setFilters((prev: FilterState) => ({
       ...prev,
       priceRange: range,
       page: 1,
@@ -143,7 +143,7 @@ export const useFilters = (allProducts: Product[]) => {
   }, []);
 
   const toggleMaterialType = useCallback((type: string) => {
-    setFilters((prev) => ({
+    setFilters((prev: FilterState) => ({
       ...prev,
       materialTypes: prev.materialTypes.includes(type)
         ? prev.materialTypes.filter((t) => t !== type)
@@ -153,7 +153,7 @@ export const useFilters = (allProducts: Product[]) => {
   }, []);
 
   const toggleSeller = useCallback((seller: string) => {
-    setFilters((prev) => ({
+    setFilters((prev: FilterState) => ({
       ...prev,
       sellers: prev.sellers.includes(seller)
         ? prev.sellers.filter((s) => s !== seller)

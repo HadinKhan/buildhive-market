@@ -1,429 +1,359 @@
-// import React, {
-//   createContext,
-//   useContext,
-//   useState,
-//   useEffect,
-//   ReactNode,
-// } from "react";
-// import {
-//   authService,
-//   LoginCredentials,
-//   RegisterData,
-//   AuthResponse,
-// } from "../services/authService";
-
-// // =============================================
-// // Context Types
-// // =============================================
-// interface User {
-//   id: string;
-//   email: string;
-//   full_name: string;
-//   role: string;
-//   email_verified: boolean;
-// }
-
-// interface AuthContextType {
-//   isAuthenticated: boolean;
-//   user: User | null;
-//   token: string | null;
-//   loading: boolean;
-//   login: (credentials: LoginCredentials) => Promise<void>;
-//   register: (data: RegisterData) => Promise<void>;
-//   logout: () => Promise<void>;
-//   refreshUser: () => Promise<void>;
-// }
-
-// // =============================================
-// // Create Context
-// // =============================================
-// const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-// // =============================================
-// // Provider Component
-// // =============================================
-// interface AuthProviderProps {
-//   children: ReactNode;
-// }
-
-// export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-//   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-//   const [user, setUser] = useState<User | null>(null);
-//   const [token, setToken] = useState<string | null>(null);
-//   const [loading, setLoading] = useState<boolean>(true);
-
-//   // =============================================
-//   // Initialize Authentication State
-//   // =============================================
-//   useEffect(() => {
-//     const initAuth = async () => {
-//       try {
-//         const storedToken = authService.getToken();
-//         const storedUser = authService.getUser();
-
-//         if (storedToken && storedUser) {
-//           setToken(storedToken);
-//           setUser(storedUser);
-//           setIsAuthenticated(true);
-
-//           // Optionally refresh user data from server
-//           try {
-//             await refreshUser();
-//           } catch (error) {
-//             console.error("Failed to refresh user data:", error);
-//             // Keep using stored data if refresh fails
-//           }
-//         }
-//       } catch (error) {
-//         console.error("Failed to initialize auth from storage:", error);
-//         // Continue with unauthenticated state
-//       } finally {
-//         setLoading(false);
-//       }
-//     };
-
-//     initAuth();
-//   }, []);
-
-//   // =============================================
-//   // Login Function
-//   // =============================================
-//   const login = async (credentials: LoginCredentials): Promise<void> => {
-//     try {
-//       const authData: AuthResponse = await authService.login(credentials);
-
-//       setToken(authData.token);
-//       setUser(authData.user);
-//       setIsAuthenticated(true);
-//     } catch (error: any) {
-//       console.error("Login error:", error);
-//       throw new Error(error.response?.data?.message || "Login failed");
-//     }
-//   };
-
-//   // =============================================
-//   // Register Function
-//   // =============================================
-//   const register = async (data: RegisterData): Promise<void> => {
-//     try {
-//       const authData: AuthResponse = await authService.register(data);
-
-//       setToken(authData.token);
-//       setUser(authData.user);
-//       setIsAuthenticated(true);
-//     } catch (error: any) {
-//       console.error("Registration error:", error);
-//       throw new Error(error.response?.data?.message || "Registration failed");
-//     }
-//   };
-
-//   // =============================================
-//   // Logout Function
-//   // =============================================
-//   const logout = async (): Promise<void> => {
-//     try {
-//       await authService.logout();
-//     } catch (error) {
-//       console.error("Logout error:", error);
-//     } finally {
-//       setToken(null);
-//       setUser(null);
-//       setIsAuthenticated(false);
-//     }
-//   };
-
-//   // =============================================
-//   // Refresh User Data
-//   // =============================================
-//   const refreshUser = async (): Promise<void> => {
-//     try {
-//       const userData = await authService.getCurrentUser();
-//       setUser(userData);
-//     } catch (error) {
-//       console.error("Failed to refresh user data:", error);
-//       throw error;
-//     }
-//   };
-
-//   // =============================================
-//   // Context Value
-//   // =============================================
-//   const value: AuthContextType = {
-//     isAuthenticated,
-//     user,
-//     token,
-//     loading,
-//     login,
-//     register,
-//     logout,
-//     refreshUser,
-//   };
-
-//   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-// };
-
-// // =============================================
-// // Custom Hook
-// // =============================================
-// export const useAuth = (): AuthContextType => {
-//   const context = useContext(AuthContext);
-
-//   if (context === undefined) {
-//     throw new Error("useAuth must be used within an AuthProvider");
-//   }
-
-//   return context;
-// };
-
-// export default AuthContext;
-
 import React, {
   createContext,
-  useContext,
-  useState,
-  useEffect,
   useCallback,
-  ReactNode,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
 } from "react";
+import axios from "axios";
+import api from "../services/api";
 import {
   authService,
-  LoginCredentials,
-  RegisterData,
-  AuthResponse,
+  type AuthResponse,
+  type LoginCredentials,
+  type RegisterData,
 } from "../services/authService";
+import { tokenStorage } from "../utils/cookies";
+import type { User as AppUser } from "../../types";
 
-// =============================================
-// Context Types
-// =============================================
-interface User {
-  id: string;
-  email: string;
-  fullName: string;
-  phone: string | null;
-  role: string;
-  emailVerified: boolean;
-  profileImage: string | null;
+type AuthUser = AppUser & {
+  fullName?: string;
+  profileImage?: string | null;
+  phone?: string | null;
+  emailVerified?: boolean;
+};
+
+interface AuthSession {
+  token: string;
+  refreshToken: string | null;
+  user: AuthUser;
 }
 
 interface AuthContextType {
+  user: AuthUser | null;
   isAuthenticated: boolean;
-  user: User | null;
-  token: string | null;
   loading: boolean;
-  login: (credentials: LoginCredentials) => Promise<void>;
+  token: string | null;
+  signIn: (credentials: LoginCredentials) => Promise<void>;
+  signOut: () => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
-  logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  login: (credentials: LoginCredentials) => Promise<void>;
+  logout: () => Promise<void>;
 }
 
-// =============================================
-// Create Context
-// =============================================
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-// =============================================
-// Provider Component
-// =============================================
 interface AuthProviderProps {
   children: ReactNode;
 }
 
-export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+const AUTH_STORAGE_KEY = "buildhive.auth.session";
 
-  // =============================================
-  // Refresh User Data (using useCallback to stabilize reference)
-  // =============================================
-  const refreshUser = useCallback(async (): Promise<void> => {
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+const safeLocalStorage = {
+  getItem(key: string): string | null {
+    if (typeof window === "undefined") {
+      return null;
+    }
+
     try {
-      const userData = await authService.getCurrentUser();
-      setUser(userData);
+      return window.localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  setItem(key: string, value: string): void {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(key, value);
+    } catch {
+      // Ignore storage failures so auth still works in restricted browsers.
+    }
+  },
+  removeItem(key: string): void {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      window.localStorage.removeItem(key);
+    } catch {
+      // Ignore storage failures so logout still completes.
+    }
+  },
+};
+
+const normalizeUser = (user: unknown): AuthUser | null => {
+  if (!user || typeof user !== "object") {
+    return null;
+  }
+
+  const raw = user as Record<string, unknown>;
+  const id = String(raw.id ?? "");
+  const email = String(raw.email ?? "");
+
+  if (!id || !email) {
+    return null;
+  }
+
+  const fullName = String(raw.fullName ?? raw.full_name ?? "");
+  const profileImage = (raw.profileImage ?? raw.profile_image ?? null) as
+    | string
+    | null;
+  const phone = (raw.phone ?? null) as string | null;
+  const role = String(raw.role ?? "buyer");
+  const emailVerified = Boolean(
+    raw.emailVerified ?? raw.email_verified ?? false,
+  );
+
+  return {
+    ...(raw as AuthUser),
+    id,
+    email,
+    fullName,
+    full_name: String(raw.full_name ?? fullName),
+    profileImage,
+    profile_image: profileImage ?? undefined,
+    phone,
+    role: role as AuthUser["role"],
+    emailVerified,
+    email_verified: Boolean(raw.email_verified ?? emailVerified),
+  };
+};
+
+const readStoredSession = (): AuthSession | null => {
+  const rawSession = safeLocalStorage.getItem(AUTH_STORAGE_KEY);
+  if (!rawSession) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(rawSession) as Partial<AuthSession>;
+    const user = normalizeUser(parsed.user);
+
+    if (!parsed.token || !user) {
+      return null;
+    }
+
+    return {
+      token: parsed.token,
+      refreshToken: parsed.refreshToken ?? null,
+      user,
+    };
+  } catch {
+    return null;
+  }
+};
+
+const persistSession = (session: AuthSession): void => {
+  const payload = {
+    token: session.token,
+    refreshToken: session.refreshToken,
+    user: session.user,
+  };
+
+  safeLocalStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(payload));
+
+  tokenStorage.setToken(session.token);
+  if (session.refreshToken) {
+    tokenStorage.setRefreshToken(session.refreshToken);
+  }
+  tokenStorage.setUserId(session.user.id);
+
+  if (typeof document !== "undefined") {
+    document.cookie = `user_role=${encodeURIComponent(
+      session.user.role,
+    )}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
+    document.cookie = `user_data=${encodeURIComponent(
+      JSON.stringify(session.user),
+    )}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
+  }
+};
+
+const clearSession = (): void => {
+  safeLocalStorage.removeItem(AUTH_STORAGE_KEY);
+  tokenStorage.clear();
+
+  if (typeof document !== "undefined") {
+    document.cookie =
+      "user_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC";
+    document.cookie =
+      "user_data=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC";
+  }
+};
+
+export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const syncAuthState = useCallback((session: AuthSession) => {
+    setUser(session.user);
+    setToken(session.token);
+    persistSession(session);
+  }, []);
+
+  const signOut = useCallback(async (): Promise<void> => {
+    try {
+      await api.post("/auth/logout");
     } catch (error) {
-      console.error("Failed to refresh user data:", error);
-      throw error;
+      if (!axios.isAxiosError(error) || error.response?.status !== 401) {
+        console.error("Logout error:", error);
+      }
+    } finally {
+      clearSession();
+      setUser(null);
+      setToken(null);
     }
   }, []);
 
-  // =============================================
-  // Initialize Authentication State
-  // =============================================
-  useEffect(() => {
-    const initAuth = async () => {
-      console.log("🔄 [AuthContext] Initializing auth state...");
-      try {
-        const storedToken = authService.getToken();
-        const storedUser = authService.getUser();
-        console.log("📦 [AuthContext] Stored data:", {
-          hasToken: !!storedToken,
-          hasUser: !!storedUser,
-          user: storedUser,
-        });
-
-        if (storedToken && storedUser) {
-          console.log("✅ [AuthContext] Found stored auth, restoring session");
-          setToken(storedToken);
-          setUser(storedUser);
-          setIsAuthenticated(true);
-
-          // Optionally refresh user data from server
-          try {
-            console.log(
-              "🔄 [AuthContext] Attempting to refresh user data from server..."
-            );
-            await refreshUser();
-            console.log("✅ [AuthContext] User data refreshed from server");
-          } catch (error) {
-            console.warn(
-              "⚠️ [AuthContext] Failed to refresh user data, keeping stored data:",
-              error
-            );
-            // Keep using stored data if refresh fails
-          }
-        } else {
-          console.log(
-            "ℹ️ [AuthContext] No stored auth found, user not logged in"
-          );
-        }
-      } catch (error) {
-        console.error(
-          "❌ [AuthContext] Failed to initialize auth from storage:",
-          error
-        );
-        // Continue with unauthenticated state
-      } finally {
-        setLoading(false);
-        console.log("✅ [AuthContext] Auth initialization complete");
-      }
-    };
-
-    initAuth();
-  }, [refreshUser]);
-
-  // =============================================
-  // Login Function
-  // =============================================
-  const login = async (credentials: LoginCredentials): Promise<void> => {
-    console.log("🔑 [AuthContext] Attempting login...");
-    try {
-      const authData: AuthResponse = await authService.login(credentials);
-      console.log("✅ [AuthContext] Login successful, setting auth state");
-
-      setToken(authData.accessToken);
-      setUser(authData.user);
-      setIsAuthenticated(true);
-      console.log("✅ [AuthContext] Auth state updated:", {
-        userId: authData.user.id,
-        email: authData.user.email,
-      });
-    } catch (error: any) {
-      console.error("❌ [AuthContext] Login error:", error);
-      console.error("📄 [AuthContext] Error response:", error.response?.data);
-      throw new Error(error.response?.data?.message || "Login failed");
+  const refreshUser = useCallback(async (): Promise<void> => {
+    const currentToken = tokenStorage.getToken() || token;
+    if (!currentToken) {
+      throw new Error("No authentication token found");
     }
-  };
 
-  // =============================================
-  // Register Function
-  // =============================================
-  const register = async (data: RegisterData): Promise<void> => {
-    console.log("📝 [AuthContext] Attempting registration...");
-    console.log("📦 [AuthContext] Registration payload:", data);
     try {
-      const authData: AuthResponse = await authService.register(data);
-      console.log(
-        "✅ [AuthContext] Registration successful, setting auth state"
-      );
+      const refreshedUser = await authService.getCurrentUser();
+      const normalizedUser = normalizeUser(refreshedUser);
 
-      setToken(authData.accessToken);
-      setUser(authData.user);
-      setIsAuthenticated(true);
-      console.log("✅ [AuthContext] Auth state updated:", {
-        userId: authData.user.id,
-        email: authData.user.email,
+      if (!normalizedUser) {
+        throw new Error("Invalid user profile returned from server");
+      }
+
+      const existingSession = readStoredSession();
+      const refreshToken =
+        existingSession?.refreshToken || tokenStorage.getRefreshToken();
+
+      syncAuthState({
+        token: currentToken,
+        refreshToken,
+        user: normalizedUser,
       });
-    } catch (error: any) {
-      console.error("❌ [AuthContext] Registration error:", error);
-      console.error("📄 [AuthContext] Error response:", error.response?.data);
-      console.error("📊 [AuthContext] Error status:", error.response?.status);
-
-      // Log validation errors if they exist
-      if (
-        error.response?.data?.errors &&
-        Array.isArray(error.response.data.errors)
-      ) {
-        console.error("🚨 [AuthContext] Validation errors:");
-        error.response.data.errors.forEach((err: any, index: number) => {
-          console.error(
-            `  ${index + 1}. Field: ${
-              err.field || err.param || "unknown"
-            }, Message: ${err.message || err.msg || JSON.stringify(err)}`
-          );
-        });
-      }
-
-      // Construct error message
-      let errorMessage = error.response?.data?.message || "Registration failed";
-
-      // If there are validation errors, include them in the message
-      if (
-        error.response?.data?.errors &&
-        Array.isArray(error.response.data.errors)
-      ) {
-        const validationMessages = error.response.data.errors
-          .map((err: any) => err.message || err.msg || JSON.stringify(err))
-          .join(", ");
-        errorMessage = `${errorMessage}: ${validationMessages}`;
-      }
-
-      throw new Error(errorMessage);
-    }
-  };
-
-  // =============================================
-  // Logout Function
-  // =============================================
-  const logout = async (): Promise<void> => {
-    console.log("🚪 [AuthContext] Logging out...");
-    try {
-      await authService.logout();
-      console.log("✅ [AuthContext] Logout API call successful");
     } catch (error) {
-      console.error("❌ [AuthContext] Logout error:", error);
-    } finally {
-      setToken(null);
-      setUser(null);
-      setIsAuthenticated(false);
-      console.log("✅ [AuthContext] Auth state cleared");
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        await signOut();
+      }
+      throw error;
     }
-  };
+  }, [signOut, syncAuthState, token]);
 
-  // =============================================
-  // Context Value
-  // =============================================
-  const value: AuthContextType = {
-    isAuthenticated,
-    user,
-    token,
-    loading,
-    login,
-    register,
-    logout,
-    refreshUser,
-  };
+  const initializeAuth = useCallback(async (): Promise<void> => {
+    try {
+      const storedSession = readStoredSession();
+      const cookieToken = authService.getToken();
+      const cookieUser = normalizeUser(authService.getUser());
+
+      const tokenFromStorage = storedSession?.token || cookieToken;
+      const userFromStorage = storedSession?.user || cookieUser;
+      const refreshTokenFromStorage =
+        storedSession?.refreshToken || tokenStorage.getRefreshToken();
+
+      if (!tokenFromStorage || !userFromStorage) {
+        clearSession();
+        return;
+      }
+
+      syncAuthState({
+        token: tokenFromStorage,
+        refreshToken: refreshTokenFromStorage,
+        user: userFromStorage,
+      });
+
+      try {
+        await refreshUser();
+      } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.status === 401) {
+          return;
+        }
+
+        const fallbackUser = storedSession?.user || userFromStorage;
+        if (fallbackUser) {
+          syncAuthState({
+            token: tokenFromStorage,
+            refreshToken: refreshTokenFromStorage,
+            user: fallbackUser,
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Failed to initialize auth state:", error);
+      clearSession();
+      setUser(null);
+      setToken(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [refreshUser, syncAuthState]);
+
+  useEffect(() => {
+    void initializeAuth();
+  }, [initializeAuth]);
+
+  const signIn = useCallback(
+    async (credentials: LoginCredentials): Promise<void> => {
+      const authData: AuthResponse = await authService.login(credentials);
+      const normalizedUser = normalizeUser(authData.user);
+
+      if (!normalizedUser) {
+        throw new Error("Invalid user returned from login");
+      }
+
+      syncAuthState({
+        token: authData.accessToken,
+        refreshToken: authData.refreshToken,
+        user: normalizedUser,
+      });
+    },
+    [syncAuthState],
+  );
+
+  const register = useCallback(
+    async (data: RegisterData): Promise<void> => {
+      const authData: AuthResponse = await authService.register(data);
+      const normalizedUser = normalizeUser(authData.user);
+
+      if (!normalizedUser) {
+        throw new Error("Invalid user returned from registration");
+      }
+
+      syncAuthState({
+        token: authData.accessToken,
+        refreshToken: authData.refreshToken,
+        user: normalizedUser,
+      });
+    },
+    [syncAuthState],
+  );
+
+  const value = useMemo<AuthContextType>(
+    () => ({
+      user,
+      isAuthenticated: Boolean(user && token),
+      loading,
+      token,
+      signIn,
+      signOut,
+      register,
+      refreshUser,
+      login: signIn,
+      logout: signOut,
+    }),
+    [loading, refreshUser, register, signIn, signOut, token, user],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-// =============================================
-// Custom Hook
-// =============================================
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
 
-  if (context === undefined) {
+  if (!context) {
     throw new Error("useAuth must be used within an AuthProvider");
   }
 

@@ -10,6 +10,19 @@ interface CookieOptions {
   sameSite?: 'strict' | 'lax' | 'none';
 }
 
+interface TokenStorage {
+  setToken: (token: string) => void;
+  getToken: () => string | null;
+  removeToken: () => void;
+  setUserId: (userId: string) => void;
+  getUserId: () => string | null;
+  removeUserId: () => void;
+  setRefreshToken: (token: string) => void;
+  getRefreshToken: () => string | null;
+  removeRefreshToken: () => void;
+  clear: () => void;
+}
+
 /**
  * Set a cookie with the given name and value
  * @param name - Cookie name
@@ -111,7 +124,7 @@ export const areCookiesAvailable = (): boolean => {
 /**
  * Token-specific storage methods
  */
-export const tokenStorage = {
+export const tokenStorage: TokenStorage = {
   /**
    * Store authentication token in cookie
    * @param token - JWT token
@@ -173,5 +186,18 @@ export const tokenStorage = {
     removeCookie('auth_token', '/');
     removeCookie('user_id', '/');
     removeCookie('user_role', '/');
-  }
+    removeCookie('refresh_token', '/');
+  },
+
+  setRefreshToken: (token: string): void => {
+    setCookie('refresh_token', token, { days: 7, path: '/', sameSite: 'lax' });
+  },
+
+  getRefreshToken: (): string | null => {
+    return getCookie('refresh_token');
+  },
+
+  removeRefreshToken: (): void => {
+    removeCookie('refresh_token', '/');
+  },
 };

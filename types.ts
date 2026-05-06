@@ -80,6 +80,7 @@ export interface Category {
 export interface Product {
   id: string;
   business_id: string;
+  seller_id?: string;
   category_id: string;
   name: string;
   slug: string;

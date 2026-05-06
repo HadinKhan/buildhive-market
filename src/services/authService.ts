@@ -25,6 +25,7 @@ export interface RegisterData {
   fullName: string;
   phone?: string;
   role: 'buyer' | 'contractor' | 'supplier';
+  termsAccepted?: boolean;
 }
 
 export interface AuthResponse {
@@ -54,6 +55,17 @@ export interface ResetPasswordData {
 // Authentication Service
 // =============================================
 class AuthService {
+  private redirectToSignIn(): void {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const target = `${window.location.origin}/signin`;
+    if (window.location.pathname + window.location.search + window.location.hash !== new URL(target).pathname) {
+      window.location.replace(target);
+    }
+  }
+
   /**
    * Register a new user
    */
@@ -98,7 +110,7 @@ class AuthService {
       console.error('Logout error:', error);
     } finally {
       this.clearAuthData();
-      window.location.href = '/signin';
+      this.redirectToSignIn();
     }
   }
 

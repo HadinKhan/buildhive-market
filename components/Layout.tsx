@@ -1,4 +1,5 @@
-import React, { useState, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
+import api from "../src/services/api";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Icons } from "./Icons";
 import { Button } from "./Button";
@@ -30,6 +31,29 @@ export const Header: React.FC<HeaderProps> = ({
   const [headerSearch, setHeaderSearch] = useState("");
   const [isDarkMode, setIsDarkMode] = useState(true);
   const dropdownTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+
+  // Declare isLoggedIn before any usage in useEffect or other logic
+  const user = authUser || propUser;
+  const isLoggedIn = isAuthenticated || !!propUser;
+
+  useEffect(() => {
+    let mounted = true;
+    const loadUnread = async () => {
+      if (!isLoggedIn) return;
+      try {
+        const res = await api.get("/chat/unread-count");
+        const cnt = res.data?.data?.count ?? res.data?.count ?? res.data ?? 0;
+        if (mounted) setUnreadCount(Number(cnt));
+      } catch (e) {
+        // ignore
+      }
+    };
+    loadUnread();
+    return () => {
+      mounted = false;
+    };
+  }, [isLoggedIn]);
 
   const handleDropdownEnter = () => {
     if (dropdownTimeoutRef.current) {
@@ -44,16 +68,16 @@ export const Header: React.FC<HeaderProps> = ({
     }, 300);
   };
 
-  // Use auth context user if available, otherwise fall back to prop
-  const user = authUser || propUser;
-  const isLoggedIn = isAuthenticated || !!propUser;
-  const displayName = (user as any)?.full_name || (user as any)?.fullName || "Account";
+  const displayName =
+    (user as any)?.full_name || (user as any)?.fullName || "Account";
   const displayEmail = user?.email || "";
   const displayRole = (user as any)?.role || "Buyer + Seller";
-  const currentActivePage = activePage || (() => {
-    const pathname = location.pathname.replace(/^\/+/, "");
-    return pathname.split("/")[0] || "home";
-  })();
+  const currentActivePage =
+    activePage ||
+    (() => {
+      const pathname = location.pathname.replace(/^\/+/, "");
+      return pathname.split("/")[0] || "home";
+    })();
   const submenuIconToneClasses: Record<string, string> = {
     amber: "bg-gradient-to-br from-amber-500 to-amber-600",
     blue: "bg-gradient-to-br from-blue-500 to-blue-600",
@@ -89,22 +113,12 @@ export const Header: React.FC<HeaderProps> = ({
   const handleTempLogin = (e: React.MouseEvent) => {
     e.preventDefault();
 
-    const demoUser = {
-      id: "demo-user-1",
-      email: "ayaan@example.com",
-      fullName: "Ayaan Ahmad",
-      phone: null,
-      role: "Buyer + Seller",
-      emailVerified: true,
-      profileImage: null,
-    };
+    if (onNavigate) {
+      onNavigate("signin");
+      return;
+    }
 
-    document.cookie = `auth_token=demo-token; path=/`;
-    document.cookie = `user_id=${encodeURIComponent(demoUser.id)}; path=/`;
-    document.cookie = `user_role=${encodeURIComponent(demoUser.role)}; path=/`;
-    document.cookie = `user_data=${encodeURIComponent(JSON.stringify(demoUser))}; path=/`;
-
-    window.location.reload();
+    navigate("/signin");
   };
 
   const handleLogout = async () => {
@@ -137,7 +151,7 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Desktop Navigation (guest dark style) */}
             <nav className="hidden lg:flex items-center gap-6">
-              {!isLoggedIn && (
+              {!isLoggedIn &&
                 (() => {
                   const items: Array<any> = [
                     {
@@ -148,9 +162,27 @@ export const Header: React.FC<HeaderProps> = ({
                       label: "AI",
                       slug: "ai",
                       submenu: [
-                        { title: "AI Chatbot", desc: "Real-time project assistant", slug: "ai-chatbot", icon: "Bot", tone: "green" },
-                        { title: "Cost Estimator", desc: "Smart budget planning", slug: "ai-cost", icon: "Calculator", tone: "blue" },
-                        { title: "Smart Recommendations", desc: "Personalised picks for you", slug: "ai-reco", icon: "Brain", tone: "purple" },
+                        {
+                          title: "AI Chatbot",
+                          desc: "Real-time project assistant",
+                          slug: "ai-chatbot",
+                          icon: "Bot",
+                          tone: "green",
+                        },
+                        {
+                          title: "Cost Estimator",
+                          desc: "Smart budget planning",
+                          slug: "ai-cost",
+                          icon: "Calculator",
+                          tone: "blue",
+                        },
+                        {
+                          title: "Smart Recommendations",
+                          desc: "Personalised picks for you",
+                          slug: "ai-reco",
+                          icon: "Brain",
+                          tone: "purple",
+                        },
                       ],
                     },
                     {
@@ -158,14 +190,41 @@ export const Header: React.FC<HeaderProps> = ({
                       slug: "services",
                     },
                     {
+                      label: "Messages",
+                      slug: "messages",
+                      icon: Icons.Message,
+                    },
+                    {
                       label: "Product",
                       slug: "products",
                     },
-                    { label: "About", slug: "about", submenu: [
-                        { title: "About BuildHive", desc: "Our mission & story", url: "/#/about#story", icon: "Building", tone: "violet" },
-                        { title: "Our Team", desc: "People behind BuildHive", url: "/#/about#team", icon: "Users", tone: "cyan" },
-                        { title: "Blog & Resources", desc: "Guides, news & insights", url: "http://localhost:4200/about#/blog", icon: "Book", tone: "amber" },
-                      ] },
+                    {
+                      label: "About",
+                      slug: "about",
+                      submenu: [
+                        {
+                          title: "About BuildHive",
+                          desc: "Our mission & story",
+                          url: "/about?section=story",
+                          icon: "Building",
+                          tone: "violet",
+                        },
+                        {
+                          title: "Our Team",
+                          desc: "People behind BuildHive",
+                          url: "/about?section=team",
+                          icon: "Users",
+                          tone: "cyan",
+                        },
+                        {
+                          title: "Blog & Resources",
+                          desc: "Guides, news & insights",
+                          url: "/blog",
+                          icon: "Book",
+                          tone: "amber",
+                        },
+                      ],
+                    },
                     { label: "Contact", slug: "contact" },
                   ];
 
@@ -184,35 +243,41 @@ export const Header: React.FC<HeaderProps> = ({
                           <button
                             onClick={(e) => handleNav(e, item.slug)}
                             className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                              openDropdown === item.slug || currentActivePage === item.slug
+                              openDropdown === item.slug ||
+                              currentActivePage === item.slug
                                 ? "bg-violet-500/15 text-violet-300"
                                 : "text-gray-200 hover:bg-violet-500/10 hover:text-violet-300"
                             }`}
                           >
                             <span>{item.label}</span>
-                            {item.submenu && <Icons.ChevronDown className={`h-4 w-4 ${openDropdown === item.slug ? "text-violet-300" : "text-gray-400"}`} />}
+                            {item.submenu && (
+                              <Icons.ChevronDown
+                                className={`h-4 w-4 ${openDropdown === item.slug ? "text-violet-300" : "text-gray-400"}`}
+                              />
+                            )}
                           </button>
 
                           {item.submenu && openDropdown === item.slug && (
                             <div className="absolute left-0 top-full mt-3 w-80 rounded-2xl bg-[#0b0f12] ring-1 ring-black/40 shadow-xl p-4">
                               <div className="grid gap-2">
                                 {item.submenu.map((s: any) => {
-                                  const IconComponent = (Icons as any)[s.icon] || Icons.Package;
+                                  const IconComponent =
+                                    (Icons as any)[s.icon] || Icons.Package;
                                   return (
                                     <a
                                       key={s.slug || s.title}
-                                      href={s.url || '#'}
+                                      href={s.url || "#"}
                                       onClick={(e) => {
                                         if (s.url) {
-                                          // Internal about anchors: use SPA navigation then scroll
-                                          if (s.url.startsWith('/#/about#')) {
-                                              e.preventDefault();
-                                              // Set the full hash so browser (HashRouter) updates and native anchor scrolling occurs
-                                              const hashPart = s.url.replace('/#', ''); // yields '/about#story' -> '/about#story'
-                                              window.location.hash = hashPart;
-                                              setIsMobileMenuOpen(false);
-                                              setIsUserMenuOpen(false);
-                                            } else if (s.url.startsWith('http')) {
+                                          // Internal about sections: use browser routes and let the page scroll
+                                          if (
+                                            s.url.startsWith("/about?section=")
+                                          ) {
+                                            e.preventDefault();
+                                            window.location.href = s.url;
+                                            setIsMobileMenuOpen(false);
+                                            setIsUserMenuOpen(false);
+                                          } else if (s.url.startsWith("http")) {
                                             // External link - go full nav
                                             // allow default behavior to follow external URL
                                             return;
@@ -229,12 +294,18 @@ export const Header: React.FC<HeaderProps> = ({
                                       }}
                                       className="group flex items-start gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-zinc-900"
                                     >
-                                      <div className={`h-10 w-10 flex shrink-0 items-center justify-center rounded-xl ${submenuIconToneClasses[s.tone] || submenuIconToneClasses.violet} shadow-lg shadow-black/25 transition-transform duration-300 group-hover:scale-110`}>
+                                      <div
+                                        className={`h-10 w-10 flex shrink-0 items-center justify-center rounded-xl ${submenuIconToneClasses[s.tone] || submenuIconToneClasses.violet} shadow-lg shadow-black/25 transition-transform duration-300 group-hover:scale-110`}
+                                      >
                                         <IconComponent className="h-5 w-5 text-white" />
                                       </div>
                                       <div>
-                                        <div className="text-sm font-semibold text-white">{s.title}</div>
-                                        <div className="text-xs text-gray-400">{s.desc}</div>
+                                        <div className="text-sm font-semibold text-white">
+                                          {s.title}
+                                        </div>
+                                        <div className="text-xs text-gray-400">
+                                          {s.desc}
+                                        </div>
                                       </div>
                                     </a>
                                   );
@@ -246,20 +317,47 @@ export const Header: React.FC<HeaderProps> = ({
                       ))}
                     </>
                   );
-                })()
-              )}
+                })()}
 
-              {isLoggedIn && (
+              {isLoggedIn &&
                 (() => {
                   const items: Array<any> = [
                     { label: "Home", slug: "home" },
                     {
+                      label: "Messages",
+                      slug: "messages",
+                      icon: Icons.Message,
+                    },
+                    {
+                      label: "Support",
+                      slug: "support",
+                      icon: Icons.HelpCircle,
+                    },
+                    {
                       label: "AI",
                       slug: "ai",
                       submenu: [
-                        { title: "AI Chatbot", desc: "Real-time project assistant", slug: "ai-chatbot", icon: "Bot", tone: "green" },
-                        { title: "Cost Estimator", desc: "Smart budget planning", slug: "ai-cost", icon: "Calculator", tone: "blue" },
-                        { title: "Smart Recommendations", desc: "Personalised picks for you", slug: "ai-reco", icon: "Brain", tone: "purple" },
+                        {
+                          title: "AI Chatbot",
+                          desc: "Real-time project assistant",
+                          slug: "ai-chatbot",
+                          icon: "Bot",
+                          tone: "green",
+                        },
+                        {
+                          title: "Cost Estimator",
+                          desc: "Smart budget planning",
+                          slug: "ai-cost",
+                          icon: "Calculator",
+                          tone: "blue",
+                        },
+                        {
+                          title: "Smart Recommendations",
+                          desc: "Personalised picks for you",
+                          slug: "ai-reco",
+                          icon: "Brain",
+                          tone: "purple",
+                        },
                       ],
                     },
                     {
@@ -270,12 +368,31 @@ export const Header: React.FC<HeaderProps> = ({
                       label: "Product",
                       slug: "products",
                     },
-                    { label: "About",
+                    {
+                      label: "About",
                       slug: "about",
                       submenu: [
-                        { title: "About BuildHive", desc: "Our mission & story", url: "/#/about#story", icon: "Building", tone: "violet" },
-                        { title: "Our Team", desc: "People behind BuildHive", url: "/#/about#team", icon: "Users", tone: "cyan" },
-                        { title: "Blog & Resources", desc: "Guides, news & insights", url: "http://localhost:4200/about#/blog", icon: "Book", tone: "amber" },
+                        {
+                          title: "About BuildHive",
+                          desc: "Our mission & story",
+                          url: "/about?section=story",
+                          icon: "Building",
+                          tone: "violet",
+                        },
+                        {
+                          title: "Our Team",
+                          desc: "People behind BuildHive",
+                          url: "/about?section=team",
+                          icon: "Users",
+                          tone: "cyan",
+                        },
+                        {
+                          title: "Blog & Resources",
+                          desc: "Guides, news & insights",
+                          url: "/blog",
+                          icon: "Book",
+                          tone: "amber",
+                        },
                       ],
                     },
                     { label: "Contact", slug: "contact" },
@@ -296,24 +413,30 @@ export const Header: React.FC<HeaderProps> = ({
                           <button
                             onClick={(e) => handleNav(e, item.slug)}
                             className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                              openDropdown === item.slug || currentActivePage === item.slug
+                              openDropdown === item.slug ||
+                              currentActivePage === item.slug
                                 ? "bg-violet-500/15 text-violet-300"
                                 : "text-gray-200 hover:bg-violet-500/10 hover:text-violet-300"
                             }`}
                           >
                             <span>{item.label}</span>
-                            {item.submenu && <Icons.ChevronDown className={`h-4 w-4 ${openDropdown === item.slug ? "text-violet-300" : "text-gray-400"}`} />}
+                            {item.submenu && (
+                              <Icons.ChevronDown
+                                className={`h-4 w-4 ${openDropdown === item.slug ? "text-violet-300" : "text-gray-400"}`}
+                              />
+                            )}
                           </button>
 
                           {item.submenu && openDropdown === item.slug && (
                             <div className="absolute left-0 top-full mt-3 w-80 rounded-2xl bg-[#0b0f12] ring-1 ring-black/40 shadow-xl p-4">
                               <div className="grid gap-2">
                                 {item.submenu.map((s: any) => {
-                                  const IconComponent = (Icons as any)[s.icon] || Icons.Package;
+                                  const IconComponent =
+                                    (Icons as any)[s.icon] || Icons.Package;
                                   return (
                                     <a
                                       key={s.slug || s.title}
-                                      href={s.url || '#'}
+                                      href={s.url || "#"}
                                       onClick={(e) => {
                                         if (s.url) {
                                           e.preventDefault();
@@ -326,12 +449,18 @@ export const Header: React.FC<HeaderProps> = ({
                                       }}
                                       className="group flex items-start gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-zinc-900"
                                     >
-                                      <div className={`h-10 w-10 flex shrink-0 items-center justify-center rounded-xl ${submenuIconToneClasses[s.tone] || submenuIconToneClasses.violet} shadow-lg shadow-black/25 transition-transform duration-300 group-hover:scale-110`}>
+                                      <div
+                                        className={`h-10 w-10 flex shrink-0 items-center justify-center rounded-xl ${submenuIconToneClasses[s.tone] || submenuIconToneClasses.violet} shadow-lg shadow-black/25 transition-transform duration-300 group-hover:scale-110`}
+                                      >
                                         <IconComponent className="h-5 w-5 text-white" />
                                       </div>
                                       <div>
-                                        <div className="text-sm font-semibold text-white">{s.title}</div>
-                                        <div className="text-xs text-gray-400">{s.desc}</div>
+                                        <div className="text-sm font-semibold text-white">
+                                          {s.title}
+                                        </div>
+                                        <div className="text-xs text-gray-400">
+                                          {s.desc}
+                                        </div>
                                       </div>
                                     </a>
                                   );
@@ -343,8 +472,7 @@ export const Header: React.FC<HeaderProps> = ({
                       ))}
                     </>
                   );
-                })()
-              )}
+                })()}
             </nav>
 
             {/* Right Actions */}
@@ -360,6 +488,19 @@ export const Header: React.FC<HeaderProps> = ({
                     {cartItemCount > 0 && (
                       <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-violet-500 px-1 text-[11px] font-bold text-white">
                         {cartItemCount}
+                      </span>
+                    )}
+                  </button>
+
+                  <button
+                    className="relative flex h-12 w-12 items-center justify-center rounded-2xl border border-zinc-800 bg-[#11151d] text-gray-300 transition-colors hover:border-zinc-700 hover:text-white"
+                    aria-label="Messages"
+                    onClick={(e) => handleNav(e, "messages")}
+                  >
+                    <Icons.Message className="h-5 w-5" />
+                    {unreadCount > 0 && (
+                      <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-violet-500 px-1 text-[11px] font-bold text-white">
+                        {unreadCount}
                       </span>
                     )}
                   </button>
@@ -404,21 +545,33 @@ export const Header: React.FC<HeaderProps> = ({
 
                         <div className="grid gap-2">
                           {[
-                            { label: "Dashboard", desc: "Portfolio & reviews", slug: "account", icon: Icons.Dashboard, gradient: "from-blue-500 to-blue-600" },
-                            { label: "Settings", desc: "Account preferences", slug: "settings", icon: Icons.Settings, gradient: "from-violet-500 to-violet-600" },
-                            { label: isDarkMode ? "Light Mode" : "Dark Mode", desc: "", slug: "toggle-theme", icon: isDarkMode ? Icons.Sun : Icons.Moon, gradient: "from-amber-500 to-amber-600" },
+                            {
+                              label: "Dashboard",
+                              desc: "Portfolio & reviews",
+                              slug: "account",
+                              icon: Icons.Dashboard,
+                              gradient: "from-blue-500 to-blue-600",
+                            },
                           ].map((item) => (
                             <button
                               key={item.label}
                               onClick={(e) => handleNav(e, item.slug)}
                               className="flex items-center gap-3 rounded-2xl px-3 py-3 text-left transition-colors hover:bg-white/5"
                             >
-                              <div className={`flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br ${item.gradient} text-white`}>
+                              <div
+                                className={`flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br ${item.gradient} text-white`}
+                              >
                                 <item.icon className="h-5 w-5 stroke-[2]" />
                               </div>
                               <div>
-                                <div className="text-base font-semibold text-white">{item.label}</div>
-                                {item.desc && <div className="text-sm text-gray-400">{item.desc}</div>}
+                                <div className="text-base font-semibold text-white">
+                                  {item.label}
+                                </div>
+                                {item.desc && (
+                                  <div className="text-sm text-gray-400">
+                                    {item.desc}
+                                  </div>
+                                )}
                               </div>
                             </button>
                           ))}
@@ -433,7 +586,9 @@ export const Header: React.FC<HeaderProps> = ({
                           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#302034] text-[#f8a0a0]">
                             <Icons.LogOut className="h-5 w-5" />
                           </div>
-                          <div className="text-base font-semibold text-[#ff7d7d]">Log out</div>
+                          <div className="text-base font-semibold text-[#ff7d7d]">
+                            Log out
+                          </div>
                         </button>
                       </div>
                     )}
@@ -441,7 +596,12 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
               ) : (
                 <div className="flex items-center gap-3">
-                  <button onClick={handleTempLogin} className="text-sm text-gray-300 hover:text-white">Log in</button>
+                  <button
+                    onClick={handleTempLogin}
+                    className="text-sm text-gray-300 hover:text-white"
+                  >
+                    Sign In
+                  </button>
                   <button
                     onClick={(e) => handleNav(e, "get-started")}
                     className="inline-flex items-center justify-center rounded-full border border-[#7e6bc7]/40 bg-[#20192f] px-5 py-2 text-sm font-medium text-white shadow-lg shadow-[#7e6bc7]/15 transition-all duration-200 hover:bg-[#2b2240] hover:border-[#a58cff]/55 focus:outline-none focus:ring-2 focus:ring-[#a58cff]/30 focus:ring-offset-2 focus:ring-offset-[#0b0f12]"
@@ -470,26 +630,27 @@ export const Header: React.FC<HeaderProps> = ({
         {isMobileMenuOpen && (
           <div className="lg:hidden border-t border-gray-100 bg-white px-4 py-4 shadow-lg animate-in slide-in-from-top-2 duration-200">
             <nav className="flex flex-col gap-4">
-              {(
-                isLoggedIn
-                  ? [
-                      { label: "Home", slug: "home" },
-                      { label: "Products", slug: "products" },
-                      { label: "Categories", slug: "categories" },
-                      { label: "Services", slug: "services" },
-                      { label: "AI", slug: "ai" },
-                      { label: "About Us", slug: "about" },
-                      { label: "Contact", slug: "contact" },
-                    ]
-                  : [
-                      { label: "Home", slug: "home" },
-                      { label: "Products", slug: "products" },
-                      { label: "Categories", slug: "categories" },
-                      { label: "Services", slug: "services" },
-                      { label: "AI", slug: "ai" },
-                      { label: "About Us", slug: "about" },
-                      { label: "Contact", slug: "contact" },
-                    ]
+              {(isLoggedIn
+                ? [
+                    { label: "Home", slug: "home" },
+                    { label: "Products", slug: "products" },
+                    { label: "Messages", slug: "messages" },
+                    { label: "Support", slug: "support" },
+                    { label: "Categories", slug: "categories" },
+                    { label: "Services", slug: "services" },
+                    { label: "AI", slug: "ai" },
+                    { label: "About Us", slug: "about" },
+                    { label: "Contact", slug: "contact" },
+                  ]
+                : [
+                    { label: "Home", slug: "home" },
+                    { label: "Products", slug: "products" },
+                    { label: "Categories", slug: "categories" },
+                    { label: "Services", slug: "services" },
+                    { label: "AI", slug: "ai" },
+                    { label: "About Us", slug: "about" },
+                    { label: "Contact", slug: "contact" },
+                  ]
               ).map((item) => (
                 <a
                   key={item.slug}
@@ -928,8 +1089,9 @@ export const Footer = () => {
             <img src="/Build-Hive-Logo.png" alt="BuildHive" />
           </button>
           <p>
-            Pakistan's premier digital construction marketplace. Connecting builders,
-            contractors, and suppliers with quality materials and innovative tools.
+            Pakistan's premier digital construction marketplace. Connecting
+            builders, contractors, and suppliers with quality materials and
+            innovative tools.
           </p>
           <div className="footer-contact">
             <div className="footer-contact-item">
@@ -942,7 +1104,10 @@ export const Footer = () => {
             </div>
             <div className="footer-contact-item">
               <Icons.MapPin className="h-4 w-4" />
-              <span>Department of Computer Science, COMSATS University Islamabad, Lahore Campus, Defence Road, Lahore, Pakistan</span>
+              <span>
+                Department of Computer Science, COMSATS University Islamabad,
+                Lahore Campus, Defence Road, Lahore, Pakistan
+              </span>
             </div>
           </div>
         </div>
@@ -953,7 +1118,10 @@ export const Footer = () => {
             <ul>
               {column.links.map((link) => (
                 <li key={link.path}>
-                  <button className="footer-link" onClick={() => onNavigate(link.path)}>
+                  <button
+                    className="footer-link"
+                    onClick={() => onNavigate(link.path)}
+                  >
                     <Icons.ChevronRight className="h-3 w-3" />
                     {link.label}
                   </button>
@@ -969,7 +1137,11 @@ export const Footer = () => {
             {footerSocialLinks.map((social) => {
               const IconComp = Icons[social.icon as keyof typeof Icons];
               return (
-                <button key={social.label} className="footer-social-link" aria-label={social.label}>
+                <button
+                  key={social.label}
+                  className="footer-social-link"
+                  aria-label={social.label}
+                >
                   <span className="social-btn">
                     <IconComp className="h-4 w-4" />
                   </span>

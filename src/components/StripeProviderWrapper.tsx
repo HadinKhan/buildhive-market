@@ -11,6 +11,9 @@ export const StripeProviderWrapper: React.FC<StripeProviderWrapperProps> = ({
   publishableKey,
   children,
 }) => {
-  const stripePromise = loadStripe(publishableKey);
+  const stripePromise = React.useMemo(
+    () => loadStripe(publishableKey),
+    [publishableKey],
+  );
   return <Elements stripe={stripePromise}>{children}</Elements>;
 };

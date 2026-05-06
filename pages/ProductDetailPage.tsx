@@ -1,32 +1,90 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Icons } from "../components/Icons";
 import { Button } from "../components/Button";
 import { Product } from "../types";
+import api from "../src/services/api";
+
+interface ProductReview {
+  id: string;
+  rating: number;
+  title?: string;
+  body?: string;
+  comment?: string;
+  reviewer_name?: string;
+  reviewerName?: string;
+  user_name?: string;
+  name?: string;
+  created_at?: string;
+  createdAt?: string;
+}
 
 interface ProductDetailPageProps {
   product: Product;
   onNavigate: (page: string) => void;
   onAddToCart: (product: Product, quantity: number) => void;
+  onMessageSeller?: (product: Product) => void;
 }
 
 export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   product,
   onNavigate,
   onAddToCart,
+  onMessageSeller,
 }) => {
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState("Overview");
   const [selectedImage, setSelectedImage] = useState(0);
+  const [reviews, setReviews] = useState<ProductReview[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewsError, setReviewsError] = useState<string | null>(null);
+
+  const gallerySource =
+    (product as any).images || (product as any).product_images || [];
 
   const galleryImages = useMemo(
     () =>
-      (product.images || [])
-        .filter((img) => img.product_id === product.id && Boolean(img.image_url))
+      gallerySource
+        .filter(
+          (img) => img.product_id === product.id && Boolean(img.image_url),
+        )
         .sort((a, b) => a.display_order - b.display_order)
         .map((img) => img.image_url),
-    [product.id, product.images]
+    [gallerySource, product.id],
   );
-  const activeImage = galleryImages[selectedImage] || galleryImages[0] || "";
+  const activeImage =
+    galleryImages[selectedImage] ||
+    galleryImages[0] ||
+    (product as any).image ||
+    "";
+
+  useEffect(() => {
+    const loadReviews = async () => {
+      try {
+        setReviewsLoading(true);
+        setReviewsError(null);
+        const response = await api.get(`/products/${product.id}/reviews`);
+        const data = Array.isArray(response.data)
+          ? response.data
+          : response.data?.data || response.data?.reviews || [];
+        setReviews(data);
+      } catch (error) {
+        console.error("Failed to load reviews:", error);
+        setReviewsError("Failed to load reviews.");
+      } finally {
+        setReviewsLoading(false);
+      }
+    };
+
+    loadReviews();
+  }, [product.id]);
+
+  const renderStars = (rating: number) =>
+    Array.from({ length: 5 }, (_, index) => (
+      <Icons.Star
+        key={index}
+        className={`h-4 w-4 ${index < rating ? "fill-current text-yellow-400" : "text-gray-300"}`}
+      />
+    ));
 
   const handleAddToCart = () => {
     onAddToCart(product, quantity);
@@ -35,6 +93,26 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   const handleBuyNow = () => {
     onAddToCart(product, quantity);
     onNavigate("checkout");
+  };
+
+  const handleMessageSeller = async () => {
+    console.log("CHAT START:", (product as any).business);
+
+    const participantId =
+      (product as any).business?.user_id ||
+      (product as any).business?.userId ||
+      product.seller_id;
+
+    if (!participantId) {
+      console.log(
+        "MISSING PARTICIPANT_ID for product.business",
+        (product as any).business,
+      );
+      return;
+    }
+
+    window.location.href =
+      "/messages?participantId=" + encodeURIComponent(participantId);
   };
 
   return (
@@ -108,6 +186,23 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
             <h1 className="mb-4 text-3xl font-bold text-gray-900 sm:text-4xl">
               {product.name}
             </h1>
+
+            <div className="mb-6 flex flex-wrap items-center gap-3">
+              <div className="text-sm text-gray-500">
+                Seller:{" "}
+                <span className="font-semibold text-gray-900">
+                  {product.author || "BuildHive Seller"}
+                </span>
+              </div>
+              <Button
+                variant="outline"
+                className="border-violet-200 text-violet-700 hover:border-violet-300 hover:bg-violet-50"
+                size="sm"
+                onClick={handleMessageSeller}
+              >
+                <Icons.Message className="mr-2 h-4 w-4" /> Message Seller
+              </Button>
+            </div>
 
             <div className="mb-6 flex items-center gap-2">
               <div className="flex text-yellow-400">
@@ -255,7 +350,57 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                   </p>
                 )}
                 {activeTab === "Reviews" && (
-                  <p className="text-sm text-gray-500">No reviews yet.</p>
+                  <div className="space-y-4">
+                    {reviewsLoading ? (
+                      <p className="text-sm text-gray-500">
+                        Loading reviews...
+                      </p>
+                    ) : reviewsError ? (
+                      <p className="text-sm text-red-500">{reviewsError}</p>
+                    ) : reviews.length === 0 ? (
+                      <p className="text-sm text-gray-500">No reviews yet.</p>
+                    ) : (
+                      reviews.map((review) => {
+                        const reviewerName =
+                          review.reviewer_name ||
+                          review.reviewerName ||
+                          review.user_name ||
+                          review.name ||
+                          "Verified buyer";
+                        const comment =
+                          review.comment || review.body || review.title || "";
+
+                        return (
+                          <div
+                            key={review.id}
+                            className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm"
+                          >
+                            <div className="flex items-start justify-between gap-4">
+                              <div>
+                                <div className="flex items-center gap-1">
+                                  {renderStars(Number(review.rating || 0))}
+                                </div>
+                                <p className="mt-2 font-semibold text-gray-900">
+                                  {review.title || "Review"}
+                                </p>
+                                <p className="mt-1 text-sm text-gray-500">
+                                  {reviewerName}
+                                </p>
+                              </div>
+                              <div className="text-sm font-semibold text-gray-900">
+                                {Number(review.rating || 0).toFixed(1)}
+                              </div>
+                            </div>
+                            {comment && (
+                              <p className="mt-3 text-sm leading-relaxed text-gray-600">
+                                {comment}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
                 )}
               </div>
             </div>
