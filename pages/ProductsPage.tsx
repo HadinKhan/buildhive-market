@@ -5,12 +5,17 @@ import React, {
   useState,
   useMemo,
 } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Icons } from "../components/Icons";
 import { useWishlist, WishlistItem } from "../src/hooks/useWishlist";
 import { useFilters } from "../src/hooks/useFilters";
 import { useAuth } from "../src/context/AuthContext";
+import { aiService } from "../src/services/aiService";
 import api from "../src/services/api";
+import {
+  getMarketplaceInitials,
+  resolveMarketplaceImageSrc,
+} from "../src/utils/marketplaceImage";
 import {
   productService,
   type Product as ApiProduct,
@@ -1977,12 +1982,53 @@ const toProductView = (product: ApiProduct): Product => ({
   },
 });
 
+const mapAiProduct = (product: any, index: number): Product => ({
+  id: String(
+    product.id ?? `ai-${index}-${product.item_name ?? product.name ?? "item"}`,
+  ),
+  name: product.item_name ?? product.name ?? "AI Recommended Item",
+  category: product.category ?? product.category_name ?? "AI Search",
+  subcategory:
+    product.brand ?? product.subcategory ?? product.unit ?? "AI Search",
+  materialType:
+    product.category ?? product.category_name ?? product.brand ?? "",
+  price: Number(product.market_price_pkr ?? product.price ?? 0),
+  unit: product.unit ?? "unit",
+  rating: Number(product.rating ?? 0),
+  reviews: Number(product.reviews ?? 0),
+  image: product.image ?? product.image_url ?? "",
+  badge: "AI Search",
+  seller: product.brand ?? "BuildHive AI",
+  seller_id: product.seller_id,
+  business_id: product.business_id,
+  business: product.business,
+  sellerData: product.sellerData,
+  images: product.images,
+  verified: true,
+  description:
+    product.description ??
+    product.item_name ??
+    product.name ??
+    "AI-powered semantic result",
+  tags: [
+    String(product.category ?? product.category_name ?? "AI Search"),
+    String(product.brand ?? product.unit ?? "BuildHive AI"),
+    "AI Search",
+  ],
+  specs: {
+    Brand: String(product.brand ?? "BuildHive AI"),
+    Unit: String(product.unit ?? "unit"),
+  },
+  relatedProducts: [],
+});
+
 export const ProductsPage: React.FC<ProductsPageProps> = ({
   onNavigate,
   initialCategory,
   onAddToCart,
 }) => {
-  const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  const { isAuthenticated, user } = useAuth();
   const { wishlist, toggleWishlist, isInWishlist } = useWishlist();
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
@@ -2013,6 +2059,9 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
   );
   const [showCompareModal, setShowCompareModal] = useState(false);
   const [showWishlistOnly, setShowWishlistOnly] = useState(false);
+  const [useAiSearch, setUseAiSearch] = useState(false);
+  const [aiResults, setAiResults] = useState<Product[]>([]);
+  const [aiSearchLabel, setAiSearchLabel] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const [categoryNavSearch, setCategoryNavSearch] = useState("");
   const [categorySearches, setCategorySearches] = useState<
@@ -2028,32 +2077,36 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
     },
   );
 
+  const hasFetchedRef = useRef(false);
+
   useEffect(() => {
-    let cancelled = false;
-    setIsLoadingProducts(true);
+    if (hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
+
     productService
-      .getProducts({ status: "approved", isActive: true, limit: 100 })
-      .then(({ products: apiProducts }) => {
-        if (!cancelled) {
-          setProducts(apiProducts.map(toProductView));
-          setProductsError(null);
-        }
+      .getProducts({
+        status: "approved",
+        limit: 20,
+      })
+      .then((response) => {
+        const prods = (response.products ||
+          response.data?.products ||
+          []) as ApiProduct[];
+        const nextProducts = prods.map(toProductView);
+        setProducts(nextProducts);
+        setProductsError(null);
+        setIsLoadingProducts(false);
       })
       .catch((error) => {
         console.error("Failed to load products:", error);
-        if (!cancelled) {
-          setProducts([]);
-          setProductsError("Products are unavailable right now.");
-        }
+        setProducts([]);
+        setProductsError("Products are unavailable right now.");
+        setIsLoadingProducts(false);
       })
       .finally(() => {
-        if (!cancelled) setIsLoadingProducts(false);
+        setIsLoadingProducts(false);
       });
-    return () => {
-      cancelled = true;
-    };
   }, []);
-
   const categoryProducts = useMemo(() => {
     let filtered =
       activeCategory === "all"
@@ -2068,13 +2121,21 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
   const displayedProducts = useMemo(() => {
     const startIdx = (filters.page - 1) * filters.itemsPerPage;
     const endIdx = startIdx + filters.itemsPerPage;
-    return categoryProducts.slice(startIdx, endIdx);
+    const sliced = categoryProducts.slice(startIdx, endIdx);
+    return sliced;
   }, [categoryProducts, filters.page, filters.itemsPerPage]);
 
   const categoryTotalPages = Math.max(
     1,
     Math.ceil(categoryProducts.length / filters.itemsPerPage),
   );
+
+  const renderedProducts =
+    useAiSearch && aiResults.length > 0 ? aiResults : displayedProducts;
+  const displayedCount =
+    useAiSearch && aiResults.length > 0
+      ? aiResults.length
+      : categoryProducts.length;
 
   const handleWishlistToggle = (product: Product) => {
     const wishlistItem: WishlistItem = {
@@ -2108,6 +2169,32 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
     scrollToTop();
     requestAnimationFrame(scrollToTop);
     window.setTimeout(scrollToTop, 80);
+  };
+
+  const handleSearch = async (query: string) => {
+    setSearchQuery(query);
+    const trimmed = query.trim();
+
+    if (trimmed.length > 2) {
+      try {
+        const result = await aiService.searchProducts(trimmed, 20);
+        const items = Array.isArray(result?.results) ? result.results : [];
+        if (items.length > 0) {
+          setAiResults(
+            items.map((item: any, index: number) => mapAiProduct(item, index)),
+          );
+          setUseAiSearch(true);
+          setAiSearchLabel(trimmed);
+          return;
+        }
+      } catch (error) {
+        // fallback to local filter
+      }
+    }
+
+    setUseAiSearch(false);
+    setAiResults([]);
+    setAiSearchLabel("");
   };
 
   const toCartProduct = (product: Product): CartProduct => ({
@@ -2145,11 +2232,31 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
     sales: product.reviews,
   });
 
-  const handleAddToCart = (product: Product) => {
-    if (onAddToCart) {
-      onAddToCart(toCartProduct(product), 1);
-    } else {
+  const handleAddToCart = async (product: Product) => {
+    if (!user) {
+      navigate("/signin");
+      return;
+    }
+
+    try {
+      // Add to backend cart
+      const sellerId = product.seller_id || product.business_id;
+      await api.post("/cart", {
+        product_id: product.id,
+        quantity: 1,
+        seller_id: sellerId,
+      });
+
       setToast(`${product.name} added to cart`);
+      setTimeout(() => setToast(null), 2000);
+
+      // Also call the prop handler if provided (for page-based navigation)
+      if (onAddToCart) {
+        onAddToCart(toCartProduct(product), 1);
+      }
+    } catch (error) {
+      console.error("Failed to add to cart:", error);
+      setToast("Failed to add to cart. Please try again.");
       setTimeout(() => setToast(null), 2000);
     }
   };
@@ -2262,7 +2369,6 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
       null;
 
     const sellerData = { business, seller };
-    console.log("SELLER DATA:", JSON.stringify(sellerData, null, 2));
 
     setSelectedSeller({
       ...fallback,
@@ -2286,13 +2392,7 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
   const handleContactSellerFromProfile = async () => {
     if (!selectedSeller) return;
 
-    if (!isAuthenticated) {
-      window.location.href = "/login";
-      return;
-    }
-
     const business = selectedSeller.business;
-    console.log("CONTACT SELLER: participantId=", business?.user_id);
 
     const participantId =
       business?.user_id ||
@@ -2308,390 +2408,406 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
     }
 
     setSelectedSeller(null);
-    window.location.href = `/messages?participantId=${encodeURIComponent(participantId)}`;
+    navigate(`/messages?participantId=${encodeURIComponent(participantId)}`);
   };
 
-  const renderProductCard = (product: Product) => (
-    <article
-      key={product.id}
-      className="product-card"
-      style={{
-        padding: 0,
-        borderRadius: "24px",
-        overflow: "hidden",
-        background: "rgba(255,255,255,0.03)",
-        border: "1px solid rgba(255,255,255,0.06)",
-        backdropFilter: "blur(16px)",
-        cursor: "pointer",
-        transition:
-          "transform 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease",
-      }}
-      onClick={() => setSelectedProduct(product)}
-      onMouseEnter={(e) => {
-        if (e.currentTarget instanceof HTMLElement) {
-          e.currentTarget.style.transform = "translateY(-8px)";
-          e.currentTarget.style.borderColor = "rgba(139, 92, 246, 0.28)";
-          e.currentTarget.style.boxShadow =
-            "0 24px 50px rgba(0,0,0,0.34), 0 0 28px rgba(124, 58, 237, 0.1)";
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (e.currentTarget instanceof HTMLElement) {
-          e.currentTarget.style.transform = "translateY(0)";
-          e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)";
-          e.currentTarget.style.boxShadow = "none";
-        }
-      }}
-    >
-      <div style={{ position: "relative", overflow: "hidden" }}>
-        {(() => {
-          const imageSrc =
-            product.images?.[0]?.image_url || product.image || null;
-          return (
+  const renderProductCard = (product: Product) => {
+    const productData = product as any;
+    const productName =
+      productData?.name ?? productData?.title ?? "Untitled Product";
+    const productPrice = Number(
+      productData?.price ?? productData?.market_price_pkr ?? 0,
+    );
+    const productUnit = productData?.unit ?? "unit";
+    const productRating = Number(productData?.rating ?? 0);
+    const productReviews = Number(productData?.reviews ?? 0);
+    const imageSrc = resolveMarketplaceImageSrc(productData);
+    const initials = getMarketplaceInitials(productName);
+
+    return (
+      <article
+        key={product.id}
+        className="product-card"
+        style={{
+          padding: 0,
+          borderRadius: "24px",
+          overflow: "hidden",
+          background: "rgba(255,255,255,0.03)",
+          border: "1px solid rgba(255,255,255,0.06)",
+          backdropFilter: "blur(16px)",
+          cursor: "pointer",
+          transition:
+            "transform 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease",
+        }}
+        onClick={() => setSelectedProduct(product)}
+        onMouseEnter={(e) => {
+          if (e.currentTarget instanceof HTMLElement) {
+            e.currentTarget.style.transform = "translateY(-8px)";
+            e.currentTarget.style.borderColor = "rgba(139, 92, 246, 0.28)";
+            e.currentTarget.style.boxShadow =
+              "0 24px 50px rgba(0,0,0,0.34), 0 0 28px rgba(124, 58, 237, 0.1)";
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (e.currentTarget instanceof HTMLElement) {
+            e.currentTarget.style.transform = "translateY(0)";
+            e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)";
+            e.currentTarget.style.boxShadow = "none";
+          }
+        }}
+      >
+        <div style={{ position: "relative", overflow: "hidden" }}>
+          {imageSrc ? (
             <>
-              {imageSrc && (
-                <img
-                  src={imageSrc}
-                  alt={product.name}
-                  style={{
-                    width: "100%",
-                    height: "204px",
-                    objectFit: "cover",
-                    transition: "transform 0.5s ease",
-                  }}
-                  onError={(e) => {
-                    e.currentTarget.style.display = "none";
-                    const placeholder = e.currentTarget
-                      .nextElementSibling as HTMLElement | null;
-                    if (placeholder) placeholder.style.display = "flex";
-                  }}
-                />
-              )}
-              <div
+              <img
+                src={imageSrc}
+                alt={productName}
                 style={{
                   width: "100%",
                   height: "204px",
-                  background: "#1f2937",
-                  display: imageSrc ? "none" : "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "#9ca3af",
-                  fontSize: "13px",
-                  fontWeight: 700,
+                  objectFit: "cover",
+                  transition: "transform 0.5s ease",
                 }}
-              >
-                No image
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                  const placeholder = e.currentTarget
+                    .nextElementSibling as HTMLElement | null;
+                  if (placeholder) placeholder.style.display = "flex";
+                }}
+              />
+              <div className="hidden h-[204px] w-full items-center justify-center bg-gray-200 text-gray-500">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gray-300 text-base font-bold text-gray-600">
+                  {initials}
+                </div>
               </div>
             </>
-          );
-        })()}
-        {product.badge && (
-          <span
+          ) : (
+            <div
+              style={{
+                width: "100%",
+                height: "204px",
+                background: "#1f2937",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#9ca3af",
+              }}
+            >
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gray-300 text-base font-bold text-gray-600">
+                {initials}
+              </div>
+            </div>
+          )}
+          {product.badge && (
+            <span
+              style={{
+                position: "absolute",
+                top: 12,
+                left: 12,
+                padding: "6px 10px",
+                borderRadius: "999px",
+                fontSize: "11px",
+                fontWeight: 800,
+                textTransform: "uppercase",
+                color: "#fff",
+                background:
+                  product.badge === "Best Seller"
+                    ? "linear-gradient(135deg, #fbbf24, #f59e0b)"
+                    : "linear-gradient(135deg, #34d399, #10b981)",
+              }}
+            >
+              {product.badge}
+            </span>
+          )}
+
+          <div
             style={{
               position: "absolute",
               top: 12,
-              left: 12,
-              padding: "6px 10px",
+              right: 12,
+              display: "flex",
+              gap: 8,
+            }}
+          >
+            <button
+              style={{
+                width: "38px",
+                height: "38px",
+                borderRadius: "999px",
+                border: "1px solid rgba(255,255,255,0.1)",
+                background: isInWishlist(product.id)
+                  ? "rgba(168, 85, 247, 0.85)"
+                  : "rgba(0,0,0,0.38)",
+                color: "white",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                backdropFilter: "blur(10px)",
+                transition:
+                  "background 0.25s ease, transform 0.25s ease, border-color 0.25s ease",
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleWishlistToggle(product);
+              }}
+              onMouseEnter={(e) => {
+                if (e.currentTarget instanceof HTMLElement) {
+                  e.currentTarget.style.background = "rgba(124, 58, 237, 0.85)";
+                  e.currentTarget.style.transform = "scale(1.05)";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (e.currentTarget instanceof HTMLElement) {
+                  e.currentTarget.style.background = isInWishlist(product.id)
+                    ? "rgba(168, 85, 247, 0.85)"
+                    : "rgba(0,0,0,0.38)";
+                  e.currentTarget.style.transform = "scale(1)";
+                }
+              }}
+              aria-label={
+                isInWishlist(product.id)
+                  ? "Remove from liked items"
+                  : "Like this product"
+              }
+              title={
+                isInWishlist(product.id)
+                  ? "Remove from liked items"
+                  : "Like this product"
+              }
+            >
+              <div style={{ width: "18px", height: "18px", color: "white" }}>
+                {renderHeart(isInWishlist(product.id))}
+              </div>
+            </button>
+
+            <label
+              style={{
+                width: "38px",
+                height: "38px",
+                borderRadius: "999px",
+                border: "1px solid rgba(255,255,255,0.1)",
+                background: "rgba(0,0,0,0.38)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                backdropFilter: "blur(10px)",
+                transition: "background 0.25s ease",
+              }}
+              onClick={(e) => e.stopPropagation()}
+              onMouseEnter={(e) => {
+                if (e.currentTarget instanceof HTMLElement) {
+                  e.currentTarget.style.background = "rgba(124, 58, 237, 0.85)";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (e.currentTarget instanceof HTMLElement) {
+                  e.currentTarget.style.background = "rgba(0,0,0,0.38)";
+                }
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={comparisonItems.includes(product.id)}
+                onChange={() => handleComparisonToggle(product.id)}
+                style={{
+                  width: "16px",
+                  height: "16px",
+                  cursor: "pointer",
+                  accentColor: "#a78bfa",
+                }}
+              />
+            </label>
+          </div>
+        </div>
+
+        <div style={{ padding: "20px" }}>
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "5px 10px",
               borderRadius: "999px",
+              marginBottom: "10px",
+              background: "rgba(124, 58, 237, 0.12)",
+              border: "1px solid rgba(124, 58, 237, 0.18)",
+              color: "#c4b5fd",
               fontSize: "11px",
               fontWeight: 800,
               textTransform: "uppercase",
-              color: "#fff",
-              background:
-                product.badge === "Best Seller"
-                  ? "linear-gradient(135deg, #fbbf24, #f59e0b)"
-                  : "linear-gradient(135deg, #34d399, #10b981)",
+              letterSpacing: "0.4px",
             }}
           >
-            {product.badge}
+            {productData?.subcategory ?? productData?.category ?? "General"}
           </span>
-        )}
-
-        <div
-          style={{
-            position: "absolute",
-            top: 12,
-            right: 12,
-            display: "flex",
-            gap: 8,
-          }}
-        >
-          <button
+          <h3
             style={{
-              width: "38px",
-              height: "38px",
-              borderRadius: "999px",
-              border: "1px solid rgba(255,255,255,0.1)",
-              background: isInWishlist(product.id)
-                ? "rgba(168, 85, 247, 0.85)"
-                : "rgba(0,0,0,0.38)",
-              color: "white",
+              margin: "0 0 8px",
+              color: "#fff",
+              fontSize: "1.03rem",
+              lineHeight: 1.35,
+              letterSpacing: "-0.02em",
+            }}
+          >
+            {productName}
+          </h3>
+          <p
+            style={{
+              margin: "0 0 16px",
+              color: "#7f8da6",
+              fontSize: "13px",
+              lineHeight: 1.6,
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+              minHeight: "42px",
+            }}
+          >
+            {productData?.description ?? "No description available."}
+          </p>
+          <div
+            style={{
               display: "flex",
               alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-              backdropFilter: "blur(10px)",
-              transition:
-                "background 0.25s ease, transform 0.25s ease, border-color 0.25s ease",
+              justifyContent: "space-between",
+              gap: 14,
+              marginBottom: 16,
             }}
+          >
+            <div
+              style={{ color: "#fff", fontWeight: 900, fontSize: "1.18rem" }}
+            >
+              Rs. {productPrice.toLocaleString()}
+              <span
+                style={{ color: "#7887a2", fontSize: "12px", fontWeight: 600 }}
+              >
+                {" "}
+                {productUnit}
+              </span>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                color: "#fbbf24",
+                fontSize: "13px",
+                fontWeight: 700,
+              }}
+            >
+              {renderStar()}
+              {productRating.toFixed(1)}
+              <span style={{ color: "#7f8da6", fontWeight: 500 }}>
+                ({productReviews})
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation();
-              handleWishlistToggle(product);
+              handleAddToCart(product);
             }}
             onMouseEnter={(e) => {
               if (e.currentTarget instanceof HTMLElement) {
-                e.currentTarget.style.background = "rgba(124, 58, 237, 0.85)";
-                e.currentTarget.style.transform = "scale(1.05)";
+                e.currentTarget.style.transform = "translateY(-2px)";
+                e.currentTarget.style.borderColor = "rgba(196, 181, 253, 0.68)";
+                e.currentTarget.style.background =
+                  "linear-gradient(180deg, rgba(196, 181, 253, 0.16), rgba(124, 58, 237, 0.08)), #211830";
+                e.currentTarget.style.boxShadow =
+                  "inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 18px 38px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(167, 139, 250, 0.22)";
               }
             }}
             onMouseLeave={(e) => {
               if (e.currentTarget instanceof HTMLElement) {
-                e.currentTarget.style.background = isInWishlist(product.id)
-                  ? "rgba(168, 85, 247, 0.85)"
-                  : "rgba(0,0,0,0.38)";
-                e.currentTarget.style.transform = "scale(1)";
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.borderColor = "rgba(167, 139, 250, 0.44)";
+                e.currentTarget.style.background =
+                  "linear-gradient(180deg, rgba(196, 181, 253, 0.12), rgba(124, 58, 237, 0.06)), #1a1426";
+                e.currentTarget.style.boxShadow =
+                  "inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 14px 30px rgba(0, 0, 0, 0.24), 0 0 0 1px rgba(124, 58, 237, 0.2)";
               }
             }}
-            aria-label={
-              isInWishlist(product.id)
-                ? "Remove from liked items"
-                : "Like this product"
-            }
-            title={
-              isInWishlist(product.id)
-                ? "Remove from liked items"
-                : "Like this product"
-            }
-          >
-            <div style={{ width: "18px", height: "18px", color: "white" }}>
-              {renderHeart(isInWishlist(product.id))}
-            </div>
-          </button>
-
-          <label
             style={{
-              width: "38px",
-              height: "38px",
-              borderRadius: "999px",
-              border: "1px solid rgba(255,255,255,0.1)",
-              background: "rgba(0,0,0,0.38)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-              backdropFilter: "blur(10px)",
-              transition: "background 0.25s ease",
-            }}
-            onClick={(e) => e.stopPropagation()}
-            onMouseEnter={(e) => {
-              if (e.currentTarget instanceof HTMLElement) {
-                e.currentTarget.style.background = "rgba(124, 58, 237, 0.85)";
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (e.currentTarget instanceof HTMLElement) {
-                e.currentTarget.style.background = "rgba(0,0,0,0.38)";
-              }
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={comparisonItems.includes(product.id)}
-              onChange={() => handleComparisonToggle(product.id)}
-              style={{
-                width: "16px",
-                height: "16px",
-                cursor: "pointer",
-                accentColor: "#a78bfa",
-              }}
-            />
-          </label>
-        </div>
-      </div>
-
-      <div style={{ padding: "20px" }}>
-        <span
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            padding: "5px 10px",
-            borderRadius: "999px",
-            marginBottom: "10px",
-            background: "rgba(124, 58, 237, 0.12)",
-            border: "1px solid rgba(124, 58, 237, 0.18)",
-            color: "#c4b5fd",
-            fontSize: "11px",
-            fontWeight: 800,
-            textTransform: "uppercase",
-            letterSpacing: "0.4px",
-          }}
-        >
-          {product.subcategory}
-        </span>
-        <h3
-          style={{
-            margin: "0 0 8px",
-            color: "#fff",
-            fontSize: "1.03rem",
-            lineHeight: 1.35,
-            letterSpacing: "-0.02em",
-          }}
-        >
-          {product.name}
-        </h3>
-        <p
-          style={{
-            margin: "0 0 16px",
-            color: "#7f8da6",
-            fontSize: "13px",
-            lineHeight: 1.6,
-            display: "-webkit-box",
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: "vertical",
-            overflow: "hidden",
-            minHeight: "42px",
-          }}
-        >
-          {product.description}
-        </p>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 14,
-            marginBottom: 16,
-          }}
-        >
-          <div style={{ color: "#fff", fontWeight: 900, fontSize: "1.18rem" }}>
-            Rs. {product.price.toLocaleString()}
-            <span
-              style={{ color: "#7887a2", fontSize: "12px", fontWeight: 600 }}
-            >
-              {" "}
-              {product.unit}
-            </span>
-          </div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              color: "#fbbf24",
+              width: "100%",
+              minHeight: "42px",
+              marginBottom: 14,
+              border: "1px solid rgba(167, 139, 250, 0.44)",
+              borderRadius: "16px",
+              background:
+                "linear-gradient(180deg, rgba(196, 181, 253, 0.12), rgba(124, 58, 237, 0.06)), #1a1426",
+              color: "#f5f3ff",
               fontSize: "13px",
-              fontWeight: 700,
-            }}
-          >
-            {renderStar()}
-            {product.rating.toFixed(1)}
-            <span style={{ color: "#7f8da6", fontWeight: 500 }}>
-              ({product.reviews})
-            </span>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleAddToCart(product);
-          }}
-          onMouseEnter={(e) => {
-            if (e.currentTarget instanceof HTMLElement) {
-              e.currentTarget.style.transform = "translateY(-2px)";
-              e.currentTarget.style.borderColor = "rgba(196, 181, 253, 0.68)";
-              e.currentTarget.style.background =
-                "linear-gradient(180deg, rgba(196, 181, 253, 0.16), rgba(124, 58, 237, 0.08)), #211830";
-              e.currentTarget.style.boxShadow =
-                "inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 18px 38px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(167, 139, 250, 0.22)";
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (e.currentTarget instanceof HTMLElement) {
-              e.currentTarget.style.transform = "translateY(0)";
-              e.currentTarget.style.borderColor = "rgba(167, 139, 250, 0.44)";
-              e.currentTarget.style.background =
-                "linear-gradient(180deg, rgba(196, 181, 253, 0.12), rgba(124, 58, 237, 0.06)), #1a1426";
-              e.currentTarget.style.boxShadow =
-                "inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 14px 30px rgba(0, 0, 0, 0.24), 0 0 0 1px rgba(124, 58, 237, 0.2)";
-            }
-          }}
-          style={{
-            width: "100%",
-            minHeight: "42px",
-            marginBottom: 14,
-            border: "1px solid rgba(167, 139, 250, 0.44)",
-            borderRadius: "16px",
-            background:
-              "linear-gradient(180deg, rgba(196, 181, 253, 0.12), rgba(124, 58, 237, 0.06)), #1a1426",
-            color: "#f5f3ff",
-            fontSize: "13px",
-            fontWeight: 900,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8,
-            boxShadow:
-              "inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 14px 30px rgba(0, 0, 0, 0.24), 0 0 0 1px rgba(124, 58, 237, 0.2)",
-            transition:
-              "transform 0.25s ease, border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease",
-          }}
-        >
-          <Icons.Cart style={{ width: 16, height: 16 }} />
-          Add to Cart
-        </button>
-        <div
-          onClick={(e) => {
-            e.stopPropagation();
-            void handleViewSellerProfile(product);
-          }}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            paddingTop: 12,
-            borderTop: "1px solid rgba(255,255,255,0.06)",
-            cursor: "pointer",
-          }}
-        >
-          <div
-            style={{
-              width: "30px",
-              height: "30px",
-              borderRadius: "999px",
+              fontWeight: 900,
+              cursor: "pointer",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              color: "white",
-              fontSize: "11px",
-              fontWeight: 800,
-              background: "linear-gradient(135deg, #a78bfa, #7c3aed)",
-              flexShrink: 0,
+              gap: 8,
+              boxShadow:
+                "inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 14px 30px rgba(0, 0, 0, 0.24), 0 0 0 1px rgba(124, 58, 237, 0.2)",
+              transition:
+                "transform 0.25s ease, border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease",
             }}
           >
-            {product.seller.charAt(0)}
-          </div>
-          <span style={{ color: "#9aa9c2", fontSize: "13px" }}>
-            {product.seller}
-          </span>
-          {product.verified && (
-            <span
+            <Icons.Cart style={{ width: 16, height: 16 }} />
+            Add to Cart
+          </button>
+          <div
+            onClick={(e) => {
+              e.stopPropagation();
+              void handleViewSellerProfile(product);
+            }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              paddingTop: 12,
+              borderTop: "1px solid rgba(255,255,255,0.06)",
+              cursor: "pointer",
+            }}
+          >
+            <div
               style={{
-                width: "16px",
-                height: "16px",
-                color: "#34d399",
-                display: "inline-flex",
+                width: "30px",
+                height: "30px",
+                borderRadius: "999px",
+                display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
+                color: "white",
+                fontSize: "11px",
+                fontWeight: 800,
+                background: "linear-gradient(135deg, #a78bfa, #7c3aed)",
+                flexShrink: 0,
               }}
             >
-              {renderCheck()}
+              {product.seller.charAt(0)}
+            </div>
+            <span style={{ color: "#9aa9c2", fontSize: "13px" }}>
+              {product.seller}
             </span>
-          )}
+            {product.verified && (
+              <span
+                style={{
+                  width: "16px",
+                  height: "16px",
+                  color: "#34d399",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {renderCheck()}
+              </span>
+            )}
+          </div>
         </div>
-      </div>
-    </article>
-  );
+      </article>
+    );
+  };
 
   const uniqueSellers = Array.from(new Set(products.map((p) => p.seller)));
   const visibleSellers = useMemo(() => {
@@ -3219,13 +3335,42 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
                   type="search"
                   placeholder="Search products, sellers, or tags"
                   value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
+                  onChange={(event) => void handleSearch(event.target.value)}
                 />
               </div>
               <span className="results-summary">
-                {categoryProducts.length} of {resultCount} products
+                {useAiSearch
+                  ? `${displayedCount} AI results`
+                  : `${displayedCount} of ${resultCount} products`}
+                {useAiSearch && (
+                  <span
+                    style={{
+                      marginLeft: 10,
+                      padding: "4px 10px",
+                      borderRadius: 999,
+                      background: "rgba(250, 204, 21, 0.18)",
+                      color: "#facc15",
+                      fontWeight: 700,
+                      fontSize: 12,
+                    }}
+                  >
+                    🔍 AI Search
+                  </span>
+                )}
               </span>
             </div>
+
+            {useAiSearch && aiSearchLabel && (
+              <div
+                style={{
+                  marginBottom: 18,
+                  color: "#dbeafe",
+                  fontSize: 13,
+                }}
+              >
+                Showing AI-powered results for "{aiSearchLabel}"
+              </div>
+            )}
 
             {/* Comparison Bar */}
             {comparisonItems.length > 0 && (
@@ -3260,8 +3405,8 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
                 >
                   Loading products...
                 </div>
-              ) : displayedProducts.length > 0 ? (
-                displayedProducts.map((product) => renderProductCard(product))
+              ) : renderedProducts.length > 0 ? (
+                renderedProducts.map((product) => renderProductCard(product))
               ) : (
                 <div
                   style={{
@@ -3293,7 +3438,7 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
             </div>
 
             {/* Pagination */}
-            {categoryTotalPages > 1 && (
+            {!useAiSearch && categoryTotalPages > 1 && (
               <div className="pagination-controls">
                 <button
                   disabled={filters.page === 1}
@@ -3342,7 +3487,36 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
               <div className="compare-grid">
                 {comparedProducts.map((product) => (
                   <div key={product.id} className="compare-card">
-                    <img src={product.image} alt={product.name} />
+                    {resolveMarketplaceImageSrc(product as any) ? (
+                      <img
+                        src={
+                          resolveMarketplaceImageSrc(product as any) ||
+                          product.image
+                        }
+                        alt={product.name}
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                          const placeholder = e.currentTarget
+                            .nextElementSibling as HTMLElement | null;
+                          if (placeholder) {
+                            placeholder.style.display = "flex";
+                          }
+                        }}
+                      />
+                    ) : null}
+                    {!resolveMarketplaceImageSrc(product as any) ? (
+                      <div className="flex h-44 w-full items-center justify-center bg-gray-200 text-gray-500">
+                        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gray-300 text-sm font-bold text-gray-600">
+                          {getMarketplaceInitials(product.name)}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="hidden h-44 w-full items-center justify-center bg-gray-200 text-gray-500">
+                        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gray-300 text-sm font-bold text-gray-600">
+                          {getMarketplaceInitials(product.name)}
+                        </div>
+                      </div>
+                    )}
                     <div className="compare-card-body">
                       <h3>{product.name}</h3>
                       <p>{product.seller}</p>
@@ -3455,11 +3629,37 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
               <div className="product-detail-grid">
                 {/* Images */}
                 <div className="product-images">
-                  <img
-                    src={selectedProduct.image}
-                    alt={selectedProduct.name}
-                    className="main-image"
-                  />
+                  {resolveMarketplaceImageSrc(selectedProduct as any) ? (
+                    <>
+                      <img
+                        src={
+                          resolveMarketplaceImageSrc(selectedProduct as any) ||
+                          selectedProduct.image
+                        }
+                        alt={selectedProduct.name}
+                        className="main-image"
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                          const placeholder = e.currentTarget
+                            .nextElementSibling as HTMLElement | null;
+                          if (placeholder) {
+                            placeholder.style.display = "flex";
+                          }
+                        }}
+                      />
+                      <div className="hidden h-full w-full items-center justify-center bg-gray-200 text-gray-500">
+                        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gray-300 text-xl font-bold text-gray-600">
+                          {getMarketplaceInitials(selectedProduct.name)}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center bg-gray-200 text-gray-500">
+                      <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gray-300 text-xl font-bold text-gray-600">
+                        {getMarketplaceInitials(selectedProduct.name)}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Details */}
@@ -3609,6 +3809,18 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
                   <div className="modal-actions">
                     <button
                       className="btn-primary"
+                      onClick={() => {
+                        void handleAddToCart(selectedProduct);
+                        setSelectedProduct(null);
+                      }}
+                    >
+                      <Icons.Cart
+                        style={{ width: 16, height: 16, marginRight: 4 }}
+                      />
+                      Add to Cart
+                    </button>
+                    <button
+                      className="btn-secondary"
                       onClick={() => {
                         handleWishlistToggle(selectedProduct);
                       }}

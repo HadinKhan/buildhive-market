@@ -2,6 +2,11 @@ import React from "react";
 import { Icons } from "./Icons";
 import { Product } from "../types";
 import { Button } from "./Button";
+import { useNavigate } from "react-router-dom";
+import {
+  getMarketplaceInitials,
+  resolveMarketplaceImageSrc,
+} from "../src/utils/marketplaceImage";
 
 interface ProductCardProps {
   product: Product;
@@ -16,16 +21,38 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   showPlaceholder = false,
   onNavigate,
 }) => {
+  const navigate = useNavigate();
   const isDark = variant === "dark";
   const isGrid = variant === "grid";
+  const ratingValue = Math.max(
+    0,
+    Number.parseFloat(String(product.rating ?? 0)) || 0,
+  );
+  const reviewCount = product.review_count || 0;
+  const stockBadge =
+    product.quantity === 0
+      ? {
+          label: "Out of Stock",
+          className: "bg-red-500 text-white",
+        }
+      : product.quantity < 10
+        ? {
+            label: "Low Stock",
+            className: "bg-orange-500 text-white",
+          }
+        : null;
 
-  const resolveProductImage = () => {
-    const images =
-      (product as any).images || (product as any).product_images || [];
+  const imgSrc = resolveMarketplaceImageSrc(product as any);
+  const initials = getMarketplaceInitials(product.name);
 
-    const firstImage = images.find((image: any) => Boolean(image?.image_url));
-    return firstImage?.image_url || (product as any).image || "";
-  };
+  if (import.meta.env.DEV) {
+    console.log(
+      "IMG SRC:",
+      product.images?.[0]?.image_url,
+      "full images:",
+      product.images,
+    );
+  }
 
   const handleExplore = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -51,13 +78,53 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       return;
     }
 
-    window.location.href =
-      "/messages?participantId=" + encodeURIComponent(participantId);
+    navigate(`/messages?participantId=${encodeURIComponent(participantId)}`);
+  };
+
+  const renderStar = (index: number) => {
+    const wholeStars = Math.floor(ratingValue);
+    const hasHalfStar = ratingValue > wholeStars;
+
+    if (index < wholeStars) {
+      return <Icons.Star className="h-4 w-4 fill-current text-yellow-400" />;
+    }
+
+    if (index === wholeStars && hasHalfStar) {
+      return (
+        <span className="relative inline-flex h-4 w-4">
+          <Icons.Star className="h-4 w-4 text-gray-300" />
+          <Icons.Star
+            className="absolute inset-0 h-4 w-4 fill-current text-yellow-400"
+            style={{ clipPath: "inset(0 50% 0 0)" }}
+          />
+        </span>
+      );
+    }
+
+    return <Icons.Star className="h-4 w-4 text-gray-300" />;
+  };
+
+  const renderRatingRow = () => {
+    if (ratingValue <= 0) {
+      return <span className="text-sm text-gray-400">No reviews yet</span>;
+    }
+
+    return (
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-0.5">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <span key={index}>{renderStar(index)}</span>
+          ))}
+        </div>
+        <span className="text-sm font-medium text-gray-500">
+          ({reviewCount} reviews)
+        </span>
+      </div>
+    );
   };
 
   // Specific style for the All Products Grid
   if (isGrid) {
-    const imageUrl = resolveProductImage();
     return (
       <div
         onClick={() => onNavigate && onNavigate("product-detail", product.id)}
@@ -65,16 +132,40 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       >
         {/* Image Area */}
         <div className="relative mb-3 aspect-[4/3] overflow-hidden rounded-lg bg-gray-300">
-          {showPlaceholder || !imageUrl ? (
-            <div className="flex h-full w-full items-center justify-center text-gray-400">
-              <Icons.Image className="h-12 w-12 stroke-1" />
+          {stockBadge && (
+            <span
+              className={`absolute left-2 top-2 z-10 rounded-full px-2.5 py-1 text-[11px] font-bold ${stockBadge.className}`}
+            >
+              {stockBadge.label}
+            </span>
+          )}
+          {showPlaceholder || !imgSrc ? (
+            <div className="flex h-full w-full items-center justify-center bg-gray-200 text-gray-500">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gray-300 text-sm font-bold text-gray-600">
+                {initials}
+              </div>
             </div>
           ) : (
-            <img
-              src={imageUrl}
-              alt={product.name}
-              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
-            />
+            <>
+              <img
+                src={imgSrc}
+                alt={product.name}
+                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                  const placeholder = e.currentTarget
+                    .nextElementSibling as HTMLElement | null;
+                  if (placeholder) {
+                    placeholder.style.display = "flex";
+                  }
+                }}
+              />
+              <div className="hidden h-full w-full items-center justify-center bg-gray-200 text-gray-500">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gray-300 text-sm font-bold text-gray-600">
+                  {initials}
+                </div>
+              </div>
+            </>
           )}
           <button
             aria-label="Add to wishlist"
@@ -103,6 +194,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               )}
             </div>
           </div>
+
+          <div className="pt-1">{renderRatingRow()}</div>
 
           <div className="flex items-center justify-between pt-2">
             <div className="flex flex-col gap-1">
@@ -135,7 +228,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   }
 
   // Default / Dark variants
-  const imageUrl = resolveProductImage();
   return (
     <div
       onClick={() => onNavigate && onNavigate("product-detail", product.id)}
@@ -147,15 +239,39 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     >
       {/* Image Area */}
       <div className="relative aspect-[4/3] overflow-hidden rounded-t-2xl bg-gray-100">
-        {imageUrl ? (
-          <img
-            src={imageUrl}
-            alt={product.name}
-            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
-          />
+        {stockBadge && (
+          <span
+            className={`absolute left-3 top-3 z-10 rounded-full px-3 py-1 text-xs font-bold ${stockBadge.className}`}
+          >
+            {stockBadge.label}
+          </span>
+        )}
+        {imgSrc ? (
+          <>
+            <img
+              src={imgSrc}
+              alt={product.name}
+              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+              onError={(e) => {
+                e.currentTarget.style.display = "none";
+                const placeholder = e.currentTarget
+                  .nextElementSibling as HTMLElement | null;
+                if (placeholder) {
+                  placeholder.style.display = "flex";
+                }
+              }}
+            />
+            <div className="hidden h-full w-full items-center justify-center bg-gray-200 text-gray-500">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gray-300 text-base font-bold text-gray-600">
+                {initials}
+              </div>
+            </div>
+          </>
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-gray-400">
-            <Icons.Image className="h-16 w-16 stroke-1" />
+          <div className="flex h-full w-full items-center justify-center bg-gray-200 text-gray-500">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gray-300 text-base font-bold text-gray-600">
+              {initials}
+            </div>
           </div>
         )}
 
@@ -216,6 +332,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             )}
           </div>
         </div>
+
+        <div className="mb-3">{renderRatingRow()}</div>
 
         {/* Footer Row */}
         <div

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { StripeProviderWrapper } from "../src/components/StripeProviderWrapper";
 import { StripeCardForm } from "../src/components/StripeCardForm";
 import { useStripePayment } from "../src/hooks/useStripePayment";
@@ -11,7 +11,7 @@ import {
   type CreateOrderData,
 } from "../src/services/orderService";
 import { addressService } from "../src/services/addressService";
-import { useAuth } from "@/src/context/AuthContext";
+import { useAuth } from "../src/context/AuthContext";
 import { useLocation } from "react-router-dom";
 import {
   INITIAL_FORM_DATA,
@@ -58,6 +58,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [orderNumber, setOrderNumber] = useState("");
+  const [placedOrdersCount, setPlacedOrdersCount] = useState(0);
   const [showStripeForm, setShowStripeForm] = useState(false);
   const [createdOrderId, setCreatedOrderId] = useState<string | null>(null);
   const [serviceCheckout, setServiceCheckout] = useState<any | null>(null);
@@ -69,7 +70,11 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const [selectedSavedAddressId, setSelectedSavedAddressId] = useState("");
 
   useEffect(() => {
-    const serviceId = new URLSearchParams(location.search).get("serviceId");
+    const serviceIdFromQuery = new URLSearchParams(location.search).get(
+      "serviceId",
+    );
+    const serviceIdFromState = (location.state as any)?.serviceId;
+    const serviceId = serviceIdFromQuery || serviceIdFromState;
 
     if (!serviceId) {
       setServiceCheckout(null);
@@ -100,7 +105,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [location.search]);
+  }, [location.search, location.state]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -110,7 +115,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     const loadAddresses = async () => {
       try {
         const res = await api.get(`/users/${user.id}/addresses`);
-        console.log("ADDRESSES:", res.data);
         const addrs = Array.isArray(res.data) ? res.data : res.data?.data || [];
         const next = addrs.map((address: any) => ({
           id: address.id,
@@ -186,6 +190,60 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const tax = subtotal * 0.05;
   const total = subtotal + tax;
 
+  const cartGroups = useMemo(() => {
+    const groups = new Map<
+      string,
+      {
+        businessId: string;
+        sellerName: string;
+        items: CartItem[];
+      }
+    >();
+
+    cartItems.forEach((item) => {
+      const businessId =
+        item.product?.business_id || (item.product as any)?.businessId || "";
+      const sellerName =
+        item.product?.author ||
+        (item.product as any)?.business_name ||
+        "BuildHive Seller";
+      const key = businessId || sellerName;
+
+      const existing = groups.get(key);
+      if (existing) {
+        existing.items.push(item);
+        return;
+      }
+
+      groups.set(key, {
+        businessId: businessId || key,
+        sellerName,
+        items: [item],
+      });
+    });
+
+    return Array.from(groups.values());
+  }, [cartItems]);
+
+  const orderedPaymentMethods = useMemo(
+    () => [
+      ...PAYMENT_METHODS.filter((method) => method.id === "cod"),
+      ...PAYMENT_METHODS.filter((method) => method.id !== "cod"),
+    ],
+    [],
+  );
+
+  const formIsValid = useMemo(() => {
+    const addressIsFilled = REQUIRED_FIELDS.every((field) => {
+      const value = formData[field as keyof FormData];
+      return Boolean(value && String(value).trim());
+    });
+
+    return addressIsFilled && Boolean(paymentMethod);
+  }, [formData, paymentMethod]);
+
+  const selectedAddress = selectedSavedAddressId || formData.full_name || "";
+
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
@@ -216,11 +274,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     setIsProcessing(true);
 
     try {
-      if (serviceCheckout) {
-        console.log("🛠️ [Checkout] Service checkout details:", serviceCheckout);
-      } else {
-        console.log("📦 [Checkout] Cart items before order:", cartItems);
-
+      if (!serviceCheckout) {
         // Validate cart items have product data
         const invalidItems = cartItems.filter(
           (item: CartItem) => !item.product || !item.product.price,
@@ -235,7 +289,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       }
 
       // Step 1: Create address first
-      console.log("📍 [Checkout] Creating shipping address...");
       if (!user?.id) {
         toast.error("User not found. Please sign in again.");
         return;
@@ -251,93 +304,73 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         phone: formData.phone,
         isDefault: false,
       };
-      console.log("📤 [Checkout] Address payload:", addressPayload);
       const address = await addressService.createAddress(
         user.id,
         addressPayload,
       );
-      console.log("✅ [Checkout] Address created:", address.id);
 
       if (serviceCheckout) {
         const serviceOrder = await serviceMarketplaceService.createServiceOrder(
           serviceCheckout.id,
           {
-            title: `${serviceCheckout.name} service order`,
-            description: formData.notes || serviceCheckout.description,
-            budget: Number(serviceCheckout.price || 0),
+            message: formData.notes || "",
+            scheduled_date: null,
+            package_id: null,
           },
         );
 
         const serviceOrderNumber =
           serviceOrder.order_number ||
           serviceOrder.orderNumber ||
-          serviceOrder.id;
-        setCreatedOrderId(String(serviceOrderNumber || serviceCheckout.id));
-        setOrderNumber(String(serviceOrderNumber || serviceCheckout.id));
-        setOrderPlaced(true);
-        onPlaceOrder();
-        toast.success(
-          `Service checkout completed! Order #${serviceOrderNumber}`,
-        );
+          serviceOrder.id?.substring(0, 8)?.toUpperCase() ||
+          "See your account for order details";
+        setCreatedOrderId(String(serviceOrder.id || serviceCheckout.id));
+        setOrderNumber(String(serviceOrderNumber));
+        toast.success("Service booked successfully!");
+        onNavigate("account?tab=orders");
         return;
       }
 
-      // Step 2: Create order with address ID
-      const orderData: CreateOrderData = {
-        items: cartItems.map((item) => ({
-          product_id: item.product_id,
-          quantity: item.quantity,
-          price: item.product!.price,
-        })),
-        shippingAddressId: address.id,
-        paymentMethod: paymentMethod,
-        notes: formData.notes,
-      };
+      // Step 2: Create one order per seller group.
+      const orderResponses: any[] = [];
 
-      console.log("==== ORDER CREATION DEBUG ====");
-      console.log("Order payload:", JSON.stringify(orderData, null, 2));
-      console.log("Payment method:", orderData.paymentMethod);
-      console.log("Shipping Address ID:", orderData.shippingAddressId);
-      console.log("Items:", orderData.items);
+      for (const group of cartGroups) {
+        const orderData: CreateOrderData = {
+          items: group.items.map((item) => ({
+            product_id: item.product_id,
+            quantity: item.quantity,
+            price: item.product!.price,
+          })),
+          shippingAddressId: address.id,
+          paymentMethod: paymentMethod,
+          notes: formData.notes,
+        };
 
-      let orderResponse: any;
-      try {
-        orderResponse = await orderService.createOrder(orderData);
-        console.log("✅ [OrderService] Order response:", orderResponse);
-      } catch (orderError) {
-        console.error("❌ [OrderService] Order creation error:", orderError);
-        throw orderError;
+        let orderResponse: any;
+        try {
+          orderResponse = await orderService.createOrder(orderData);
+        } catch (orderError) {
+          console.error("❌ [OrderService] Order creation error:", orderError);
+          throw orderError;
+        }
+
+        orderResponses.push(orderResponse);
       }
 
-      // Extract order object safely from possible array / wrapper shapes
-      const order =
-        orderResponse?.orders?.[0] ||
-        orderResponse?.data?.orders?.[0] ||
-        orderResponse;
-      const orderId = order?.id;
-      console.log("extracted orderId:", orderId);
+      const firstOrder =
+        orderResponses[0]?.orders?.[0] ||
+        orderResponses[0]?.data?.orders?.[0] ||
+        orderResponses[0];
+      const orderId = firstOrder?.id;
       setCreatedOrderId(orderId);
-      console.log("[Checkout] Extracted order:", order);
+      setPlacedOrdersCount(orderResponses.length);
 
       if (paymentMethod === "card") {
-        // Stripe payment flow
-        console.log(
-          "[Checkout] Starting Stripe payment flow for order:",
-          orderId,
-        );
         stripePayment.resetStripeState();
         const stripeConfigData = await stripePayment.fetchStripeConfig();
         const intentData = await stripePayment.createPaymentIntent(
           orderId as string,
         );
-
-        console.log("[Checkout] Stripe data ready:", {
-          stripeConfigData,
-          intentData,
-          stateStripeConfig: stripePayment.stripeConfig,
-          stateClientSecret: stripePayment.clientSecret,
-          statePaymentIntentId: stripePayment.paymentIntentId,
-        });
 
         if (
           stripeConfigData.publishableKey &&
@@ -345,7 +378,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
           intentData.paymentIntentId
         ) {
           setShowStripeForm(true);
-          console.log("[Checkout] Stripe form should now be shown.");
         } else {
           console.error("[Checkout] Stripe payment intent creation failed.");
           toast.error("Failed to start card payment. Please try again.");
@@ -354,10 +386,14 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         return;
       }
 
-      setOrderNumber(order.order_number);
-      setOrderPlaced(true);
-      onPlaceOrder(); // Clear cart
-      toast.success(`Order placed successfully! Order #${order.order_number}`);
+      const fallbackOrderNumber =
+        firstOrder?.order_number ||
+        firstOrder?.orderNumber ||
+        firstOrder?.id?.substring(0, 8)?.toUpperCase() ||
+        "See your account for order details";
+      setOrderNumber(String(fallbackOrderNumber));
+      toast.success("Order placed successfully! Pay on delivery.");
+      onNavigate("account?tab=orders");
     } catch (error: any) {
       console.error("Failed to place order:", error);
       console.error(
@@ -387,11 +423,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
           console.error("   Error:", error.response.data.errors);
         }
       }
-
-      console.log(
-        "📋 Full error response object:",
-        JSON.stringify(error.response?.data, null, 2),
-      );
 
       toast.error(
         error.response?.data?.message ||
@@ -433,11 +464,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
             paymentIntentId={stripePayment.paymentIntentId}
             onPaymentSuccess={async (paymentIntentId: string) => {
               await stripePayment.confirmPaymentToBackend(paymentIntentId);
-              setOrderPlaced(true);
               setShowStripeForm(false);
               stripePayment.resetStripeState();
-              onPlaceOrder();
-              toast.success("Payment successful! Your order is confirmed.");
+              toast.success("Payment successful! Order confirmed.");
+              onNavigate("account?tab=orders");
             }}
           />
         </StripeProviderWrapper>
@@ -454,14 +484,18 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         <h1 className="success-title">
           {serviceCheckout
             ? "Service Checkout Completed!"
-            : "Order Placed Successfully!"}
+            : placedOrdersCount > 1
+              ? "Orders Placed Successfully!"
+              : "Order Placed Successfully!"}
         </h1>
         <p className="success-message">
           {serviceCheckout
             ? `Thank you for booking ${serviceCheckout.name}. Your service order `
-            : "Thank you for shopping with BuildHive. Your order "}
+            : placedOrdersCount > 1
+              ? `Thank you for shopping with BuildHive. Your ${placedOrdersCount} orders `
+              : "Thank you for shopping with BuildHive. Your order "}
           <span className="success-order-number">
-            #{orderNumber || `BH-${Math.floor(Math.random() * 100000)}`}
+            #{orderNumber || "See your account for order details"}
           </span>{" "}
           {serviceCheckout
             ? "has been confirmed and the provider will contact you shortly."
@@ -699,7 +733,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 Method
               </h2>
               <div className="payment-methods">
-                {PAYMENT_METHODS.map((method) => (
+                {orderedPaymentMethods.map((method) => (
                   <label
                     key={method.id}
                     className={`payment-method-label ${
@@ -809,20 +843,20 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 <div className="order-summary-row">
                   <span>Tax (5%)</span>
                   <span className="order-summary-row-amount">
-                    PKR {tax.toLocaleString()}
+                    PKR {tax.toFixed(2)}
                   </span>
                 </div>
               </div>
 
               <div className="order-total">
                 <span>Total</span>
-                <span>PKR {total.toLocaleString()}</span>
+                <span>PKR {total.toFixed(2)}</span>
               </div>
 
               <button
                 type="submit"
                 className="submit-button"
-                disabled={isProcessing}
+                disabled={isProcessing || !formIsValid}
               >
                 {isProcessing ? "Processing..." : "Place Order"}
               </button>

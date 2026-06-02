@@ -98,58 +98,50 @@ class ProductService {
    * Get all products with filters
    */
   async getProducts(params?: GetProductsParams): Promise<{ products: Product[]; meta: any }> {
-    console.log('🛍️ [ProductService] Fetching products with params:', params);
-    console.log('🛍️ [ProductService] API endpoint: /products');
+    try {
+      const response = await api.get<ApiResponse<{ products: Product[]; pagination: any }>>('/products', {
+        params,
+      });
     
-    const response = await api.get<ApiResponse<{ products: Product[]; pagination: any }>>('/products', {
-      params,
-    });
+      // Backend returns data: { products: [], pagination: {} }
+      const productsData = response.data.data;
     
-    console.log('📥 [ProductService] Raw API response:', response.data);
-    console.log('📥 [ProductService] Response data field:', response.data.data);
-    
-    // Backend returns data: { products: [], pagination: {} }
-    const productsData = response.data.data;
-    
-    // Log first product to debug image issue
-    if (productsData.products?.length > 0) {
-      console.log('🔍 [ProductService] First product from API:', productsData.products[0]);
-      console.log('🔍 [ProductService] First product product_images:', productsData.products[0].product_images);
+      return {
+        products: productsData.products || [],
+        meta: productsData.pagination || {},
+      };
+    } catch (error) {
+      console.error('Products fetch failed:', error);
+      return {
+        products: [],
+        meta: {
+          total: 0,
+          page: 1,
+          limit: params?.limit ?? 0,
+          totalPages: 0,
+        },
+      };
     }
-    
-    console.log('✅ [ProductService] Products fetched:', {
-      count: productsData.products?.length,
-      total: productsData.pagination?.total,
-    });
-    
-    return {
-      products: productsData.products || [],
-      meta: productsData.pagination || {},
-    };
   }
 
   /**
    * Get product by ID
    */
   async getProductById(id: string): Promise<Product> {
-    console.log('🔍 [ProductService] Fetching product by ID:', id);
-    
-    const response = await api.get<ApiResponse<Product>>(`/products/${id}`);
-    
-    console.log('✅ [ProductService] Product fetched:', response.data.data.name);
-    
-    return response.data.data;
+    try {
+      const response = await api.get<ApiResponse<Product>>(`/products/${id}`);
+      return response.data.data;
+    } catch (error) {
+      console.error('Product fetch failed:', error);
+      throw error;
+    }
   }
 
   /**
    * Get product by slug
    */
   async getProductBySlug(slug: string): Promise<Product> {
-    console.log('🔍 [ProductService] Fetching product by slug:', slug);
-    
     const response = await api.get<ApiResponse<Product>>(`/products/slug/${slug}`);
-    
-    console.log('✅ [ProductService] Product fetched:', response.data.data.name);
     
     return response.data.data;
   }
@@ -158,8 +150,6 @@ class ProductService {
    * Search products
    */
   async searchProducts(searchTerm: string, filters?: Omit<GetProductsParams, 'search'>): Promise<{ products: Product[]; meta: any }> {
-    console.log('🔎 [ProductService] Searching products:', searchTerm);
-    
     return this.getProducts({
       search: searchTerm,
       ...filters,
@@ -170,8 +160,6 @@ class ProductService {
    * Get products by category
    */
   async getProductsByCategory(categoryId: string, params?: Omit<GetProductsParams, 'categoryId'>): Promise<{ products: Product[]; meta: any }> {
-    console.log('📁 [ProductService] Fetching products by category:', categoryId);
-    
     return this.getProducts({
       categoryId,
       ...params,
@@ -182,8 +170,6 @@ class ProductService {
    * Get products by supplier/business
    */
   async getProductsByBusiness(businessId: string, params?: Omit<GetProductsParams, 'businessId'>): Promise<{ products: Product[]; meta: any }> {
-    console.log('🏢 [ProductService] Fetching products by business:', businessId);
-    
     return this.getProducts({
       businessId,
       ...params,
@@ -194,8 +180,6 @@ class ProductService {
    * Get featured/recommended products (most recent approved products)
    */
   async getFeaturedProducts(limit: number = 8): Promise<Product[]> {
-    console.log('⭐ [ProductService] Fetching featured products, limit:', limit);
-    
     const response = await this.getProducts({
       status: 'approved',
       isActive: true,
@@ -204,8 +188,6 @@ class ProductService {
       sortOrder: 'desc',
     });
     
-    console.log('✅ [ProductService] Featured products fetched:', response.products.length);
-    
     return response.products;
   }
 
@@ -213,11 +195,7 @@ class ProductService {
    * Get product reviews
    */
   async getProductReviews(productId: string): Promise<any[]> {
-    console.log('⭐ [ProductService] Fetching reviews for product:', productId);
-    
     const response = await api.get<ApiResponse<any[]>>(`/products/${productId}/reviews`);
-    
-    console.log('✅ [ProductService] Reviews fetched:', response.data.data.length);
     
     return response.data.data;
   }
@@ -226,11 +204,7 @@ class ProductService {
    * Create product review
    */
   async createReview(productId: string, reviewData: { rating: number; comment?: string }): Promise<any> {
-    console.log('📝 [ProductService] Creating review for product:', productId, reviewData);
-    
     const response = await api.post<ApiResponse<any>>(`/products/${productId}/reviews`, reviewData);
-    
-    console.log('✅ [ProductService] Review created');
     
     return response.data.data;
   }
@@ -239,11 +213,7 @@ class ProductService {
    * Update product review
    */
   async updateReview(productId: string, reviewId: string, reviewData: { rating?: number; comment?: string }): Promise<any> {
-    console.log('✏️ [ProductService] Updating review:', reviewId, reviewData);
-    
     const response = await api.put<ApiResponse<any>>(`/products/${productId}/reviews/${reviewId}`, reviewData);
-    
-    console.log('✅ [ProductService] Review updated');
     
     return response.data.data;
   }
@@ -252,11 +222,7 @@ class ProductService {
    * Delete product review
    */
   async deleteReview(productId: string, reviewId: string): Promise<void> {
-    console.log('🗑️ [ProductService] Deleting review:', reviewId);
-    
     await api.delete(`/products/${productId}/reviews/${reviewId}`);
-    
-    console.log('✅ [ProductService] Review deleted');
   }
 }
 

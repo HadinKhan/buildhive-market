@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import type { Product } from '../../pages/ProductsPage';
 
 export interface FilterState {
@@ -33,6 +33,13 @@ export const useFilters = (allProducts: Product[]) => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [comparisonItems, setComparisonItems] = useState<string[]>([]);
+
+  useEffect(() => {
+    setFilters((prev) => ({
+      ...prev,
+      priceRange: [prev.priceRange[0], Math.max(prev.priceRange[1], defaultMaxPrice)],
+    }));
+  }, [defaultMaxPrice]);
 
   const filteredProducts = useMemo(() => {
     let result = [...allProducts];

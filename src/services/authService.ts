@@ -70,12 +70,9 @@ class AuthService {
    * Register a new user
    */
   async register(data: RegisterData): Promise<AuthResponse> {
-    console.log('🔵 [AuthService] Registering user with data:', data);
     const response = await api.post<ApiResponse<AuthResponse>>('/auth/register', data);
-    console.log('🟢 [AuthService] Registration response:', response.data);
     
     if (response.data.success && response.data.data.accessToken) {
-      console.log('✅ [AuthService] Storing auth data from registration');
       // Store authentication data
       this.storeAuthData(response.data.data);
     }
@@ -87,12 +84,9 @@ class AuthService {
    * Login user
    */
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
-    console.log('🔵 [AuthService] Logging in with email:', credentials.email);
     const response = await api.post<ApiResponse<AuthResponse>>('/auth/login', credentials);
-    console.log('🟢 [AuthService] Login response:', response.data);
     
     if (response.data.success && response.data.data.accessToken) {
-      console.log('✅ [AuthService] Storing auth data from login');
       // Store authentication data
       this.storeAuthData(response.data.data);
     }
@@ -140,10 +134,6 @@ class AuthService {
    * Change password (authenticated user)
    */
   async changePassword(oldPassword: string, newPassword: string): Promise<void> {
-    console.log('🔐 [AuthService] Changing password with payload:', {
-      currentPassword: oldPassword ? '***' : undefined,
-      newPassword: newPassword ? '***' : undefined,
-    });
     await api.put('/auth/change-password', {
       currentPassword: oldPassword,
       newPassword: newPassword,
@@ -161,12 +151,9 @@ class AuthService {
    * Refresh authentication token
    */
   async refreshToken(): Promise<AuthResponse> {
-    console.log('🔄 [AuthService] Refreshing token...');
     const response = await api.post<ApiResponse<AuthResponse>>('/auth/refresh');
-    console.log('🟢 [AuthService] Token refresh response:', response.data);
     
     if (response.data.success && response.data.data.accessToken) {
-      console.log('✅ [AuthService] Storing refreshed auth data');
       this.storeAuthData(response.data.data);
     }
     
@@ -181,14 +168,6 @@ class AuthService {
    * Store authentication data in cookies
    */
   private storeAuthData(authData: AuthResponse): void {
-    console.log('💾 [AuthService] Storing auth data:', {
-      userId: authData.user.id,
-      email: authData.user.email,
-      role: authData.user.role,
-      hasAccessToken: !!authData.accessToken,
-      hasRefreshToken: !!authData.refreshToken
-    });
-    
     tokenStorage.setToken(authData.accessToken);
     tokenStorage.setUserId(authData.user.id);
     
@@ -196,38 +175,30 @@ class AuthService {
     document.cookie = `user_role=${encodeURIComponent(authData.user.role)}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
     document.cookie = `refresh_token=${encodeURIComponent(authData.refreshToken)}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
     document.cookie = `user_data=${encodeURIComponent(JSON.stringify(authData.user))}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
-    
-    console.log('✅ [AuthService] Auth data stored successfully');
   }
 
   /**
    * Clear authentication data from cookies
    */
   private clearAuthData(): void {
-    console.log('🗑️ [AuthService] Clearing auth data');
     tokenStorage.clear();
     document.cookie = 'user_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC';
     document.cookie = 'refresh_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC';
     document.cookie = 'user_data=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC';
-    console.log('✅ [AuthService] Auth data cleared');
   }
 
   /**
    * Check if user is authenticated
    */
   isAuthenticated(): boolean {
-    const hasToken = !!tokenStorage.getToken();
-    console.log('🔐 [AuthService] isAuthenticated:', hasToken);
-    return hasToken;
+    return !!tokenStorage.getToken();
   }
 
   /**
    * Get stored authentication token
    */
   getToken(): string | null {
-    const token = tokenStorage.getToken();
-    console.log('🎫 [AuthService] getToken:', token ? `${token.substring(0, 20)}...` : 'null');
-    return token;
+    return tokenStorage.getToken();
   }
 
   /**
@@ -260,12 +231,9 @@ class AuthService {
       for (let cookie of cookies) {
         const [name, value] = cookie.trim().split('=');
         if (name === 'user_data') {
-          const user = JSON.parse(decodeURIComponent(value));
-          console.log('👤 [AuthService] getUser:', user);
-          return user;
+          return JSON.parse(decodeURIComponent(value));
         }
       }
-      console.log('👤 [AuthService] getUser: null (no cookie found)');
       return null;
     } catch (error) {
       console.error('❌ [AuthService] getUser error:', error);

@@ -1,8 +1,4 @@
 import api from "./api";
-import axios from "axios";
-
-const rawBaseUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
-const BASE_URL = `${rawBaseUrl.replace(/\/$/, "").replace(/\/api$/, "")}/api`;
 
 interface ApiResponse<T> {
   success: boolean;
@@ -70,19 +66,25 @@ export interface ServiceContractorProfileResponse {
 }
 
 export const serviceMarketplaceService = {
-  async getServices(params?: GetServicesParams) {
-    const response = await api.get<ApiResponse<any>>("/services", { params });
-    const data = response.data.data;
-    return {
-      services: data?.services || data?.items || (Array.isArray(data) ? data : []),
-      meta: data?.pagination || data?.meta || {},
-    };
+  async getServices(filters?: { category?: string; limit?: number }) {
+    const params = new URLSearchParams();
+    if (filters?.category) params.append("category", filters.category);
+    if (filters?.limit) params.append("limit", String(filters.limit));
+
+    const query = params.toString();
+    const response = await api.get(`/services${query ? `?${query}` : ""}`);
+    const data = response.data?.data ?? response.data ?? [];
+    const services = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.services)
+        ? data.services
+        : [];
+    return services;
   },
 
   // Public, unauthenticated services endpoint
   async getPublicServices(params?: GetServicesParams) {
-    const client = axios.create({ baseURL: BASE_URL, timeout: 30000, headers: { "Content-Type": "application/json" } });
-    const response = await client.get<ApiResponse<any>>("/services/public", { params });
+    const response = await api.get<ApiResponse<any>>("/services/public", { params });
     const data = response.data.data;
     return {
       services: data?.services || data?.items || (Array.isArray(data) ? data : []),
@@ -91,8 +93,18 @@ export const serviceMarketplaceService = {
   },
 
   async getServiceById(id: string) {
-    const response = await api.get<ApiResponse<any>>(`/services/${id}`);
-    return response.data.data;
+    const response = await api.get(`/services/${id}`);
+    return response.data?.data ?? response.data;
+  },
+
+  async getServiceReviews(serviceId: string) {
+    const response = await api.get(`/reviews?serviceId=${serviceId}`);
+    const data = response.data?.data ?? response.data ?? [];
+    return Array.isArray(data)
+      ? data
+      : Array.isArray(data?.reviews)
+        ? data.reviews
+        : [];
   },
 
   async getServiceContractorProfile(id: string) {

@@ -268,6 +268,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       try {
         await refreshUser();
       } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.status === 429) {
+          // Rate limited - keep existing stored session, do not clear
+          return;
+        }
         if (axios.isAxiosError(error) && error.response?.status === 401) {
           return;
         }

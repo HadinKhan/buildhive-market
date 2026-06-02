@@ -1,8 +1,38 @@
 import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from "axios";
 import { tokenStorage } from "../utils/cookies";
 
-const rawBaseUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
-const BASE_URL = `${rawBaseUrl.replace(/\/$/, "").replace(/\/api$/, "")}/api`;
+const BASE_URL = `${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}/api`;
+
+const PUBLIC_ROUTE_PREFIXES = [
+  "/",
+  "/products",
+  "/product-detail",
+  "/services",
+  "/contractors",
+  "/cost-estimator",
+  "/about",
+  "/blog",
+  "/contact",
+  "/signin",
+  "/get-started",
+  "/terms",
+  "/privacy",
+];
+
+const isPublicRoute = () => {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const path = window.location.pathname;
+  return PUBLIC_ROUTE_PREFIXES.some((prefix) => {
+    if (prefix === "/") {
+      return path === "/";
+    }
+
+    return path === prefix || path.startsWith(`${prefix}/`);
+  });
+};
 
 const redirectToSignIn = () => {
   if (typeof window === "undefined") {
@@ -82,6 +112,10 @@ api.interceptors.response.use(
 
     // Fallback: clear auth and redirect to signin on 401
     if (error.response?.status === 401) {
+      if (isPublicRoute()) {
+        return Promise.reject(error);
+      }
+
       tokenStorage.clear();
       document.cookie = "user_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC";
       document.cookie = "refresh_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC";

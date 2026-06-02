@@ -23,15 +23,23 @@ import { AboutPage } from "./pages/AboutPage";
 import { BlogPage } from "./pages/BlogPage";
 import { BlogDetailPage } from "./pages/BlogDetailPage";
 import { SignInPage } from "./pages/SignInPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
+import EmailVerifyPage from "./pages/EmailVerifyPage";
 import { GetStartedPage } from "./pages/GetStartedPage";
 import { AccountPage } from "./pages/AccountPage";
 import { TermsPage } from "./pages/TermsPage";
 import { PrivacyPage } from "./pages/PrivacyPage";
 import { ServicesPage } from "./pages/ServicesPage";
+import ServiceDetailPage from "./pages/ServiceDetailPage";
+import { ContractorsPage } from "./pages/ContractorsPage";
+import { ContractorProfilePage } from "./pages/ContractorProfilePage";
 import { NotificationPage } from "./pages/NotificationPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { CostEstimatorPage } from "./pages/CostEstimatorPage";
+import NotFoundPage from "./pages/NotFoundPage";
 import { MessagesPage } from "./src/pages/Messages";
 import { SupportPage } from "./src/pages/Support";
+import { AIChatWidget } from "./components/AIChatWidget";
 import { productService } from "./src/services/productService";
 import { cartService } from "./src/services/cartService";
 import api from "./src/services/api";
@@ -41,7 +49,44 @@ const ProtectedRoute: React.FC<{
   children: React.ReactNode;
   redirectTo?: string;
 }> = ({ children, redirectTo = "/signin" }) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          minHeight: "100vh",
+          background: "#07070b",
+          color: "#e2e8f0",
+          fontSize: "18px",
+        }}
+      >
+        <div style={{ textAlign: "center" }}>
+          <div
+            style={{
+              width: "40px",
+              height: "40px",
+              border: "3px solid rgba(124, 58, 237, 0.2)",
+              borderTop: "3px solid #a78bfa",
+              borderRadius: "50%",
+              margin: "0 auto 16px",
+              animation: "spin 0.8s linear infinite",
+            }}
+          />
+          <p>Loading...</p>
+          <style>{`
+            @keyframes spin {
+              to { transform: rotate(360deg); }
+            }
+          `}</style>
+        </div>
+      </div>
+    );
+  }
+
   return isAuthenticated ? (
     <>{children}</>
   ) : (
@@ -108,8 +153,7 @@ const ProductDetailWrapper: React.FC<{
           sales: apiProduct.total_reviews || 0,
         };
         setProduct(converted);
-      } catch (error) {
-        console.error("Failed to load product:", error);
+      } catch {
       } finally {
         setLoading(false);
       }
@@ -165,6 +209,58 @@ const BlogDetailWrapper: React.FC<{
   );
 };
 
+const AccountRoute = ({
+  onNavigate,
+  onLogout,
+}: {
+  onNavigate: (page: string, productId?: string) => void;
+  onLogout: () => Promise<void>;
+}): JSX.Element | null => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          minHeight: "100vh",
+          background: "#07070b",
+          color: "#e2e8f0",
+          fontSize: "18px",
+        }}
+      >
+        <div style={{ textAlign: "center" }}>
+          <div
+            style={{
+              width: "40px",
+              height: "40px",
+              border: "3px solid rgba(124, 58, 237, 0.2)",
+              borderTop: "3px solid #a78bfa",
+              borderRadius: "50%",
+              margin: "0 auto 16px",
+              animation: "spin 0.8s linear infinite",
+            }}
+          />
+          <p>Loading...</p>
+          <style>{`
+              @keyframes spin {
+                to { transform: rotate(360deg); }
+              }
+            `}</style>
+        </div>
+      </div>
+    );
+  }
+
+  return user ? (
+    <AccountPage user={user} onNavigate={onNavigate} onLogout={onLogout} />
+  ) : (
+    <Navigate to="/signin" replace />
+  );
+};
+
 const AppContent: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -175,28 +271,6 @@ const AppContent: React.FC = () => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [loadingCart, setLoadingCart] = useState(false);
 
-  // Debug: Monitor cart state changes
-  React.useEffect(() => {
-    console.log("🔍 [CART STATE CHANGED]", {
-      cartLength: cart.length,
-      items: cart.map((item) => ({
-        id: item.id,
-        product: item.product?.name,
-        quantity: item.quantity,
-      })),
-      timestamp: new Date().toISOString(),
-    });
-  }, [cart]);
-
-  // Debug: Monitor authentication state changes
-  React.useEffect(() => {
-    console.log("🔐 [AUTH STATE CHANGED]", {
-      isAuthenticated,
-      user: user?.fullName,
-      timestamp: new Date().toISOString(),
-    });
-  }, [isAuthenticated, user]);
-
   // Load cart from API when user is authenticated
   React.useEffect(() => {
     const loadCart = async () => {
@@ -204,20 +278,9 @@ const AppContent: React.FC = () => {
         try {
           setLoadingCart(true);
           const cartItems = await cartService.getCartItems();
-          console.log(
-            "📦 Loaded cart items from API:",
-            cartItems?.length || 0,
-            "items",
-          );
-          console.log("📝 Cart items data:", cartItems);
 
           // Ensure cartItems is an array
           if (!Array.isArray(cartItems)) {
-            console.error(
-              "⚠️ Cart items is not an array:",
-              typeof cartItems,
-              cartItems,
-            );
             setCart([]);
             return;
           }
@@ -261,17 +324,7 @@ const AppContent: React.FC = () => {
             updated_at: item.updated_at,
           }));
           setCart(transformedItems);
-          console.log(
-            "✅ Cart state updated:",
-            transformedItems.length,
-            "items",
-          );
-        } catch (error) {
-          console.error("❌ Failed to load cart:", error);
-          console.error("Error details:", {
-            message: error instanceof Error ? error.message : "Unknown error",
-            stack: error instanceof Error ? error.stack : undefined,
-          });
+        } catch {
           // Set empty cart on error
           setCart([]);
         } finally {
@@ -279,7 +332,6 @@ const AppContent: React.FC = () => {
         }
       } else {
         // Don't clear cart when logged out - it's stored in backend
-        console.log("👤 User not authenticated, keeping current cart state");
       }
     };
     loadCart();
@@ -288,6 +340,8 @@ const AppContent: React.FC = () => {
   const navigateTo = (page: string, productId?: string) => {
     if (page === "product-detail" && productId) {
       navigate(`/product-detail/${productId}`);
+    } else if (page === "contractor-detail" && productId) {
+      navigate(`/contractors/${productId}`);
     } else {
       navigate(`/${page === "home" ? "" : page}`);
     }
@@ -306,68 +360,32 @@ const AppContent: React.FC = () => {
 
   // Cart Functions
   const addToCart = async (product: Product, quantity: number) => {
-    console.log("🛒 [addToCart] Called with:", {
-      productId: product.id,
-      productName: product.name,
-      quantity,
-      isAuthenticated,
-    });
-
     if (!isAuthenticated) {
       // Redirect to sign in
-      console.log(
-        "❌ [addToCart] User not authenticated, redirecting to signin",
-      );
       toast.info("Please sign in to add items to cart");
       navigate("/signin");
       return;
     }
 
     try {
-      console.log("CART BUSINESS CHECK:", {
-        existing: cart[0]?.product?.business_id,
-        new: product.business_id,
-      });
-
-      if (
-        cart.length > 0 &&
-        cart[0]?.product?.business_id !== product.business_id
-      ) {
-        const confirmed = window.confirm(
-          "Cart has items from another seller. Clear cart and continue?",
-        );
-        if (!confirmed) return;
-        await cartService.clearCart();
-        setCart([]);
-      }
-
-      console.log("📤 [addToCart] Calling API to add item...");
       const cartItem = await cartService.addToCart({
         productId: product.id,
         quantity: quantity,
       });
-      console.log("✅ [addToCart] API response:", cartItem);
 
       // Update local cart state
       setCart((prevCart) => {
-        console.log(
-          "🔄 [addToCart] Updating cart state. Previous cart:",
-          prevCart.length,
-          "items",
-        );
         const existingItem = prevCart.find(
           (item) => item.product_id === product.id,
         );
         if (existingItem) {
-          console.log("♻️ [addToCart] Item exists, updating quantity");
           return prevCart.map((item) =>
             item.product_id === product.id
               ? { ...item, quantity: item.quantity + quantity }
               : item,
           );
         }
-        console.log("➕ [addToCart] Adding new item to cart");
-        const newCart = [
+        return [
           ...prevCart,
           {
             id: cartItem.id,
@@ -382,15 +400,10 @@ const AppContent: React.FC = () => {
             updated_at: cartItem.updated_at,
           },
         ];
-        console.log("📦 [addToCart] New cart state:", newCart.length, "items");
-        return newCart;
       });
 
       toast.success(`${product.name} added to cart!`);
     } catch (error: any) {
-      console.error("Failed to add to cart:", error);
-      console.error("Error response:", error.response?.data);
-      console.error("Validation errors:", error.response?.data?.errors);
       const validationErrors =
         error.response?.data?.errors
           ?.map((e: any) => e.message || e)
@@ -406,18 +419,10 @@ const AppContent: React.FC = () => {
   };
 
   const removeFromCart = async (cartItemId: string) => {
-    console.log(
-      "🗑️ [removeFromCart] Called with cartItemId:",
-      cartItemId,
-      "isAuthenticated:",
-      isAuthenticated,
-    );
     if (!isAuthenticated) return;
 
     try {
-      console.log("📤 [removeFromCart] Calling API to remove item...");
       await cartService.removeFromCart(cartItemId);
-      console.log("✅ [removeFromCart] API call successful");
 
       // Reload cart to ensure IDs are fresh
       const cartItems = await cartService.getCartItems();
@@ -459,45 +464,25 @@ const AppContent: React.FC = () => {
       }
 
       toast.success("Item removed from cart");
-    } catch (error) {
-      console.error("❌ [removeFromCart] Failed to remove from cart:", error);
+    } catch {
       toast.error("Failed to remove item from cart.");
     }
   };
 
   const updateQuantity = async (cartItemId: string, newQuantity: number) => {
-    console.log("🔢 [updateQuantity] Called with:", {
-      cartItemId,
-      newQuantity,
-      isAuthenticated,
-    });
     if (newQuantity < 1 || !isAuthenticated) return;
 
     // Optimistically update UI first
     const previousCart = cart;
     setCart((prevCart) => {
-      console.log(
-        "🔄 [updateQuantity] Optimistically updating cart state. Previous:",
-        prevCart.length,
-        "items",
-      );
-      const newCart = prevCart.map((item) =>
+      return prevCart.map((item) =>
         item.id === cartItemId ? { ...item, quantity: newQuantity } : item,
       );
-      console.log(
-        "📦 [updateQuantity] New cart state:",
-        newCart.length,
-        "items",
-      );
-      return newCart;
     });
 
     try {
-      console.log("📤 [updateQuantity] Calling API to update quantity...");
       await cartService.updateCartItem(cartItemId, { quantity: newQuantity });
-      console.log("✅ [updateQuantity] API call successful");
-    } catch (error) {
-      console.error("❌ [updateQuantity] Failed to update quantity:", error);
+    } catch {
       // Revert optimistic update on error
       setCart(previousCart);
       toast.error("Failed to update quantity.");
@@ -505,26 +490,18 @@ const AppContent: React.FC = () => {
   };
 
   const clearCart = async () => {
-    console.log("🧹 [clearCart] Called. isAuthenticated:", isAuthenticated);
     if (!isAuthenticated) return;
 
     // Confirmation dialog
     if (!window.confirm("Are you sure you want to clear your entire cart?")) {
-      console.log("❌ [clearCart] User cancelled");
       return;
     }
 
     try {
-      console.log("📤 [clearCart] Calling API to clear cart...");
       await cartService.clearCart();
-      console.log("✅ [clearCart] API call successful");
-      console.log("🗑️ [clearCart] Setting cart to empty array");
       setCart([]);
-      console.log("📦 [clearCart] Cart cleared");
       toast.success("Cart cleared successfully");
-    } catch (error) {
-      console.error("❌ [clearCart] Failed to clear cart:", error);
-    }
+    } catch {}
   };
 
   return (
@@ -562,6 +539,14 @@ const AppContent: React.FC = () => {
           path="/services"
           element={<ServicesPage onNavigate={navigateTo} />}
         />
+
+        <Route path="/cost-estimator" element={<CostEstimatorPage />} />
+
+        <Route path="/services/:id" element={<ServiceDetailPage />} />
+
+        <Route path="/contractors" element={<ContractorsPage />} />
+
+        <Route path="/contractors/:id" element={<ContractorProfilePage />} />
 
         <Route
           path="/contact"
@@ -629,6 +614,10 @@ const AppContent: React.FC = () => {
           element={<SignInPage onNavigate={navigateTo} onLogin={handleLogin} />}
         />
 
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+
+        <Route path="/verify-email" element={<EmailVerifyPage />} />
+
         <Route
           path="/get-started"
           element={
@@ -639,18 +628,9 @@ const AppContent: React.FC = () => {
         <Route
           path="/account"
           element={
-            user ? (
-              <AccountPage
-                user={user}
-                onNavigate={navigateTo}
-                onLogout={() => {
-                  handleLogout();
-                  navigate("/");
-                }}
-              />
-            ) : (
-              <Navigate to="/signin" replace />
-            )
+            <ProtectedRoute>
+              <AccountRoute onNavigate={navigateTo} onLogout={handleLogout} />
+            </ProtectedRoute>
           }
         />
 
@@ -682,9 +662,12 @@ const AppContent: React.FC = () => {
             </ProtectedRoute>
           }
         />
+
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
 
       <Footer />
+      <AIChatWidget />
       <ToastContainer
         position="top-right"
         autoClose={3000}

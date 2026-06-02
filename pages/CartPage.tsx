@@ -5,6 +5,10 @@ import { commerceService } from "../src/services/commerceService";
 import { addressService } from "../src/services/addressService";
 import { useAuth } from "../src/context/AuthContext";
 import { cartPageStyles } from "../src/styles/cartPageStyles";
+import {
+  getMarketplaceInitials,
+  resolveMarketplaceImageSrc,
+} from "../src/utils/marketplaceImage";
 
 interface CartPageProps {
   cartItems: AppCartItem[];
@@ -17,6 +21,7 @@ interface CartPageProps {
 interface CartViewItem {
   id: string;
   productId: string;
+  businessId: string;
   name: string;
   description: string;
   price: number;
@@ -29,6 +34,13 @@ interface CartViewItem {
   subcategory: string;
   maxQuantity?: number;
   requiresShipping: boolean;
+}
+
+interface CartSellerGroup {
+  businessId: string;
+  sellerName: string;
+  items: CartViewItem[];
+  subtotal: number;
 }
 
 interface PromoCode {
@@ -67,25 +79,32 @@ interface RecommendedProduct {
   image: string;
 }
 
+const TAX_RATE = 0.05;
+
 const getCartViewItem = (item: AppCartItem): CartViewItem => {
   const product = item.product;
   const firstImage = product?.images?.[0] as any;
+  const imageSrc = resolveMarketplaceImageSrc({
+    images: (product as any)?.images,
+    product_images: (product as any)?.product_images,
+    image_url: (product as any)?.image_url,
+    image: (product as any)?.image,
+    thumbnail: (product as any)?.thumbnail,
+  });
 
   return {
     id: item.id,
     productId: item.product_id || product?.id || item.id,
+    businessId:
+      (product as any)?.business_id || (product as any)?.businessId || item.id,
     name: product?.name || "Product",
     description: product?.description || "Construction marketplace item.",
     price: product?.price || 0,
     quantity: item.quantity,
-    image:
-      product?.images?.[0]?.image_url ||
-      firstImage ||
-      (product as any)?.image ||
-      (product as any)?.thumbnail ||
-      null,
+    image: imageSrc || firstImage || null,
     unit: product?.weight_unit || "piece",
-    seller: product?.author || "BuildHive Seller",
+    seller:
+      product?.author || (product as any)?.business_name || "BuildHive Seller",
     verified: true,
     category: product?.category_id || "products",
     subcategory: product?.is_physical ? "Physical Product" : "Digital Product",
@@ -152,7 +171,10 @@ export const CartPage: React.FC<CartPageProps> = ({
             name: product.name,
             price: product.price || 0,
             image:
-              product.image || product.product_images?.[0]?.image_url || "",
+              resolveMarketplaceImageSrc(product) ||
+              product.image ||
+              product.product_images?.[0]?.image_url ||
+              "",
           })),
         );
       })
@@ -193,14 +215,31 @@ export const CartPage: React.FC<CartPageProps> = ({
   }, [user?.id]);
 
   const items = useMemo(() => cartItems.map(getCartViewItem), [cartItems]);
-  useEffect(() => {
-    if (items.length > 0) {
-      console.log("CART ITEMS:", JSON.stringify(items[0], null, 2));
-    }
-  }, [items]);
 
   const visibleCartItems = items.filter((item) => !savedIds.includes(item.id));
   const savedForLater = items.filter((item) => savedIds.includes(item.id));
+  const sellerGroups = useMemo<CartSellerGroup[]>(() => {
+    const grouped = new Map<string, CartSellerGroup>();
+
+    visibleCartItems.forEach((item) => {
+      const key = item.businessId || item.seller;
+      const existing = grouped.get(key);
+      if (existing) {
+        existing.items.push(item);
+        existing.subtotal += item.price * item.quantity;
+        return;
+      }
+
+      grouped.set(key, {
+        businessId: item.businessId || key,
+        sellerName: item.seller,
+        items: [item],
+        subtotal: item.price * item.quantity,
+      });
+    });
+
+    return Array.from(grouped.values());
+  }, [visibleCartItems]);
 
   const showToast = (message: string) => {
     setToast(message);
@@ -217,7 +256,8 @@ export const CartPage: React.FC<CartPageProps> = ({
       0,
     );
     const shipping = 0;
-    const tax = subtotal * 0.05;
+    const taxAmount = subtotal * TAX_RATE;
+    const total = subtotal + shipping + taxAmount;
     let discount = 0;
 
     if (appliedPromo) {
@@ -233,9 +273,9 @@ export const CartPage: React.FC<CartPageProps> = ({
     return {
       subtotal,
       shipping,
-      tax,
+      tax: taxAmount,
       discount,
-      total: Math.max(0, subtotal + shipping + tax - discount),
+      total: Math.max(0, total - discount),
       itemCount,
     };
   }, [appliedPromo, visibleCartItems]);
@@ -334,126 +374,166 @@ export const CartPage: React.FC<CartPageProps> = ({
                   </button>
                 </div>
               ) : (
-                visibleCartItems.map((item) => (
-                  <div key={item.id} className="cart-item">
-                    <div
-                      className="cart-item-image-wrap"
-                      onClick={() =>
-                        onNavigate("product-detail", item.productId)
-                      }
-                    >
-                      {item.image ? (
-                        <img
-                          src={item.image}
-                          alt={item.name}
-                          className="cart-item-image"
-                        />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center rounded-2xl bg-gray-200 text-gray-500">
-                          <Icons.Image className="h-9 w-9" />
-                        </div>
-                      )}
+                sellerGroups.map((group) => (
+                  <div key={group.businessId} className="seller-group">
+                    <div className="seller-group-header">
+                      <h3 className="seller-group-title">
+                        Items from {group.sellerName}
+                      </h3>
+                      <div className="seller-group-subtotal">
+                        Subtotal: Rs. {group.subtotal.toLocaleString()}
+                      </div>
                     </div>
 
-                    <div className="cart-item-details">
-                      <h3 className="cart-item-name">{item.name}</h3>
-                      <p className="cart-item-description">
-                        {item.description}
-                      </p>
-                      <div className="cart-item-meta">
-                        <span className="cart-item-category">
-                          {item.subcategory}
-                        </span>
-                        <span className="cart-item-seller">
-                          <span className="seller-avatar">
-                            {item.seller.charAt(0)}
-                          </span>
-                          {item.seller}
-                          {item.verified && (
-                            <Icons.Check
-                              className="h-4 w-4"
-                              style={{ color: "#34d399" }}
-                            />
+                    {group.items.map((item) => (
+                      <div key={item.id} className="cart-item">
+                        <div
+                          className="cart-item-image-wrap"
+                          onClick={() =>
+                            onNavigate("product-detail", item.productId)
+                          }
+                        >
+                          {item.image
+                            ? (() => {
+                                const imageSrc = resolveMarketplaceImageSrc({
+                                  image: item.image,
+                                });
+                                return imageSrc ? (
+                                  <img
+                                    src={imageSrc}
+                                    alt={item.name}
+                                    className="cart-item-image"
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = "none";
+                                      const placeholder = e.currentTarget
+                                        .nextElementSibling as HTMLElement | null;
+                                      if (placeholder) {
+                                        placeholder.style.display = "flex";
+                                      }
+                                    }}
+                                  />
+                                ) : null;
+                              })()
+                            : null}
+                          {!item.image ? (
+                            <div className="flex h-full w-full items-center justify-center rounded-2xl bg-gray-200 text-gray-500">
+                              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-300 text-xs font-bold text-gray-600">
+                                {getMarketplaceInitials(item.name)}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="hidden h-full w-full items-center justify-center rounded-2xl bg-gray-200 text-gray-500">
+                              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-300 text-xs font-bold text-gray-600">
+                                {getMarketplaceInitials(item.name)}
+                              </div>
+                            </div>
                           )}
-                        </span>
-                      </div>
-                      <div className="cart-item-price">
-                        Rs. {item.price.toLocaleString()}
-                        <span className="cart-item-unit"> / {item.unit}</span>
-                      </div>
-                      <div className="quantity-control">
-                        <button
-                          className="quantity-btn"
-                          onClick={() =>
-                            onUpdateQuantity(
-                              item.id,
-                              Math.max(1, item.quantity - 1),
-                            )
-                          }
-                          disabled={item.quantity <= 1}
-                          aria-label="Decrease quantity"
-                        >
-                          <Icons.Minus className="h-4 w-4" />
-                        </button>
-                        <input
-                          type="number"
-                          className="quantity-value"
-                          value={item.quantity}
-                          min={1}
-                          max={item.maxQuantity || 99}
-                          onChange={(event) => {
-                            const value = Number(event.target.value) || 1;
-                            const max = item.maxQuantity || 99;
-                            onUpdateQuantity(
-                              item.id,
-                              Math.min(max, Math.max(1, value)),
-                            );
-                          }}
-                        />
-                        <button
-                          className="quantity-btn"
-                          onClick={() =>
-                            onUpdateQuantity(item.id, item.quantity + 1)
-                          }
-                          disabled={
-                            item.maxQuantity
-                              ? item.quantity >= item.maxQuantity
-                              : false
-                          }
-                          aria-label="Increase quantity"
-                        >
-                          <Icons.Plus className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
+                        </div>
 
-                    <div className="cart-item-actions">
-                      <div className="cart-item-total">
-                        Rs. {(item.price * item.quantity).toLocaleString()}
+                        <div className="cart-item-details">
+                          <h3 className="cart-item-name">{item.name}</h3>
+                          <p className="cart-item-description">
+                            {item.description}
+                          </p>
+                          <div className="cart-item-meta">
+                            <span className="cart-item-category">
+                              {item.subcategory}
+                            </span>
+                            <span className="cart-item-seller">
+                              <span className="seller-avatar">
+                                {item.seller.charAt(0)}
+                              </span>
+                              {item.seller}
+                              {item.verified && (
+                                <Icons.Check
+                                  className="h-4 w-4"
+                                  style={{ color: "#34d399" }}
+                                />
+                              )}
+                            </span>
+                          </div>
+                          <div className="cart-item-price">
+                            Rs. {item.price.toLocaleString()}
+                            <span className="cart-item-unit">
+                              {" "}
+                              / {item.unit}
+                            </span>
+                          </div>
+                          <div className="quantity-control">
+                            <button
+                              className="quantity-btn"
+                              onClick={() =>
+                                onUpdateQuantity(
+                                  item.id,
+                                  Math.max(1, item.quantity - 1),
+                                )
+                              }
+                              disabled={item.quantity <= 1}
+                              aria-label="Decrease quantity"
+                            >
+                              <Icons.Minus className="h-4 w-4" />
+                            </button>
+                            <input
+                              type="number"
+                              className="quantity-value"
+                              value={item.quantity}
+                              min={1}
+                              max={item.maxQuantity || 99}
+                              onChange={(event) => {
+                                const value = Number(event.target.value) || 1;
+                                const max = item.maxQuantity || 99;
+                                onUpdateQuantity(
+                                  item.id,
+                                  Math.min(max, Math.max(1, value)),
+                                );
+                              }}
+                            />
+                            <button
+                              className="quantity-btn"
+                              onClick={() =>
+                                onUpdateQuantity(item.id, item.quantity + 1)
+                              }
+                              disabled={
+                                item.maxQuantity
+                                  ? item.quantity >= item.maxQuantity
+                                  : false
+                              }
+                              aria-label="Increase quantity"
+                            >
+                              <Icons.Plus className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="cart-item-actions">
+                          <div className="cart-item-total">
+                            Rs. {(item.price * item.quantity).toLocaleString()}
+                          </div>
+                          <div className="cart-action-row">
+                            <button
+                              className="btn-save-later"
+                              onClick={() => {
+                                setSavedIds((current) => [...current, item.id]);
+                                showToast("Saved for later");
+                              }}
+                            >
+                              <Icons.Heart className="h-4 w-4" />
+                              Save for Later
+                            </button>
+                            <button
+                              className="btn-remove"
+                              onClick={() => {
+                                onRemoveFromCart(item.id);
+                                showToast("Item removed from cart");
+                              }}
+                            >
+                              <Icons.Trash className="h-4 w-4" />
+                              Remove
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                      <div className="cart-action-row">
-                        <button
-                          className="btn-save-later"
-                          onClick={() => {
-                            setSavedIds((current) => [...current, item.id]);
-                            showToast("Saved for later");
-                          }}
-                        >
-                          <Icons.Heart className="h-4 w-4" />
-                          Save for Later
-                        </button>
-                        <button
-                          className="btn-remove"
-                          onClick={() => {
-                            onRemoveFromCart(item.id);
-                            showToast("Item removed from cart");
-                          }}
-                        >
-                          <Icons.Trash className="h-4 w-4" />
-                          Remove
-                        </button>
-                      </div>
-                    </div>
+                    ))}
                   </div>
                 ))
               )}
@@ -470,15 +550,39 @@ export const CartPage: React.FC<CartPageProps> = ({
                       style={{ opacity: 0.72 }}
                     >
                       <div className="cart-item-image-wrap">
-                        {item.image ? (
-                          <img
-                            src={item.image}
-                            alt={item.name}
-                            className="cart-item-image"
-                          />
-                        ) : (
+                        {item.image
+                          ? (() => {
+                              const imageSrc = resolveMarketplaceImageSrc({
+                                image: item.image,
+                              });
+                              return imageSrc ? (
+                                <img
+                                  src={imageSrc}
+                                  alt={item.name}
+                                  className="cart-item-image"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = "none";
+                                    const placeholder = e.currentTarget
+                                      .nextElementSibling as HTMLElement | null;
+                                    if (placeholder) {
+                                      placeholder.style.display = "flex";
+                                    }
+                                  }}
+                                />
+                              ) : null;
+                            })()
+                          : null}
+                        {!item.image ? (
                           <div className="flex h-full w-full items-center justify-center rounded-2xl bg-gray-200 text-gray-500">
-                            <Icons.Image className="h-9 w-9" />
+                            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-300 text-xs font-bold text-gray-600">
+                              {getMarketplaceInitials(item.name)}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="hidden h-full w-full items-center justify-center rounded-2xl bg-gray-200 text-gray-500">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-300 text-xs font-bold text-gray-600">
+                              {getMarketplaceInitials(item.name)}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -538,7 +642,37 @@ export const CartPage: React.FC<CartPageProps> = ({
                   <div className="recommended-grid">
                     {recommendedProducts.map((product) => (
                       <div key={product.id} className="recommended-card">
-                        <img src={product.image} alt={product.name} />
+                        {product.image ? (
+                          <>
+                            <img
+                              src={
+                                resolveMarketplaceImageSrc({
+                                  image: product.image,
+                                }) || product.image
+                              }
+                              alt={product.name}
+                              onError={(e) => {
+                                e.currentTarget.style.display = "none";
+                                const placeholder = e.currentTarget
+                                  .nextElementSibling as HTMLElement | null;
+                                if (placeholder) {
+                                  placeholder.style.display = "flex";
+                                }
+                              }}
+                            />
+                            <div className="hidden h-full w-full items-center justify-center bg-gray-200 text-gray-500">
+                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-300 text-xs font-bold text-gray-600">
+                                {getMarketplaceInitials(product.name)}
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center bg-gray-200 text-gray-500">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-300 text-xs font-bold text-gray-600">
+                              {getMarketplaceInitials(product.name)}
+                            </div>
+                          </div>
+                        )}
                         <div className="recommended-card-body">
                           <div
                             style={{
@@ -580,7 +714,7 @@ export const CartPage: React.FC<CartPageProps> = ({
               </div>
               <div className="summary-row">
                 <span>Tax (5%)</span>
-                <span>Rs. {Math.round(orderSummary.tax).toLocaleString()}</span>
+                <span>PKR {orderSummary.tax.toFixed(2)}</span>
               </div>
               {orderSummary.discount > 0 && (
                 <div className="summary-row discount">
@@ -592,9 +726,7 @@ export const CartPage: React.FC<CartPageProps> = ({
               )}
               <div className="summary-row total">
                 <span>Total</span>
-                <span>
-                  Rs. {Math.round(orderSummary.total).toLocaleString()}
-                </span>
+                <span>PKR {orderSummary.total.toFixed(2)}</span>
               </div>
 
               <div className="promo-section">
@@ -705,7 +837,7 @@ export const CartPage: React.FC<CartPageProps> = ({
               <button
                 className="btn-checkout"
                 onClick={handleCheckout}
-                disabled={visibleCartItems.length === 0}
+                disabled={cartItems.length === 0}
               >
                 <Icons.Lock className="h-4 w-4" />
                 Proceed to Checkout

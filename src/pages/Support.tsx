@@ -43,14 +43,9 @@ export const SupportPage: React.FC = () => {
   const [creatingTicket, setCreatingTicket] = useState(false);
 
   const normalizeTickets = (list: any): Ticket[] => {
-    const payload = list?.data || list;
-    const arr = Array.isArray(payload?.tickets)
-      ? payload.tickets
-      : Array.isArray(payload)
-        ? payload
-        : [];
-    console.log("TICKETS EXTRACTED:", arr.length);
-    return arr.map((ticket: any) => ({
+    const tickets = list?.data?.data?.tickets || list?.data?.tickets || list?.tickets || [];
+    console.log("TICKETS EXTRACTED:", tickets.length);
+    return (Array.isArray(tickets) ? tickets : []).map((ticket: any) => ({
       id: ticket.id,
       subject: ticket.subject || ticket.title || "Support ticket",
       status: (ticket.status || "open") as TicketStatus,
@@ -75,7 +70,7 @@ export const SupportPage: React.FC = () => {
       try {
         setLoadingTickets(true);
         const response = await api.get("/tickets");
-        console.log("TICKETS RAW:", response.data);
+        console.log("TICKETS RESPONSE:", response.data);
         const normalized = normalizeTickets(response.data);
         setTickets(normalized);
         if (normalized.length > 0) {
@@ -150,9 +145,10 @@ export const SupportPage: React.FC = () => {
           </div>
           <button
             onClick={() => setIsNewTicketOpen(true)}
+            type="button"
             className="inline-flex items-center justify-center rounded-full bg-violet-500 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-violet-600"
           >
-            <Icons.Plus className="mr-2 h-4 w-4" /> New Ticket
+            <Icons.Plus className="mr-2 h-4 w-4" /> + Create Ticket
           </button>
         </div>
 
@@ -168,7 +164,7 @@ export const SupportPage: React.FC = () => {
                 </div>
               ) : tickets.length === 0 ? (
                 <div className="flex h-full items-center justify-center p-6 text-center text-gray-400">
-                  No tickets yet.
+                  No tickets yet. Create your first support ticket.
                 </div>
               ) : (
                 tickets.map((ticket) => (

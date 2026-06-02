@@ -26,7 +26,6 @@ export const Header: React.FC<HeaderProps> = ({
   const { isAuthenticated, user: authUser, logout: authLogout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [headerSearch, setHeaderSearch] = useState("");
   const [isDarkMode, setIsDarkMode] = useState(true);
@@ -97,8 +96,8 @@ export const Header: React.FC<HeaderProps> = ({
   const handleNav = (e: React.MouseEvent, page: string) => {
     e.preventDefault();
     if (page === "ai") {
-      setIsAIModalOpen(true);
-      setIsMobileMenuOpen(false); // Close mobile menu if open
+      if (onNavigate) onNavigate("cost-estimator");
+      setIsMobileMenuOpen(false);
       return;
     }
     if (page === "toggle-theme") {
@@ -124,8 +123,8 @@ export const Header: React.FC<HeaderProps> = ({
   const handleLogout = async () => {
     try {
       await authLogout();
-    } catch (error) {
-      console.error("Logout error:", error);
+    } catch {
+      // ignore logout errors in the public shell
     }
     if (propOnLogout) propOnLogout();
     setIsUserMenuOpen(false);
@@ -172,7 +171,7 @@ export const Header: React.FC<HeaderProps> = ({
                         {
                           title: "Cost Estimator",
                           desc: "Smart budget planning",
-                          slug: "ai-cost",
+                          slug: "cost-estimator",
                           icon: "Calculator",
                           tone: "blue",
                         },
@@ -188,6 +187,14 @@ export const Header: React.FC<HeaderProps> = ({
                     {
                       label: "Services",
                       slug: "services",
+                    },
+                    {
+                      label: "Cost Estimator",
+                      slug: "cost-estimator",
+                    },
+                    {
+                      label: "Find a Contractor",
+                      slug: "contractors",
                     },
                     {
                       label: "Messages",
@@ -274,7 +281,7 @@ export const Header: React.FC<HeaderProps> = ({
                                             s.url.startsWith("/about?section=")
                                           ) {
                                             e.preventDefault();
-                                            window.location.href = s.url;
+                                            navigate(s.url);
                                             setIsMobileMenuOpen(false);
                                             setIsUserMenuOpen(false);
                                           } else if (s.url.startsWith("http")) {
@@ -282,9 +289,9 @@ export const Header: React.FC<HeaderProps> = ({
                                             // allow default behavior to follow external URL
                                             return;
                                           } else {
-                                            // For other internal-style urls, fall back to full assignment
+                                            // For other internal-style urls, use router navigation
                                             e.preventDefault();
-                                            window.location.href = s.url;
+                                            navigate(s.url);
                                             setIsMobileMenuOpen(false);
                                             setIsUserMenuOpen(false);
                                           }
@@ -347,7 +354,7 @@ export const Header: React.FC<HeaderProps> = ({
                         {
                           title: "Cost Estimator",
                           desc: "Smart budget planning",
-                          slug: "ai-cost",
+                          slug: "cost-estimator",
                           icon: "Calculator",
                           tone: "blue",
                         },
@@ -363,6 +370,14 @@ export const Header: React.FC<HeaderProps> = ({
                     {
                       label: "Services",
                       slug: "services",
+                    },
+                    {
+                      label: "Cost Estimator",
+                      slug: "cost-estimator",
+                    },
+                    {
+                      label: "Find a Contractor",
+                      slug: "contractors",
                     },
                     {
                       label: "Product",
@@ -440,7 +455,7 @@ export const Header: React.FC<HeaderProps> = ({
                                       onClick={(e) => {
                                         if (s.url) {
                                           e.preventDefault();
-                                          window.location.href = s.url;
+                                          navigate(s.url);
                                           setIsMobileMenuOpen(false);
                                           setIsUserMenuOpen(false);
                                         } else {
@@ -519,7 +534,7 @@ export const Header: React.FC<HeaderProps> = ({
                       onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
                       className="relative flex h-12 w-12 items-center justify-center rounded-full border border-[#8d7cff] bg-[#20192f] text-base font-semibold text-white transition-all duration-200 hover:bg-[#2a2140] focus:outline-none focus:ring-2 focus:ring-[#a58cff]/30 focus:ring-offset-2 focus:ring-offset-[#0b0f12]"
                       aria-label="Open profile menu"
-                      aria-expanded={isUserMenuOpen}
+                      aria-haspopup="menu"
                     >
                       <span>{userInitials || "AA"}</span>
                       <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-[#0b0f12]" />
@@ -634,10 +649,11 @@ export const Header: React.FC<HeaderProps> = ({
                 ? [
                     { label: "Home", slug: "home" },
                     { label: "Products", slug: "products" },
+                    { label: "Cost Estimator", slug: "cost-estimator" },
                     { label: "Messages", slug: "messages" },
                     { label: "Support", slug: "support" },
-                    { label: "Categories", slug: "categories" },
                     { label: "Services", slug: "services" },
+                    { label: "Find a Contractor", slug: "contractors" },
                     { label: "AI", slug: "ai" },
                     { label: "About Us", slug: "about" },
                     { label: "Contact", slug: "contact" },
@@ -645,8 +661,9 @@ export const Header: React.FC<HeaderProps> = ({
                 : [
                     { label: "Home", slug: "home" },
                     { label: "Products", slug: "products" },
-                    { label: "Categories", slug: "categories" },
+                    { label: "Cost Estimator", slug: "cost-estimator" },
                     { label: "Services", slug: "services" },
+                    { label: "Find a Contractor", slug: "contractors" },
                     { label: "AI", slug: "ai" },
                     { label: "About Us", slug: "about" },
                     { label: "Contact", slug: "contact" },
@@ -731,70 +748,6 @@ export const Header: React.FC<HeaderProps> = ({
         )}
       </header>
 
-      {/* AI Coming Soon Modal */}
-      {isAIModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl animate-in zoom-in-95 duration-200">
-            {/* Background Pattern */}
-            <div className="absolute inset-0 bg-gradient-to-br from-violet-500/10 via-purple-500/5 to-transparent"></div>
-            <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-primary/20 blur-3xl"></div>
-
-            <button
-              onClick={() => setIsAIModalOpen(false)}
-              className="absolute right-4 top-4 z-10 rounded-full bg-white/50 p-1 text-gray-500 hover:bg-white hover:text-gray-900 transition-colors"
-              aria-label="Close AI Modal"
-            >
-              <Icons.Close className="h-5 w-5" />
-            </button>
-
-            <div className="relative z-10 px-8 py-10 text-center">
-              <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-tr from-violet-500 to-fuchsia-500 shadow-xl shadow-primary/30">
-                <Icons.Brain className="h-10 w-10 text-white" />
-              </div>
-
-              <h2 className="mb-2 text-2xl font-bold text-gray-900">
-                BuildHive AI
-              </h2>
-              <div className="mb-6 inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-primary">
-                Coming Soon
-              </div>
-
-              <p className="mb-8 text-gray-500 leading-relaxed">
-                We are building the future of construction. Our AI assistant
-                will help you estimate costs, find matching materials, and
-                optimize your project planning.
-              </p>
-
-              <div className="mb-6">
-                <div className="relative">
-                  <input
-                    type="email"
-                    placeholder="Enter your email"
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50 py-3 pl-4 pr-12 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                  />
-                  <button
-                    className="absolute right-1.5 top-1.5 flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-white hover:bg-primary-hover"
-                    aria-label="Subscribe to Notifications"
-                  >
-                    <Icons.ArrowRight className="h-4 w-4" />
-                  </button>
-                </div>
-                <p className="mt-2 text-xs text-gray-400">
-                  Get notified when we launch!
-                </p>
-              </div>
-
-              <Button
-                variant="outline"
-                onClick={() => setIsAIModalOpen(false)}
-                className="w-full border-gray-200"
-              >
-                Close
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 };
@@ -1162,7 +1115,7 @@ export const Footer = () => {
             className="footer-campus-link"
             href="https://lahore.comsats.edu.pk/default.aspx"
             target="_blank"
-            rel="noreferrer"
+            rel="noreferrer noopener"
           >
             COMSATS University Islamabad, Lahore Campus.
           </a>
@@ -1226,7 +1179,6 @@ const LegacyFooter = () => {
                 { label: "Services", slug: "services" },
                 { label: "About Us", slug: "about" },
                 { label: "Contact", slug: "contact" },
-                { label: "FAQ", slug: "faq" },
                 { label: "Terms & Conditions", slug: "terms" },
                 { label: "Privacy Policy", slug: "privacy" },
               ].map((link) => (
@@ -1300,16 +1252,6 @@ const LegacyFooter = () => {
               className="hover:text-white transition-colors"
             >
               Terms of Service
-            </a>
-            <a
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                onNavigate("faq");
-              }}
-              className="hover:text-white transition-colors"
-            >
-              FAQ
             </a>
           </div>
         </div>

@@ -1,6 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Icons } from "../components/Icons";
+import { ContractorCard } from "../components/ContractorCard";
 import api from "../src/services/api";
+import contractorService from "../src/services/contractorService";
+import {
+  getMarketplaceInitials,
+  resolveMarketplaceImageSrc,
+} from "../src/utils/marketplaceImage";
 
 interface HomePageProps {
   onNavigate: (page: string, productId?: string) => void;
@@ -29,6 +35,18 @@ interface Listing {
   tag: string;
 }
 
+interface FeaturedServiceListing {
+  id: string;
+  title: string;
+  creatorName: string;
+  creatorRole: "Contractor" | "Seller";
+  category: string;
+  price: number;
+  deliveryDays: number;
+  rating: number;
+  reviewCount: number;
+}
+
 interface ServiceProvider {
   id: string;
   name: string;
@@ -45,6 +63,25 @@ interface ServiceProvider {
   certifications: string[];
 }
 
+interface FeaturedContractor {
+  id: string;
+  businessId?: string;
+  userId?: string;
+  name: string;
+  trade: string;
+  bio: string;
+  rating: number;
+  reviewCount: number;
+  location: string;
+  verified: boolean;
+  servicesCount: number;
+  startingPrice?: number;
+  availableNow?: boolean;
+  avatar?: string | null;
+  image?: string | null;
+  featured?: boolean;
+}
+
 interface FeaturedProductApi {
   id: string;
   name: string;
@@ -52,6 +89,10 @@ interface FeaturedProductApi {
   compare_at_price?: number;
   average_rating?: number;
   total_reviews?: number;
+  review_count?: number;
+  image?: string | null;
+  image_url?: string | null;
+  thumbnail?: string | null;
   product_images?: Array<{ image_url: string }>;
   businesses?: { business_name: string };
   categories?: { name?: string; slug?: string };
@@ -224,13 +265,129 @@ const mapProduct = (product: FeaturedProductApi): Listing => ({
   price: product.price,
   originalPrice: product.compare_at_price,
   rating: product.average_rating || 0,
-  reviews: product.total_reviews || 0,
-  image:
-    product.product_images?.[0]?.image_url ||
-    "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800&h=600&fit=crop",
+  reviews: product.total_reviews || product.review_count || 0,
+  image: resolveMarketplaceImageSrc(product) || "",
   badge: product.is_featured ? "Featured" : undefined,
   tag: product.categories?.name?.toUpperCase() || "PRODUCT",
 });
+
+const normalizeProducts = (data: any): FeaturedProductApi[] => {
+  const products = Array.isArray(data)
+    ? data
+    : data?.data?.products || data?.data || [];
+  return Array.isArray(products) ? products : [];
+};
+
+const normalizeCategories = (data: any): CategoryApi[] => {
+  const categories = Array.isArray(data)
+    ? data
+    : data?.data?.categories || data?.data || data?.categories || [];
+  return Array.isArray(categories) ? categories : [];
+};
+
+const normalizeServices = (data: any): any[] => {
+  const services = Array.isArray(data)
+    ? data
+    : data?.data?.services || data?.data || data?.services || [];
+  return Array.isArray(services) ? services : [];
+};
+
+const mapService = (service: any): FeaturedServiceListing => ({
+  id: service.id,
+  title: service.name || service.title || "Service",
+  creatorName:
+    service.creator?.full_name ||
+    service.creator?.name ||
+    service.contractor?.business_name ||
+    service.business?.business_name ||
+    service.provider?.name ||
+    service.provider ||
+    "BuildHive Creator",
+  creatorRole:
+    String(
+      service.creator_role ||
+        service.creator?.role ||
+        (service.contractor || service.contractor_id ? "contractor" : "seller"),
+    ).toLowerCase() === "contractor"
+      ? "Contractor"
+      : "Seller",
+  category:
+    service.category?.name ||
+    service.category_name ||
+    service.category ||
+    "Other",
+  price: (() => {
+    const pkg = Array.isArray(service.packages) ? service.packages : [];
+    if (pkg.length === 0) return Number(service.price || 0);
+    const prices = pkg
+      .map((item: any) => Number(item.price || 0))
+      .filter((value: number) => Number.isFinite(value) && value > 0);
+    return prices.length > 0 ? Math.min(...prices) : Number(service.price || 0);
+  })(),
+  deliveryDays: Number(service.delivery_days || service.deliveryDays || 0),
+  rating: Number(service.average_rating || service.rating || 0),
+  reviewCount: Number(service.total_reviews || service.review_count || 0),
+});
+
+const renderCategorySkeletons = (count: number) =>
+  Array.from({ length: count }).map((_, index) => (
+    <div
+      key={`category-skeleton-${index}`}
+      className="category-card category-pill reveal-scale opacity-70"
+    >
+      <div className="category-icon animate-pulse bg-slate-800" />
+      <div className="category-info space-y-2">
+        <div className="h-4 w-32 animate-pulse rounded bg-slate-800" />
+        <div className="h-3 w-24 animate-pulse rounded bg-slate-800" />
+      </div>
+    </div>
+  ));
+
+const renderFeaturedSkeletons = (count: number) =>
+  Array.from({ length: count }).map((_, index) => (
+    <div key={`featured-skeleton-${index}`} className="listing-card reveal">
+      <div className="listing-image-wrap animate-pulse bg-slate-800" />
+      <div className="listing-body space-y-3">
+        <div className="h-4 w-4/5 animate-pulse rounded bg-slate-800" />
+        <div className="h-3 w-1/2 animate-pulse rounded bg-slate-800" />
+        <div className="flex items-center justify-between gap-4">
+          <div className="h-4 w-20 animate-pulse rounded bg-slate-800" />
+          <div className="h-4 w-16 animate-pulse rounded bg-slate-800" />
+        </div>
+      </div>
+    </div>
+  ));
+
+const renderContractorSkeletons = (count: number) =>
+  Array.from({ length: count }).map((_, index) => (
+    <div
+      key={`contractor-skeleton-${index}`}
+      className="overflow-hidden rounded-[24px] border border-white/8 bg-white/4 shadow-[0_20px_45px_rgba(0,0,0,0.16)]"
+    >
+      <div className="animate-pulse bg-slate-800/80 px-5 py-5">
+        <div className="flex items-center gap-4">
+          <div className="h-16 w-16 rounded-2xl bg-slate-700" />
+          <div className="flex-1 space-y-3">
+            <div className="h-4 w-2/3 rounded bg-slate-700" />
+            <div className="h-3 w-1/2 rounded bg-slate-700" />
+            <div className="h-3 w-28 rounded bg-slate-700" />
+          </div>
+        </div>
+      </div>
+      <div className="space-y-4 px-5 py-5">
+        <div className="h-4 w-full rounded bg-slate-700" />
+        <div className="h-4 w-5/6 rounded bg-slate-700" />
+        <div className="grid grid-cols-2 gap-3 rounded-2xl border border-white/6 bg-white/4 p-4">
+          <div className="h-10 rounded bg-slate-700" />
+          <div className="h-10 rounded bg-slate-700" />
+        </div>
+        <div className="grid grid-cols-2 gap-3 pt-1">
+          <div className="h-10 rounded-[16px] bg-slate-700" />
+          <div className="h-10 rounded-[16px] bg-slate-700" />
+        </div>
+      </div>
+    </div>
+  ));
 
 const homePageStyles = `
 .home-root {
@@ -622,8 +779,14 @@ const homePageStyles = `
 
 .listings-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 24px;
+}
+
+@media (min-width: 1024px) {
+  .listings-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 .listing-card {
@@ -938,15 +1101,15 @@ const homePageStyles = `
 
 .reveal,
 .reveal-scale {
-  opacity: 0;
-  transform: translateY(28px);
+  opacity: 1;
+  transform: none;
   transition: opacity 0.6s ease, transform 0.6s ease;
 }
-.reveal-scale { transform: scale(0.96); }
+.reveal-scale { transform: none; }
 .reveal.active,
 .reveal-scale.active {
   opacity: 1;
-  transform: translateY(0) scale(1);
+  transform: none;
 }
 
 .home-root ::-webkit-scrollbar { width: 8px; }
@@ -996,10 +1159,21 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [selectedProvider, setSelectedProvider] =
     useState<ServiceProvider | null>(null);
-  const [categories, setCategories] = useState<Category[]>(fallbackCategories);
-  const [featuredListings, setFeaturedListings] = useState<Listing[]>(
-    fallbackFeaturedListings,
-  );
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [featuredListings, setFeaturedListings] = useState<Listing[]>([]);
+  const [featuredServices, setFeaturedServices] = useState<
+    FeaturedServiceListing[]
+  >([]);
+  const [featuredContractors, setFeaturedContractors] = useState<
+    FeaturedContractor[]
+  >([]);
+  const [allListings, setAllListings] = useState<Listing[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [featuredLoading, setFeaturedLoading] = useState(true);
+  const [featuredServicesLoading, setFeaturedServicesLoading] = useState(true);
+  const [featuredContractorsLoading, setFeaturedContractorsLoading] =
+    useState(true);
+  const [allProductsLoading, setAllProductsLoading] = useState(true);
   const [topProviders] = useState<ServiceProvider[]>(fallbackTopProviders);
   const [stats] =
     useState<Array<{ value: string; label: string }>>(fallbackStats);
@@ -1008,37 +1182,101 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   useEffect(() => {
     let cancelled = false;
 
+    setCategoriesLoading(true);
+    setFeaturedLoading(true);
+    setFeaturedServicesLoading(true);
+    setAllProductsLoading(true);
+    setHomeError(null);
+
     const loadHomepageSections = async () => {
       try {
-        const [productsResponse, categoriesResponse] = await Promise.all([
+        const [
+          featuredResponse,
+          trendingResponse,
+          categoriesResponse,
+          contractorsResponse,
+          servicesResponse,
+        ] = await Promise.all([
           api.get<ApiResponse<{ products: FeaturedProductApi[] }>>(
             "/products",
-            { params: { limit: 8 } },
+            { params: { status: "approved", is_featured: true, limit: 8 } },
           ),
-          api.get<ApiResponse<CategoryApi[]>>("/categories"),
+          api.get<ApiResponse<{ products: FeaturedProductApi[] }>>(
+            "/products",
+            { params: { status: "approved", limit: 12 } },
+          ),
+          api.get<ApiResponse<CategoryApi[]>>("/categories", {
+            params: { limit: 10 },
+          }),
+          contractorService.getContractors({
+            limit: 3,
+            page: 1,
+            featured: true,
+          }),
+          api.get<ApiResponse<any>>("/services", { params: { limit: 6 } }),
         ]);
 
         if (cancelled) return;
 
-        const products = productsResponse.data.data.products || [];
-        const categoriesData = categoriesResponse.data.data || [];
+        const featured = normalizeProducts(featuredResponse.data);
+        const trending = normalizeProducts(trendingResponse.data).filter(
+          (product) => !product.is_featured,
+        );
+        const categoriesData = normalizeCategories(categoriesResponse.data);
+        const contractorsData = contractorsResponse.contractors || [];
+        const servicesData = normalizeServices(servicesResponse.data);
 
         setFeaturedListings(
-          products.length > 0
-            ? products.map(mapProduct)
-            : fallbackFeaturedListings,
+          featured.length > 0 ? featured.map(mapProduct) : [],
+        );
+        setAllListings(trending.length > 0 ? trending.map(mapProduct) : []);
+        setFeaturedServices(
+          servicesData.length > 0
+            ? servicesData.map(mapService).slice(0, 6)
+            : [],
+        );
+        setFeaturedContractors(
+          contractorsData.length > 0
+            ? contractorsData.map((contractor) => ({
+                id: contractor.businessId || contractor.id,
+                businessId: contractor.businessId,
+                userId: contractor.userId,
+                name: contractor.name,
+                trade: contractor.trade,
+                bio: contractor.bio,
+                rating: contractor.rating,
+                reviewCount: contractor.reviewCount,
+                location: contractor.location,
+                verified: contractor.verified,
+                servicesCount: contractor.servicesCount,
+                startingPrice: contractor.startingPrice,
+                availableNow: contractor.availableNow,
+                avatar: contractor.avatar,
+                image: contractor.image,
+                featured: contractor.featured,
+              }))
+            : [],
         );
         setCategories(
-          categoriesData.length > 0
-            ? categoriesData.map(mapCategory)
-            : fallbackCategories,
+          categoriesData.length > 0 ? categoriesData.map(mapCategory) : [],
         );
       } catch (error) {
         console.error("Failed to load homepage sections:", error);
         if (!cancelled) {
-          setCategories(fallbackCategories);
-          setFeaturedListings(fallbackFeaturedListings);
+          setCategories([]);
+          setFeaturedListings([]);
+          setFeaturedServices([]);
+          setFeaturedContractors([]);
+          setAllListings([]);
           setHomeError("Homepage content is unavailable right now.");
+        }
+      } finally {
+        if (!cancelled) {
+          setCategoriesLoading(false);
+          setFeaturedLoading(false);
+          setFeaturedServicesLoading(false);
+          setFeaturedContractorsLoading(false);
+          setAllProductsLoading(false);
         }
       }
     };
@@ -1137,6 +1375,37 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         </section>
 
         <section className="section">
+          <div className="rounded-[28px] border border-yellow-200 bg-yellow-50 p-8 text-center shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
+            <div className="mb-2 text-3xl">🧮</div>
+            <h2 className="text-2xl font-bold text-gray-800">
+              Plan Your Construction Budget
+            </h2>
+            <p className="mt-2 mb-4 text-gray-600">
+              Get instant AI-powered cost estimates for any construction project
+              in Pakistan. Accurate PKR rates for Lahore, Karachi, Islamabad and
+              more.
+            </p>
+            <div className="flex flex-wrap justify-center gap-3">
+              <button
+                onClick={() => onNavigate("cost-estimator")}
+                className="rounded-lg bg-yellow-500 px-6 py-3 font-semibold text-white transition hover:bg-yellow-600"
+              >
+                Try Cost Estimator →
+              </button>
+              <button
+                onClick={() => onNavigate("contractors")}
+                className="rounded-lg border border-gray-300 px-6 py-3 font-semibold text-gray-700 transition hover:bg-gray-50"
+              >
+                Find a Contractor
+              </button>
+            </div>
+            <p className="mt-3 text-xs text-gray-400">
+              Free · No signup required · Updated market rates
+            </p>
+          </div>
+        </section>
+
+        <section className="section">
           <div className="home-about-grid">
             <div className="home-about-copy reveal">
               <span className="section-label">About BuildHive</span>
@@ -1194,25 +1463,27 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
             </p>
           </div>
           <div className="category-pills-grid">
-            {categories.map((category, index) => {
-              const IconComp = Icons[category.icon] || Icons.Package;
-              return (
-                <div
-                  key={category.id}
-                  className="category-card category-pill reveal-scale"
-                  style={{ transitionDelay: `${index * 50}ms` }}
-                  onClick={() => onNavigate(category.route)}
-                >
-                  <div className={`category-icon icon-tone-${index % 8}`}>
-                    <IconComp />
-                  </div>
-                  <div className="category-info">
-                    <h3>{category.name}</h3>
-                    <p>{category.count.toLocaleString()} products</p>
-                  </div>
-                </div>
-              );
-            })}
+            {categoriesLoading || categories.length === 0
+              ? renderCategorySkeletons(6)
+              : categories.map((category, index) => {
+                  const IconComp = Icons[category.icon] || Icons.Package;
+                  return (
+                    <div
+                      key={category.id}
+                      className="category-card category-pill reveal-scale"
+                      style={{ transitionDelay: `${index * 50}ms` }}
+                      onClick={() => onNavigate(category.route)}
+                    >
+                      <div className={`category-icon icon-tone-${index % 8}`}>
+                        <IconComp />
+                      </div>
+                      <div className="category-info">
+                        <h3>{category.name}</h3>
+                        <p>{category.count.toLocaleString()} products</p>
+                      </div>
+                    </div>
+                  );
+                })}
           </div>
         </section>
 
@@ -1220,49 +1491,280 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
           <div className="section-inner">
             <div className="section-header reveal">
               <span className="section-label">Featured</span>
-              <h2 className="section-title">Trending Materials</h2>
+              <h2 className="section-title">Featured Products</h2>
               <p className="section-subtitle">
-                Top-rated products with strong value from verified sellers.
+                Hand-picked approved products from verified sellers.
               </p>
             </div>
             <div className="listings-grid">
-              {featuredListings.map((listing, index) => (
-                <div
-                  key={listing.id}
-                  className="listing-card reveal"
-                  style={{ transitionDelay: `${index * 80}ms` }}
-                  onClick={() => onNavigate("products")}
-                >
-                  <div className="listing-image-wrap">
-                    <img
-                      src={listing.image}
-                      alt={listing.title}
-                      loading="lazy"
-                    />
-                    {listing.badge && (
-                      <span className="listing-badge">{listing.badge}</span>
-                    )}
-                    <span className="listing-tag">{listing.tag}</span>
-                  </div>
-                  <div className="listing-body">
-                    <h3 className="listing-title">{listing.title}</h3>
-                    <p className="listing-seller">by {listing.seller}</p>
-                    <div className="listing-footer">
-                      <div className="listing-price">
-                        <span className="price-current">
-                          PKR {listing.price.toLocaleString()}
-                        </span>
-                        {listing.originalPrice && (
-                          <span className="price-original">
-                            PKR {listing.originalPrice.toLocaleString()}
-                          </span>
+              {featuredLoading || featuredListings.length === 0
+                ? renderFeaturedSkeletons(8)
+                : featuredListings.map((listing, index) => (
+                    <div
+                      key={listing.id}
+                      className="listing-card reveal"
+                      style={{ transitionDelay: `${index * 80}ms` }}
+                      onClick={() => onNavigate("products")}
+                    >
+                      <div className="listing-image-wrap">
+                        {listing.image ? (
+                          <>
+                            <img
+                              src={listing.image}
+                              alt={listing.title}
+                              loading="lazy"
+                              onError={(e) => {
+                                e.currentTarget.style.display = "none";
+                                const placeholder = e.currentTarget
+                                  .nextElementSibling as HTMLElement | null;
+                                if (placeholder) {
+                                  placeholder.style.display = "flex";
+                                }
+                              }}
+                            />
+                            <div className="hidden h-full w-full items-center justify-center bg-gray-200 text-gray-500">
+                              <section className="section">
+                                <div className="section-inner">
+                                  <div className="section-header reveal">
+                                    <span className="section-label">
+                                      Professionals
+                                    </span>
+                                    <h2 className="section-title">
+                                      Need a skilled professional?
+                                    </h2>
+                                    <p className="section-subtitle">
+                                      Browse verified contractors across all
+                                      trades.
+                                    </p>
+                                  </div>
+
+                                  <div className="mb-6 flex justify-center">
+                                    <button
+                                      className="btn-primary"
+                                      onClick={() => onNavigate("contractors")}
+                                    >
+                                      <Icons.Users className="h-5 w-5" />
+                                      Browse Contractors
+                                    </button>
+                                  </div>
+
+                                  {featuredContractorsLoading ? (
+                                    <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                                      {renderContractorSkeletons(3)}
+                                    </div>
+                                  ) : featuredContractors.length > 0 ? (
+                                    <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                                      {featuredContractors.map((contractor) => (
+                                        <ContractorCard
+                                          key={
+                                            contractor.businessId ||
+                                            contractor.id
+                                          }
+                                          contractor={contractor as any}
+                                          onViewProfile={() =>
+                                            onNavigate(
+                                              "contractor-detail",
+                                              contractor.businessId ||
+                                                contractor.id,
+                                            )
+                                          }
+                                          onMessage={() => onNavigate("signin")}
+                                        />
+                                      ))}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </section>
+                              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gray-300 text-base font-bold text-gray-600">
+                                {getMarketplaceInitials(listing.title)}
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center bg-gray-200 text-gray-500">
+                            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gray-300 text-base font-bold text-gray-600">
+                              {getMarketplaceInitials(listing.title)}
+                            </div>
+                          </div>
                         )}
+                        {listing.badge && (
+                          <span className="listing-badge">{listing.badge}</span>
+                        )}
+                        <span className="listing-tag">{listing.tag}</span>
                       </div>
-                      <StarRating rating={listing.rating} />
+                      <div className="listing-body">
+                        <h3 className="listing-title">{listing.title}</h3>
+                        <p className="listing-seller">by {listing.seller}</p>
+                        <div className="listing-footer">
+                          <div className="listing-price">
+                            <span className="price-current">
+                              PKR {listing.price.toLocaleString()}
+                            </span>
+                            {listing.originalPrice && (
+                              <span className="price-original">
+                                PKR {listing.originalPrice.toLocaleString()}
+                              </span>
+                            )}
+                          </div>
+                          <StarRating rating={listing.rating} />
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              ))}
+                  ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="section">
+          <div className="section-inner">
+            <div className="section-header reveal">
+              <span className="section-label">Browse Gigs</span>
+              <h2 className="section-title">Popular Services</h2>
+              <p className="section-subtitle">
+                Approved gigs from sellers and contractors.
+              </p>
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+                gap: 16,
+              }}
+            >
+              {featuredServicesLoading
+                ? renderFeaturedSkeletons(6)
+                : featuredServices.map((service) => (
+                    <div
+                      key={service.id}
+                      className="listing-card reveal"
+                      onClick={() => onNavigate(`services/${service.id}`)}
+                    >
+                      <div className="listing-body">
+                        <span
+                          className="listing-tag"
+                          style={{
+                            position: "static",
+                            display: "inline-block",
+                            marginBottom: 10,
+                          }}
+                        >
+                          {service.category}
+                        </span>
+                        <h3
+                          className="listing-title"
+                          style={{ minHeight: "unset" }}
+                        >
+                          {service.title}
+                        </h3>
+                        <p className="listing-seller">
+                          {service.creatorName} · {service.creatorRole}
+                        </p>
+                        <div
+                          className="listing-footer"
+                          style={{ marginTop: 8 }}
+                        >
+                          <div className="listing-price">
+                            <span className="price-current">
+                              PKR {service.price.toLocaleString()}
+                            </span>
+                          </div>
+                          <StarRating rating={service.rating} />
+                        </div>
+                        <p className="listing-seller" style={{ marginTop: 10 }}>
+                          Delivered in {service.deliveryDays || 0} days ·{" "}
+                          {service.reviewCount} reviews
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+            </div>
+            <div
+              style={{ textAlign: "center", marginTop: 28 }}
+              className="reveal"
+            >
+              <button
+                className="btn-secondary"
+                onClick={() => onNavigate("services")}
+              >
+                Browse All Services
+                <Icons.ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section className="section">
+          <div className="section-inner">
+            <div className="section-header reveal">
+              <span className="section-label">Trending</span>
+              <h2 className="section-title">All Products</h2>
+              <p className="section-subtitle">
+                Approved products that are not marked featured.
+              </p>
+            </div>
+            <div className="listings-grid">
+              {allProductsLoading || allListings.length === 0
+                ? renderFeaturedSkeletons(12)
+                : allListings.map((listing, index) => (
+                    <div
+                      key={listing.id}
+                      className="listing-card reveal"
+                      style={{ transitionDelay: `${index * 80}ms` }}
+                      onClick={() => onNavigate("products")}
+                    >
+                      <div className="listing-image-wrap">
+                        {listing.image ? (
+                          <>
+                            <img
+                              src={listing.image}
+                              alt={listing.title}
+                              loading="lazy"
+                              onError={(e) => {
+                                e.currentTarget.style.display = "none";
+                                const placeholder = e.currentTarget
+                                  .nextElementSibling as HTMLElement | null;
+                                if (placeholder) {
+                                  placeholder.style.display = "flex";
+                                }
+                              }}
+                            />
+                            <div className="hidden h-full w-full items-center justify-center bg-gray-200 text-gray-500">
+                              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gray-300 text-base font-bold text-gray-600">
+                                {getMarketplaceInitials(listing.title)}
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center bg-gray-200 text-gray-500">
+                            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gray-300 text-base font-bold text-gray-600">
+                              {getMarketplaceInitials(listing.title)}
+                            </div>
+                          </div>
+                        )}
+                        {listing.badge && (
+                          <span className="listing-badge">{listing.badge}</span>
+                        )}
+                        <span className="listing-tag">{listing.tag}</span>
+                      </div>
+                      <div className="listing-body">
+                        <h3 className="listing-title">{listing.title}</h3>
+                        <p className="listing-seller">by {listing.seller}</p>
+                        <div className="listing-footer">
+                          <div className="listing-price">
+                            <span className="price-current">
+                              PKR {listing.price.toLocaleString()}
+                            </span>
+                            {listing.originalPrice && (
+                              <span className="price-original">
+                                PKR {listing.originalPrice.toLocaleString()}
+                              </span>
+                            )}
+                          </div>
+                          <StarRating rating={listing.rating} />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
             </div>
             <div
               style={{ textAlign: "center", marginTop: 40 }}

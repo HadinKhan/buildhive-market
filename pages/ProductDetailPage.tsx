@@ -3,6 +3,11 @@ import { Icons } from "../components/Icons";
 import { Button } from "../components/Button";
 import { Product } from "../types";
 import api from "../src/services/api";
+import { useNavigate } from "react-router-dom";
+import {
+  getMarketplaceInitials,
+  resolveMarketplaceImageSrc,
+} from "../src/utils/marketplaceImage";
 
 interface ProductReview {
   id: string;
@@ -31,9 +36,11 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   onAddToCart,
   onMessageSeller,
 }) => {
+  const navigate = useNavigate();
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState("Overview");
   const [selectedImage, setSelectedImage] = useState(0);
+  const [imageFailed, setImageFailed] = useState(false);
   const [reviews, setReviews] = useState<ProductReview[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [reviewsError, setReviewsError] = useState<string | null>(null);
@@ -48,7 +55,8 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           (img) => img.product_id === product.id && Boolean(img.image_url),
         )
         .sort((a, b) => a.display_order - b.display_order)
-        .map((img) => img.image_url),
+        .map((img) => resolveMarketplaceImageSrc(img) || img.image_url || "")
+        .filter(Boolean),
     [gallerySource, product.id],
   );
   const activeImage =
@@ -56,6 +64,13 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     galleryImages[0] ||
     (product as any).image ||
     "";
+  const activeImageSrc = resolveMarketplaceImageSrc({ image: activeImage });
+  const productInitials = getMarketplaceInitials(product.name);
+  const isOutOfStock = product.quantity === 0;
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [activeImageSrc]);
 
   useEffect(() => {
     const loadReviews = async () => {
@@ -111,8 +126,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       return;
     }
 
-    window.location.href =
-      "/messages?participantId=" + encodeURIComponent(participantId);
+    navigate(`/messages?participantId=${encodeURIComponent(participantId)}`);
   };
 
   return (
@@ -143,11 +157,24 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           {/* Left Column - Images */}
           <div className="flex flex-col gap-6">
             <div className="relative aspect-square w-full overflow-hidden rounded-3xl bg-gray-100">
-              <img
-                src={activeImage}
-                alt={product.title}
-                className="h-full w-full object-cover transition-all duration-500"
-              />
+              {activeImageSrc && !imageFailed ? (
+                <img
+                  src={activeImageSrc}
+                  alt={product.title}
+                  className="h-full w-full object-cover transition-all duration-500"
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                    setImageFailed(true);
+                  }}
+                />
+              ) : null}
+              {!activeImageSrc || imageFailed ? (
+                <div className="flex h-full w-full items-center justify-center bg-gray-200 text-gray-500">
+                  <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gray-300 text-xl font-bold text-gray-600">
+                    {productInitials}
+                  </div>
+                </div>
+              ) : null}
               <button
                 aria-label="Add to wishlist"
                 className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/80 text-gray-500 backdrop-blur-sm transition-colors hover:text-red-500"
@@ -168,11 +195,34 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                       : "border-transparent hover:border-gray-200"
                   }`}
                 >
-                  <img
-                    src={img}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
+                  {img ? (
+                    <>
+                      <img
+                        src={img}
+                        alt=""
+                        className="h-full w-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                          const placeholder = e.currentTarget
+                            .nextElementSibling as HTMLElement | null;
+                          if (placeholder) {
+                            placeholder.style.display = "flex";
+                          }
+                        }}
+                      />
+                      <div className="hidden h-full w-full items-center justify-center bg-gray-200 text-gray-500">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-300 text-xs font-bold text-gray-600">
+                          {productInitials}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center bg-gray-200 text-gray-500">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-300 text-xs font-bold text-gray-600">
+                        {productInitials}
+                      </div>
+                    </div>
+                  )}
                 </button>
               ))}
             </div>
@@ -233,6 +283,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
             <Button
               className="mb-8 w-full bg-primary hover:bg-primary-hover shadow-lg shadow-primary/30 sm:w-auto"
               size="lg"
+              disabled={isOutOfStock}
               onClick={handleAddToCart}
             >
               <Icons.Cart className="mr-2 h-5 w-5" /> Add to Cart
@@ -241,19 +292,14 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
             {/* Stock Status */}
             <div className="mb-8">
               <div className="flex items-center gap-2">
-                {product.quantity > 0 ? (
-                  <>
-                    <div className="h-2 w-2 rounded-full bg-green-500"></div>
-                    <span className="text-sm text-gray-600">
-                      {product.quantity} items in stock
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <div className="h-2 w-2 rounded-full bg-red-500"></div>
-                    <span className="text-sm text-gray-600">Out of stock</span>
-                  </>
-                )}
+                <div
+                  className={`h-2 w-2 rounded-full ${isOutOfStock ? "bg-red-500" : "bg-green-500"}`}
+                ></div>
+                <span
+                  className={`text-sm ${isOutOfStock ? "text-red-600" : "text-gray-600"}`}
+                >
+                  {product.quantity} items in stock
+                </span>
               </div>
             </div>
 

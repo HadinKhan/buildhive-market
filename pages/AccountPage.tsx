@@ -3,7 +3,7 @@ import { Icons } from "../components/Icons";
 import { Button } from "../components/Button";
 import { User } from "../types";
 import { useAuth } from "../src/context/AuthContext";
-import api from "../src/services/api";
+import apiClient from "../src/services/api";
 import {
   userService,
   UserProfile,
@@ -55,6 +55,20 @@ export const AccountPage: React.FC<AccountPageProps> = ({
     title: "",
     body: "",
   });
+  const [projects, setProjects] = useState<any[]>([]);
+  const [loadingProjects, setLoadingProjects] = useState(false);
+  const [showPostProject, setShowPostProject] = useState(false);
+  const [disputes, setDisputes] = useState<any[]>([]);
+  const [loadingDisputes, setLoadingDisputes] = useState(false);
+  const [disputeModal, setDisputeModal] = useState<{
+    open: boolean;
+    order: Order | null;
+  }>({ open: false, order: null });
+  const [disputeForm, setDisputeForm] = useState({
+    reason: "",
+    description: "",
+  });
+  const [submittingDispute, setSubmittingDispute] = useState(false);
 
   useEffect(() => {
     // Fetch orders for the logged-in user only
@@ -66,16 +80,13 @@ export const AccountPage: React.FC<AccountPageProps> = ({
         const data = await (
           await import("../src/services/orderService")
         ).orderService.getOrders();
-        // Filter to only show orders for the logged-in user
-        const userOrders = Array.isArray(data.orders)
-          ? data.orders.filter((order: Order) => order.user_id === user.id)
-          : [];
+        const orders = Array.isArray(data.orders)
+          ? data.orders
+          : Array.isArray(data)
+            ? data
+            : [];
 
-        // Debug: Log first order to see actual data structure
-        if (userOrders.length > 0) {
-        }
-
-        setOrders(userOrders);
+        setOrders(orders);
       } catch (err: any) {
         setOrdersError("Failed to load orders");
       } finally {
@@ -85,13 +96,21 @@ export const AccountPage: React.FC<AccountPageProps> = ({
     fetchOrders();
   }, [user.id]);
   const [activeTab, setActiveTab] = useState("dashboard");
+
+  useEffect(() => {
+    if (activeTab === "projects") {
+      void fetchProjects();
+    }
+
+    if (activeTab === "disputes") {
+      void fetchDisputes();
+    }
+  }, [activeTab]);
+
   // Use user prop data directly instead of fetching from API to avoid 403 errors
   // Handle both camelCase (from AuthContext) and snake_case (from types.ts) user objects
   const profileImage = (user as any).profileImage || user.profile_image || null;
   const fullName = (user as any).fullName || user.full_name || "";
-
-  console.log("👤 User object:", user);
-  console.log("👤 Profile image:", profileImage);
 
   const [profile, setProfile] = useState<UserProfile | null>({
     id: user.id,
@@ -189,12 +208,10 @@ export const AccountPage: React.FC<AccountPageProps> = ({
     setEditError(null);
     try {
       const url = await userService.uploadProfileImage(user.id, file);
-      console.log("📸 Profile image URL received:", url);
       // If URL doesn't start with http, prepend base URL
       const imageUrl = url.startsWith("http")
         ? url
         : `${import.meta.env.VITE_API_URL || "http://localhost:3000"}${url}`;
-      console.log("📸 Full image URL:", imageUrl);
       setEditProfile((prev) => ({ ...prev, profile_image: imageUrl }));
       setProfile((prev) =>
         prev ? { ...prev, profile_image: imageUrl } : prev,
@@ -203,7 +220,6 @@ export const AccountPage: React.FC<AccountPageProps> = ({
       // Refresh user in AuthContext to update profile image globally
       try {
         await refreshUser();
-        console.log("✅ AuthContext user refreshed with new profile image");
       } catch (refreshErr) {
         console.warn("⚠️ Failed to refresh AuthContext user:", refreshErr);
       }
@@ -231,9 +247,6 @@ export const AccountPage: React.FC<AccountPageProps> = ({
       // Refresh user in AuthContext to update profile image globally
       try {
         await refreshUser();
-        console.log(
-          "✅ AuthContext user refreshed after deleting profile image",
-        );
       } catch (refreshErr) {
         console.warn("⚠️ Failed to refresh AuthContext user:", refreshErr);
       }
@@ -291,7 +304,6 @@ export const AccountPage: React.FC<AccountPageProps> = ({
     try {
       if (address) {
         // Update existing address
-        console.log("📍 Updating address:", addressForm);
         const updated = await userService.updateAddress(
           user.id,
           address.id,
@@ -301,7 +313,6 @@ export const AccountPage: React.FC<AccountPageProps> = ({
         setAddressSuccess("Address updated successfully!");
       } else {
         // Create new address
-        console.log("📍 Creating address:", addressForm);
         const created = await userService.createAddress(user.id, addressForm);
         setAddress(created);
         setAddressSuccess("Address added successfully!");
@@ -429,8 +440,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
       try {
         const tracking = await orderService.getOrderTracking(order.id);
         setOrderTracking(tracking);
-      } catch (error) {
-        console.log("Tracking not available:", error);
+      } catch {
         setOrderTracking(null);
       } finally {
         setTrackingLoading(false);
@@ -467,6 +477,61 @@ export const AccountPage: React.FC<AccountPageProps> = ({
     }
   };
 
+  const fetchProjects = async () => {
+    setLoadingProjects(true);
+    try {
+      const res = await apiClient.get("/projects");
+      const data = res.data?.data ?? res.data ?? [];
+      setProjects(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Projects fetch error:", error);
+      setProjects([]);
+    } finally {
+      setLoadingProjects(false);
+    }
+  };
+
+  const fetchDisputes = async () => {
+    setLoadingDisputes(true);
+    try {
+      const res = await apiClient.get("/disputes");
+      const data = res.data?.data ?? res.data ?? [];
+      setDisputes(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Disputes fetch error:", error);
+      setDisputes([]);
+    } finally {
+      setLoadingDisputes(false);
+    }
+  };
+
+  const openRaiseDisputeModal = (order: Order) => {
+    setDisputeModal({ open: true, order });
+    setDisputeForm({ reason: "", description: "" });
+  };
+
+  const submitDispute = async () => {
+    if (!disputeForm.reason || !disputeForm.description) return;
+
+    setSubmittingDispute(true);
+    try {
+      await apiClient.post("/disputes", {
+        orderId: disputeModal.order?.id,
+        filedAgainst:
+          (disputeModal.order as any)?.sellerId ??
+          (disputeModal.order as any)?.seller_id,
+        reason: disputeForm.reason,
+        description: disputeForm.description,
+      });
+      setDisputeModal({ open: false, order: null });
+      alert("Dispute filed successfully! Admin will review within 24 hours.");
+    } catch (error: any) {
+      alert(error?.response?.data?.message || "Failed to file dispute");
+    } finally {
+      setSubmittingDispute(false);
+    }
+  };
+
   const openReviewModal = (productId: string, productName: string) => {
     setReviewTarget({ productId, productName });
     setReviewForm({ rating: 5, title: "", body: "" });
@@ -493,7 +558,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
     setReviewError(null);
 
     try {
-      const response = await api.post(
+      await apiClient.post(
         `/products/${reviewTarget.productId}/reviews`,
         {
           rating: reviewForm.rating,
@@ -501,7 +566,6 @@ export const AccountPage: React.FC<AccountPageProps> = ({
           body: reviewForm.body,
         },
       );
-      console.log("REVIEW POST:", response.data);
       setReviewedProducts((prev) => ({
         ...prev,
         [reviewTarget.productId]: true,
@@ -528,6 +592,8 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   const menuItems = [
     { id: "dashboard", label: "Dashboard", icon: Icons.Dashboard },
     { id: "orders", label: "My Orders", icon: Icons.Package },
+    { id: "projects", label: "My Projects", icon: Icons.Folder },
+    { id: "disputes", label: "My Disputes", icon: Icons.AlertCircle },
     { id: "profile", label: "Profile Settings", icon: Icons.Settings },
     { id: "addresses", label: "Addresses", icon: Icons.MapPin },
     { id: "password", label: "Change Password", icon: Icons.Lock },
@@ -723,6 +789,23 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                           >
                             View Invoice
                           </Button>
+                          {order.status !== "cancelled" && (
+                            <button
+                              onClick={() => openRaiseDisputeModal(order)}
+                              style={{
+                                fontSize: "12px",
+                                color: "#EF4444",
+                                background: "#FEF2F2",
+                                border: "1px solid #FECACA",
+                                borderRadius: "6px",
+                                padding: "4px 10px",
+                                cursor: "pointer",
+                                marginLeft: "8px",
+                              }}
+                            >
+                              Raise Dispute
+                            </button>
+                          )}
                           {canCancelOrder(order) && (
                             <Button
                               size="sm"
@@ -740,6 +823,315 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                 </tbody>
               </table>
             </div>
+          </div>
+        );
+      case "projects":
+        return (
+          <div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "16px",
+              }}
+            >
+              <h2 style={{ fontSize: "20px", fontWeight: 600 }}>My Projects</h2>
+              <button
+                onClick={() => setShowPostProject(true)}
+                style={{
+                  background: "#F59E0B",
+                  color: "white",
+                  padding: "8px 16px",
+                  borderRadius: "8px",
+                  fontWeight: 500,
+                  border: "none",
+                  cursor: "pointer",
+                }}
+              >
+                + Post New Project
+              </button>
+            </div>
+
+            {loadingProjects ? (
+              <p style={{ color: "#6B7280" }}>Loading projects...</p>
+            ) : projects.length === 0 ? (
+              <div
+                style={{
+                  textAlign: "center",
+                  padding: "40px",
+                  background: "#F9FAFB",
+                  borderRadius: "12px",
+                }}
+              >
+                <div style={{ fontSize: "40px", marginBottom: "8px" }}>🏗️</div>
+                <p style={{ color: "#6B7280" }}>
+                  No projects yet. Post your first project to find contractors.
+                </p>
+                <button
+                  onClick={() => setShowPostProject(true)}
+                  style={{
+                    marginTop: "12px",
+                    background: "#F59E0B",
+                    color: "white",
+                    padding: "8px 16px",
+                    borderRadius: "8px",
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  Post a Project
+                </button>
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "12px",
+                }}
+              >
+                {projects.map((project: any) => (
+                  <div
+                    key={project.id}
+                    style={{
+                      background: "white",
+                      border: "1px solid #E5E7EB",
+                      borderRadius: "12px",
+                      padding: "16px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "flex-start",
+                      }}
+                    >
+                      <div>
+                        <h3
+                          style={{
+                            fontWeight: 600,
+                            color: "#111827",
+                            marginBottom: "4px",
+                          }}
+                        >
+                          {project.title}
+                        </h3>
+                        <p
+                          style={{
+                            fontSize: "13px",
+                            color: "#6B7280",
+                            marginBottom: "8px",
+                          }}
+                        >
+                          {project.description?.slice(0, 100)}...
+                        </p>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "16px",
+                            fontSize: "13px",
+                            color: "#6B7280",
+                          }}
+                        >
+                          {project.budgetMin && (
+                            <span>
+                              💰 PKR{" "}
+                              {Number(project.budgetMin).toLocaleString()} –{" "}
+                              {Number(project.budgetMax).toLocaleString()}
+                            </span>
+                          )}
+                          <span>
+                            📋 {project.proposalsCount ?? 0} proposals
+                          </span>
+                          <span>
+                            📅{" "}
+                            {new Date(
+                              project.createdAt ?? project.created_at,
+                            ).toLocaleDateString("en-PK")}
+                          </span>
+                        </div>
+                      </div>
+                      <span
+                        style={{
+                          padding: "4px 10px",
+                          borderRadius: "20px",
+                          fontSize: "12px",
+                          fontWeight: 500,
+                          background:
+                            project.status === "open" ? "#DCFCE7" : "#F3F4F6",
+                          color:
+                            project.status === "open" ? "#166534" : "#6B7280",
+                        }}
+                      >
+                        {project.status}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {showPostProject && (
+              <div
+                style={{
+                  position: "fixed",
+                  inset: 0,
+                  background: "rgba(0,0,0,0.5)",
+                  zIndex: 1000,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "16px",
+                }}
+              >
+                <div
+                  style={{
+                    background: "white",
+                    borderRadius: "16px",
+                    padding: "24px",
+                    width: "100%",
+                    maxWidth: "520px",
+                    maxHeight: "90vh",
+                    overflowY: "auto",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: "20px",
+                    }}
+                  >
+                    <h2 style={{ fontSize: "18px", fontWeight: 600 }}>
+                      Post a Project
+                    </h2>
+                    <button
+                      onClick={() => setShowPostProject(false)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        fontSize: "20px",
+                        cursor: "pointer",
+                        color: "#6B7280",
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <PostProjectForm
+                    onSuccess={() => {
+                      setShowPostProject(false);
+                      void fetchProjects();
+                    }}
+                    onCancel={() => setShowPostProject(false)}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      case "disputes":
+        return (
+          <div>
+            <h2
+              style={{
+                fontSize: "20px",
+                fontWeight: 600,
+                marginBottom: "16px",
+              }}
+            >
+              My Disputes
+            </h2>
+            {loadingDisputes ? (
+              <p style={{ color: "#6B7280" }}>Loading...</p>
+            ) : disputes.length === 0 ? (
+              <div
+                style={{
+                  textAlign: "center",
+                  padding: "40px",
+                  background: "#F9FAFB",
+                  borderRadius: "12px",
+                }}
+              >
+                <div style={{ fontSize: "40px", marginBottom: "8px" }}>✅</div>
+                <p style={{ color: "#6B7280" }}>No disputes filed. All good!</p>
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "10px",
+                }}
+              >
+                {disputes.map((d: any) => (
+                  <div
+                    key={d.id}
+                    style={{
+                      background: "white",
+                      border: "1px solid #E5E7EB",
+                      borderRadius: "12px",
+                      padding: "16px",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <div>
+                      <p
+                        style={{
+                          fontWeight: 500,
+                          color: "#111827",
+                          marginBottom: "4px",
+                        }}
+                      >
+                        {d.reason}
+                      </p>
+                      <p style={{ fontSize: "13px", color: "#6B7280" }}>
+                        {d.description?.slice(0, 80)}...
+                      </p>
+                      <p
+                        style={{
+                          fontSize: "12px",
+                          color: "#9CA3AF",
+                          marginTop: "4px",
+                        }}
+                      >
+                        {new Date(
+                          d.createdAt ?? d.created_at,
+                        ).toLocaleDateString("en-PK")}
+                      </p>
+                    </div>
+                    <span
+                      style={{
+                        padding: "4px 12px",
+                        borderRadius: "20px",
+                        fontSize: "12px",
+                        fontWeight: 500,
+                        whiteSpace: "nowrap",
+                        background:
+                          d.status === "resolved"
+                            ? "#DCFCE7"
+                            : d.status === "in-progress"
+                              ? "#DBEAFE"
+                              : "#FEF3C7",
+                        color:
+                          d.status === "resolved"
+                            ? "#166534"
+                            : d.status === "in-progress"
+                              ? "#1E40AF"
+                              : "#92400E",
+                      }}
+                    >
+                      {d.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         );
       case "profile":
@@ -1242,6 +1634,122 @@ export const AccountPage: React.FC<AccountPageProps> = ({
         </div>
       )}
 
+      {/* Raise Dispute Modal */}
+      {disputeModal.open && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
+            <div className="border-b border-gray-200 p-6 flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">
+                  Raise a Dispute
+                </h2>
+                <p className="text-sm text-gray-500">
+                  Order: #{disputeModal.order?.id?.slice(0, 8)}
+                </p>
+              </div>
+              <button
+                onClick={() => setDisputeModal({ open: false, order: null })}
+                className="text-gray-400 hover:text-gray-600"
+                aria-label="Close dispute modal"
+              >
+                <Icons.Close className="h-6 w-6" />
+              </button>
+            </div>
+            <div className="space-y-4 p-6">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  Reason *
+                </label>
+                <select
+                  style={{
+                    width: "100%",
+                    border: "1px solid #D1D5DB",
+                    borderRadius: "8px",
+                    padding: "8px 12px",
+                    fontSize: "14px",
+                  }}
+                  value={disputeForm.reason}
+                  onChange={(e) =>
+                    setDisputeForm((prev) => ({
+                      ...prev,
+                      reason: e.target.value,
+                    }))
+                  }
+                >
+                  <option value="">Select reason</option>
+                  <option value="Product Quality Issue">
+                    Product Quality Issue
+                  </option>
+                  <option value="Item Not Received">Item Not Received</option>
+                  <option value="Wrong Item Delivered">
+                    Wrong Item Delivered
+                  </option>
+                  <option value="Quantity Mismatch">Quantity Mismatch</option>
+                  <option value="Damaged Product">Damaged Product</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  Description *
+                </label>
+                <textarea
+                  style={{
+                    width: "100%",
+                    border: "1px solid #D1D5DB",
+                    borderRadius: "8px",
+                    padding: "8px 12px",
+                    fontSize: "14px",
+                    minHeight: "80px",
+                    resize: "vertical",
+                  }}
+                  placeholder="Describe the issue in detail..."
+                  value={disputeForm.description}
+                  onChange={(e) =>
+                    setDisputeForm((prev) => ({
+                      ...prev,
+                      description: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setDisputeModal({ open: false, order: null })}
+                  style={{
+                    flex: 1,
+                    padding: "10px",
+                    border: "1px solid #D1D5DB",
+                    borderRadius: "8px",
+                    background: "white",
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={submitDispute}
+                  disabled={submittingDispute}
+                  style={{
+                    flex: 1,
+                    padding: "10px",
+                    background: "#EF4444",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "8px",
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    opacity: submittingDispute ? 0.6 : 1,
+                  }}
+                >
+                  {submittingDispute ? "Submitting..." : "File Dispute"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Invoice Modal */}
       {showInvoiceModal && selectedOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -1693,3 +2201,247 @@ export const AccountPage: React.FC<AccountPageProps> = ({
     </>
   );
 };
+
+function PostProjectForm({
+  onSuccess,
+  onCancel,
+}: {
+  onSuccess: () => void;
+  onCancel: () => void;
+}) {
+  const [form, setForm] = useState({
+    title: "",
+    description: "",
+    category: "",
+    budgetMin: "",
+    budgetMax: "",
+    deadline: "",
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [generating, setGenerating] = useState(false);
+
+  const generateDescription = async () => {
+    if (!form.title) {
+      setError("Enter a title first");
+      return;
+    }
+
+    setGenerating(true);
+    try {
+      const response = await fetch(
+        "https://ai-backend-production-d13d.up.railway.app/chat",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            query: `Write a professional project description for: ${form.title}, Category: ${form.category || "Construction"}, Budget: PKR ${form.budgetMax || "50000"}. Location: Lahore Pakistan. 3-4 sentences only.`,
+            use_llm: true,
+          }),
+        },
+      );
+      const data = await response.json();
+      setForm((prev) => ({ ...prev, description: data.answer ?? "" }));
+    } catch {
+      setError("AI unavailable");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!form.title || !form.description) {
+      setError("Title and description required");
+      return;
+    }
+
+    setSubmitting(true);
+    setError("");
+    try {
+      await apiClient.post("/projects", {
+        title: form.title,
+        description: form.description,
+        category: form.category,
+        budgetMin: form.budgetMin ? Number(form.budgetMin) : undefined,
+        budgetMax: form.budgetMax ? Number(form.budgetMax) : undefined,
+        deadline: form.deadline || undefined,
+      });
+      onSuccess();
+    } catch (err: any) {
+      setError(err?.response?.data?.message || "Failed to post project");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const inputStyle = {
+    width: "100%",
+    border: "1px solid #D1D5DB",
+    borderRadius: "8px",
+    padding: "8px 12px",
+    fontSize: "14px",
+    outline: "none",
+    boxSizing: "border-box" as const,
+  };
+  const labelStyle = {
+    display: "block",
+    fontSize: "13px",
+    fontWeight: 500,
+    color: "#374151",
+    marginBottom: "4px",
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+      <div>
+        <label style={labelStyle}>Project Title *</label>
+        <input
+          style={inputStyle}
+          placeholder="e.g. Bathroom Renovation in Gulberg"
+          value={form.title}
+          onChange={(e) =>
+            setForm((prev) => ({ ...prev, title: e.target.value }))
+          }
+        />
+      </div>
+      <div>
+        <label style={labelStyle}>Category</label>
+        <select
+          style={inputStyle}
+          value={form.category}
+          onChange={(e) =>
+            setForm((prev) => ({ ...prev, category: e.target.value }))
+          }
+        >
+          <option value="">Select category</option>
+          {[
+            "Electrical",
+            "Plumbing",
+            "Carpentry",
+            "Masonry",
+            "Painting",
+            "Tiling",
+            "Civil Works",
+            "Interior Design",
+            "Renovation",
+            "Other",
+          ].map((category) => (
+            <option key={category} value={category}>
+              {category}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "4px",
+          }}
+        >
+          <label style={{ ...labelStyle, marginBottom: 0 }}>
+            Description *
+          </label>
+          <button
+            onClick={generateDescription}
+            disabled={generating}
+            style={{
+              fontSize: "12px",
+              color: "#7C3AED",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+            }}
+          >
+            {generating ? "Generating..." : "✨ Generate with AI"}
+          </button>
+        </div>
+        <textarea
+          style={{ ...inputStyle, minHeight: "80px", resize: "vertical" }}
+          placeholder="Describe your project requirements..."
+          value={form.description}
+          onChange={(e) =>
+            setForm((prev) => ({ ...prev, description: e.target.value }))
+          }
+        />
+      </div>
+      <div
+        style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}
+      >
+        <div>
+          <label style={labelStyle}>Min Budget (PKR)</label>
+          <input
+            style={inputStyle}
+            type="number"
+            placeholder="25000"
+            value={form.budgetMin}
+            onChange={(e) =>
+              setForm((prev) => ({ ...prev, budgetMin: e.target.value }))
+            }
+          />
+        </div>
+        <div>
+          <label style={labelStyle}>Max Budget (PKR)</label>
+          <input
+            style={inputStyle}
+            type="number"
+            placeholder="75000"
+            value={form.budgetMax}
+            onChange={(e) =>
+              setForm((prev) => ({ ...prev, budgetMax: e.target.value }))
+            }
+          />
+        </div>
+      </div>
+      <div>
+        <label style={labelStyle}>Deadline</label>
+        <input
+          style={inputStyle}
+          type="date"
+          value={form.deadline}
+          onChange={(e) =>
+            setForm((prev) => ({ ...prev, deadline: e.target.value }))
+          }
+          min={new Date().toISOString().split("T")[0]}
+        />
+      </div>
+      {error && <p style={{ color: "#EF4444", fontSize: "13px" }}>{error}</p>}
+      <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
+        <button
+          onClick={onCancel}
+          style={{
+            flex: 1,
+            padding: "10px",
+            border: "1px solid #D1D5DB",
+            borderRadius: "8px",
+            background: "white",
+            cursor: "pointer",
+            fontSize: "14px",
+          }}
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleSubmit}
+          disabled={submitting}
+          style={{
+            flex: 1,
+            padding: "10px",
+            background: "#F59E0B",
+            color: "white",
+            border: "none",
+            borderRadius: "8px",
+            fontWeight: 500,
+            cursor: "pointer",
+            fontSize: "14px",
+            opacity: submitting ? 0.6 : 1,
+          }}
+        >
+          {submitting ? "Posting..." : "Post Project"}
+        </button>
+      </div>
+    </div>
+  );
+}

@@ -1,7 +1,10 @@
 import React, { useMemo, useState } from "react";
+import { toast as toastify } from "react-toastify";
 import { Icons } from "../components/Icons";
 import { useAuth } from "../src/context/AuthContext";
+import api from "../src/services/api";
 import { serviceMarketplaceService } from "../src/services/serviceMarketplaceService";
+import type { ApiService } from "../src/types";
 
 interface ServicesPageProps {
   onNavigate: (page: string) => void;
@@ -12,10 +15,22 @@ export interface Service {
   name: string;
   category: string;
   subcategory: string;
+  creatorName: string;
+  creatorRole: "Contractor" | "Seller";
+  creatorId?: string;
+  memberSince?: string;
   price: number;
+  packages?: Array<{
+    tier: string;
+    price: number;
+    deliveryDays: number;
+    description?: string;
+  }>;
   priceType: "fixed" | "hourly" | "per-sqft" | "project-based";
+  deliveryDays: number;
   rating: number;
   reviews: number;
+  reviewCount: number;
   image: string;
   badge?: string;
   provider: string;
@@ -33,6 +48,8 @@ export interface Service {
 
 export interface ServiceProviderProfile {
   name: string;
+  contractorId?: string;
+  role?: "Contractor" | "Seller";
   avatar: string;
   verified: boolean;
   rating: number;
@@ -1333,15 +1350,113 @@ const availabilityLabels: Record<Service["availability"], string> = {
 const formatPriceType = (priceType: Service["priceType"]) =>
   priceType.replace("-", " ");
 
-const toServiceView = (service: any): Service => ({
+const marketplaceCategoryButtons = [
+  "All",
+  "Electrical",
+  "Plumbing",
+  "Carpentry",
+  "Masonry",
+  "Painting",
+  "Tiling",
+  "Civil Works",
+  "Interior Design",
+  "HVAC",
+  "Landscaping",
+  "Roofing",
+  "Other",
+];
+
+const normalizeCategoryValue = (value?: string) =>
+  String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+
+const toServiceView = (service: ApiService | any): Service => ({
   id: service.id,
   name: service.name || service.title || "Service",
-  category: service.category_id || service.category || "services",
-  subcategory: service.subcategory || service.category?.name || "Service",
-  price: Number(service.price || 0),
+  category:
+    service.category?.name ||
+    service.category_name ||
+    service.category ||
+    "Other",
+  subcategory:
+    service.subcategory ||
+    service.category?.name ||
+    service.category_name ||
+    service.category ||
+    "Other",
+  creatorName:
+    service.creator?.full_name ||
+    service.creator?.name ||
+    service.contractor?.business_name ||
+    service.business?.business_name ||
+    service.provider?.name ||
+    service.provider ||
+    "BuildHive Provider",
+  creatorRole:
+    String(
+      service.creator_role ||
+        service.creatorRole ||
+        service.creator?.role ||
+        (service.contractor || service.contractor_id ? "contractor" : "seller"),
+    ).toLowerCase() === "contractor"
+      ? "Contractor"
+      : "Seller",
+  creatorId:
+    service.creator_id ||
+    service.contractor_id ||
+    service.contractor?.id ||
+    service.business_id ||
+    service.creator?.id,
+  memberSince: String(service.created_at || service.createdAt || "").slice(
+    0,
+    4,
+  ),
+  price: (() => {
+    const rawPackages = service.packages || service.service_packages || [];
+    if (Array.isArray(rawPackages) && rawPackages.length > 0) {
+      const prices = rawPackages
+        .map((pkg: any) => Number(pkg.price || 0))
+        .filter((price: number) => Number.isFinite(price) && price > 0);
+      return prices.length > 0
+        ? Math.min(...prices)
+        : Number(service.price || 0);
+    }
+    return Number(service.price || 0);
+  })(),
+  packages: (() => {
+    const rawPackages = service.packages || service.service_packages || [];
+    if (!Array.isArray(rawPackages)) return [];
+    return rawPackages.map((pkg: any, index: number) => ({
+      tier:
+        String(pkg.tier || pkg.name || pkg.title || "").toLowerCase() ||
+        ["basic", "standard", "premium"][index] ||
+        `tier-${index + 1}`,
+      price: Number(pkg.price || 0),
+      deliveryDays: Number(pkg.deliveryDays || pkg.delivery_days || 0),
+      description: pkg.description || "",
+    }));
+  })(),
   priceType: service.price_type || service.priceType || "fixed",
+  deliveryDays: (() => {
+    const rawPackages = service.packages || service.service_packages || [];
+    if (Array.isArray(rawPackages) && rawPackages.length > 0) {
+      const deliveryDays = rawPackages
+        .map((pkg: any) => Number(pkg.deliveryDays || pkg.delivery_days || 0))
+        .filter((days: number) => Number.isFinite(days) && days > 0);
+      return deliveryDays.length > 0
+        ? Math.min(...deliveryDays)
+        : Number(service.delivery_days || service.deliveryDays || 0);
+    }
+    return Number(service.delivery_days || service.deliveryDays || 0);
+  })(),
   rating: Number(service.rating || service.average_rating || 0),
-  reviews: Number(service.reviews || service.total_reviews || 0),
+  reviews: Number(
+    service.reviews || service.total_reviews || service.review_count || 0,
+  ),
+  reviewCount: Number(
+    service.total_reviews || service.review_count || service.reviews || 0,
+  ),
   image: service.image || service.images?.[0]?.image_url || "",
   badge: service.badge,
   provider:
@@ -1394,6 +1509,8 @@ const mapContractorProfile = (
       contractor.business_name ||
       contractor.name ||
       service.provider,
+    contractorId: contractor.id || service.creatorId,
+    role: service.creatorRole,
     avatar: String(
       contractor.businessName ||
         contractor.business_name ||
@@ -1593,28 +1710,26 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
     let cancelled = false;
     setIsLoadingServices(true);
     serviceMarketplaceService
-      .getPublicServices({ limit: 100 })
-      .then(({ services: apiServices }) => {
+      .getServices()
+      .then((apiServices) => {
         if (!cancelled) {
-          const mappedServices = apiServices.map(toServiceView);
+          const mappedServices = apiServices.map((service: ApiService) =>
+            toServiceView(service),
+          );
           if (mappedServices.length > 0) {
             setServices(mappedServices);
             setServicesError(null);
           } else {
-            setServices(featuredServicesPreview);
-            setServicesError(
-              "No services were returned from the API. Showing featured preview listings.",
-            );
+            setServices([]);
+            setServicesError("No approved services found.");
           }
         }
       })
       .catch((error) => {
         console.error("Failed to load services:", error);
         if (!cancelled) {
-          setServices(featuredServicesPreview);
-          setServicesError(
-            "Services are unavailable right now. Showing featured preview listings.",
-          );
+          setServices([]);
+          setServicesError("Services are unavailable right now.");
         }
       })
       .finally(() => {
@@ -1684,11 +1799,29 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
 
   const filteredServices = useMemo(() => {
     const query = searchParams.query.trim().toLowerCase();
+
+    const categoryMatches = (service: Service) => {
+      if (activeCategory === "all") return true;
+      const active = normalizeCategoryValue(activeCategory);
+      if (active === "other") {
+        const known = marketplaceCategoryButtons
+          .slice(1, -1)
+          .map((category) => normalizeCategoryValue(category));
+        const serviceCategory = normalizeCategoryValue(service.category);
+        const serviceSubCategory = normalizeCategoryValue(service.subcategory);
+        return (
+          !known.includes(serviceCategory) &&
+          !known.includes(serviceSubCategory)
+        );
+      }
+
+      return [service.category, service.subcategory, ...service.tags]
+        .map((value) => normalizeCategoryValue(value))
+        .some((value) => value.includes(active));
+    };
+
     return services
-      .filter(
-        (service) =>
-          activeCategory === "all" || service.category === activeCategory,
-      )
+      .filter((service) => categoryMatches(service))
       .filter(
         (service) =>
           !query ||
@@ -1812,6 +1945,9 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
   const getProviderProfile = (service: Service): ServiceProviderProfile =>
     serviceProviderProfiles[service.provider] || {
       name: service.provider,
+      contractorId:
+        service.creatorRole === "Contractor" ? service.creatorId : undefined,
+      role: service.creatorRole,
       avatar: service.provider.slice(0, 1).toUpperCase(),
       verified: service.verified,
       rating: service.rating,
@@ -1853,12 +1989,13 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
 
     setServiceOrderingId(service.id);
     try {
-      await serviceMarketplaceService.createServiceOrder(service.id, {
-        title: `${service.name} project order`,
-        description: service.description,
-        budget: service.price,
+      await api.post(`/services/${service.id}/order`, {
+        message: "",
+        scheduled_date: null,
+        package_id: null,
       });
-      showToast("Service order created successfully.", 3000);
+      toastify.success("Service booked successfully!");
+      onNavigate("account?tab=orders");
     } catch (error) {
       console.error("Failed to create service order:", error);
       showToast("Failed to create service order.", 3000);
@@ -1971,8 +2108,33 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
       </div>
 
       <div className="service-card-body">
-        <span className="subcategory-pill">{service.subcategory}</span>
+        <span className="subcategory-pill">{service.category || "Other"}</span>
         <h3>{service.name}</h3>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            marginBottom: 10,
+          }}
+        >
+          <span style={{ color: "#cbd5e1", fontSize: 12 }}>
+            {service.creatorName}
+          </span>
+          <span
+            style={{
+              fontSize: "10px",
+              padding: "1px 5px",
+              background: "#EEF2FF",
+              color: "#4338CA",
+              borderRadius: "4px",
+              fontWeight: 800,
+              lineHeight: 1.4,
+            }}
+          >
+            {service.creatorRole === "Seller" ? "Seller" : "Contractor"}
+          </span>
+        </div>
         <p>{service.description}</p>
 
         <div className="service-meta-row">
@@ -1993,16 +2155,17 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
         <div className="price-rating-row">
           <div>
             <div className="service-price">
-              Rs. {service.price.toLocaleString()}
+              {service.packages && service.packages.length > 0 ? "From " : ""}
+              PKR {service.price.toLocaleString()}
             </div>
             <span className="service-price-type">
-              {formatPriceType(service.priceType)}
+              Delivered in {service.deliveryDays || 0} days
             </span>
           </div>
           <div className="rating-pill">
             {renderStar()}
             {service.rating.toFixed(1)}
-            <span>({service.reviews})</span>
+            <span>({service.reviewCount || service.reviews})</span>
           </div>
         </div>
 
@@ -2030,11 +2193,11 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
           className="btn-secondary"
           onClick={(event) => {
             event.stopPropagation();
-            openCheckoutModal(service);
+            onNavigate(`services/${service.id}`);
           }}
         >
           <Icons.ArrowRight style={{ width: 16, height: 16 }} />
-          Checkout
+          View Details
         </button>
 
         <div
@@ -2109,38 +2272,34 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
                 whiteSpace: "nowrap",
               }}
             >
-              All Services
+              All
             </button>
-            {visibleCategories.map((category) => (
+            {marketplaceCategoryButtons.slice(1).map((category) => (
               <button
-                key={category.id}
-                onClick={() => setCategory(category.id)}
+                key={category}
+                onClick={() => setCategory(category)}
                 style={{
                   minHeight: 42,
                   padding: "0 18px",
                   borderRadius: 999,
                   border:
-                    activeCategory === category.id
+                    activeCategory === category
                       ? "1px solid rgba(167, 139, 250, 0.44)"
                       : "1px solid rgba(255,255,255,0.08)",
                   background:
-                    activeCategory === category.id
+                    activeCategory === category
                       ? "linear-gradient(180deg, rgba(196, 181, 253, 0.12), rgba(124, 58, 237, 0.06)), #1a1426"
                       : "rgba(255,255,255,0.03)",
-                  color: activeCategory === category.id ? "#f5f3ff" : "#94a3b8",
+                  color: activeCategory === category ? "#f5f3ff" : "#94a3b8",
                   boxShadow:
-                    activeCategory === category.id
+                    activeCategory === category
                       ? "inset 0 1px 0 rgba(255,255,255,0.12), 0 10px 22px rgba(0,0,0,0.22)"
                       : "none",
                   cursor: "pointer",
                   whiteSpace: "nowrap",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
                 }}
               >
-                {category.icon}
-                {category.title}
+                {category}
               </button>
             ))}
           </nav>
@@ -3155,6 +3314,23 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
                     .map((service) => renderServiceCard(service))}
                 </div>
               </div>
+
+              {selectedProvider.role === "Contractor" &&
+                selectedProvider.contractorId && (
+                  <div className="seller-section" style={{ marginTop: 24 }}>
+                    <button
+                      className="btn-secondary"
+                      onClick={() =>
+                        onNavigate(
+                          `contractors/${selectedProvider.contractorId}`,
+                        )
+                      }
+                      style={{ minHeight: 44, padding: "0 16px" }}
+                    >
+                      View Full Profile
+                    </button>
+                  </div>
+                )}
             </div>
           </div>
         </div>

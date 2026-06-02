@@ -6,7 +6,7 @@ import {
   useStripe,
   useElements,
 } from "@stripe/react-stripe-js";
-import { Button } from "@/components/Button";
+import { Button } from "../../components/Button";
 import { FaLock, FaRegCreditCard } from "react-icons/fa";
 
 interface StripeCardFormProps {

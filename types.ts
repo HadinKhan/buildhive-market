@@ -111,7 +111,8 @@ export interface Product {
   variants?: ProductVariant[];
   // Frontend display props
   author?: string; // business_name for display
-  rating?: number;
+  rating?: string | number;
+  review_count?: number;
   sales?: number; // total_orders count
 }
 
@@ -333,6 +334,67 @@ export interface PortfolioItem {
   display_order: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface ContractorSummary {
+  id: string;
+  userId?: string;
+  businessId?: string;
+  name: string;
+  trade: string;
+  category?: string;
+  bio: string;
+  rating: number;
+  reviewCount: number;
+  location: string;
+  city?: string;
+  verified: boolean;
+  servicesCount: number;
+  startingPrice?: number;
+  availableNow?: boolean;
+  memberSince?: string;
+  responseTime?: string;
+  avatar?: string | null;
+  image?: string | null;
+  featured?: boolean;
+  skills?: string[];
+}
+
+export interface ContractorServiceOffer {
+  id: string;
+  title: string;
+  description: string;
+  price: number;
+  deliveryTime?: string;
+  rating: number;
+  reviewCount: number;
+  image?: string | null;
+}
+
+export interface ContractorPortfolioEntry {
+  id: string;
+  title: string;
+  description?: string;
+  image?: string | null;
+  createdAt?: string;
+}
+
+export interface ContractorReviewEntry {
+  id: string;
+  reviewerName: string;
+  rating: number;
+  comment: string;
+  createdAt?: string;
+}
+
+export interface ContractorProfile extends ContractorSummary {
+  about?: string;
+  skills: string[];
+  responseRate?: string;
+  avgResponseTime?: string;
+  portfolio: ContractorPortfolioEntry[];
+  services: ContractorServiceOffer[];
+  reviews: ContractorReviewEntry[];
 }
 
 // =============================================

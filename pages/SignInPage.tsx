@@ -4,6 +4,7 @@ import { Button } from "../components/Button";
 import { useAuth } from "../src/context/AuthContext";
 import { signInPageData } from "../src/data/signInPageData";
 import { authPageStyles } from "../src/styles/authPageStyles";
+import { useNavigate } from "react-router-dom";
 
 interface SignInPageProps {
   onNavigate: (page: string) => void;
@@ -15,6 +16,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({
   onLogin,
 }) => {
   const { login } = useAuth();
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -35,8 +37,11 @@ export const SignInPage: React.FC<SignInPageProps> = ({
 
     try {
       await login({ email, password });
-      // Success - Context will update, user will see logged in state
-      onNavigate("home");
+      // Success - Context will update and persist token to localStorage
+      const returnUrl = new URLSearchParams(window.location.search).get(
+        "returnUrl",
+      );
+      navigate(returnUrl || "/");
     } catch (err: any) {
       setError(err.message || "Invalid email or password");
     } finally {
@@ -59,7 +64,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({
       setResetError(
         err.response?.data?.message ||
           err.response?.data?.error ||
-          "Failed to send reset email"
+          "Failed to send reset email",
       );
     } finally {
       setResetLoading(false);
@@ -93,7 +98,9 @@ export const SignInPage: React.FC<SignInPageProps> = ({
 
         <form onSubmit={handleSubmit}>
           <div className="auth-field">
-            <label className="auth-label">{signInPageData.form.emailLabel}</label>
+            <label className="auth-label">
+              {signInPageData.form.emailLabel}
+            </label>
             <div className="auth-input-wrap">
               <Icons.Mail className="auth-icon" />
               <input
@@ -108,7 +115,9 @@ export const SignInPage: React.FC<SignInPageProps> = ({
           </div>
 
           <div className="auth-field">
-            <label className="auth-label">{signInPageData.form.passwordLabel}</label>
+            <label className="auth-label">
+              {signInPageData.form.passwordLabel}
+            </label>
             <div className="auth-input-wrap">
               <Icons.Lock className="auth-icon" />
               <input
@@ -136,9 +145,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({
 
           <div className="auth-actions">
             <label className="auth-check">
-              <input
-                type="checkbox"
-              />
+              <input type="checkbox" />
               <span>{signInPageData.form.rememberMe}</span>
             </label>
             <button
@@ -151,7 +158,9 @@ export const SignInPage: React.FC<SignInPageProps> = ({
           </div>
 
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? signInPageData.form.submitLoading : signInPageData.form.submitIdle}
+            {loading
+              ? signInPageData.form.submitLoading
+              : signInPageData.form.submitIdle}
           </Button>
         </form>
 
@@ -189,10 +198,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({
 
         <div className="auth-bottom">
           {signInPageData.bottomText.prefix}{" "}
-          <span
-            onClick={() => onNavigate("get-started")}
-            className="auth-link"
-          >
+          <span onClick={() => onNavigate("get-started")} className="auth-link">
             {signInPageData.bottomText.action}
           </span>
         </div>
@@ -237,7 +243,9 @@ export const SignInPage: React.FC<SignInPageProps> = ({
 
                 <form onSubmit={handleForgotPassword}>
                   <div className="auth-field">
-                    <label className="auth-label">{signInPageData.form.emailLabel}</label>
+                    <label className="auth-label">
+                      {signInPageData.form.emailLabel}
+                    </label>
                     <div className="auth-input-wrap">
                       <Icons.Mail className="auth-icon" />
                       <input
@@ -252,7 +260,11 @@ export const SignInPage: React.FC<SignInPageProps> = ({
                   </div>
 
                   <div className="auth-form-actions">
-                    <button type="button" onClick={closeForgotPasswordModal} className="btn-cancel">
+                    <button
+                      type="button"
+                      onClick={closeForgotPasswordModal}
+                      className="btn-cancel"
+                    >
                       {signInPageData.forgotPassword.cancel}
                     </button>
                     <Button
@@ -260,7 +272,9 @@ export const SignInPage: React.FC<SignInPageProps> = ({
                       className="btn-submit"
                       disabled={resetLoading}
                     >
-                      {resetLoading ? signInPageData.forgotPassword.submitLoading : signInPageData.forgotPassword.submitIdle}
+                      {resetLoading
+                        ? signInPageData.forgotPassword.submitLoading
+                        : signInPageData.forgotPassword.submitIdle}
                     </Button>
                   </div>
                 </form>
