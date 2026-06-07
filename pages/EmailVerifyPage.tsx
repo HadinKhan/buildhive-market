@@ -1,29 +1,87 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { authService } from "../src/services/authService";
 
 export default function EmailVerifyPage() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token") || "";
+  const redirectedResult = useMemo(() => {
+    const resultStatus = searchParams.get("status")?.trim();
+    const verified = searchParams.get("verified")?.trim();
+
+    if (verified === "true") {
+      return {
+        status: "success" as const,
+        message:
+          searchParams.get("message")?.trim() ||
+          "Email verified successfully.",
+      };
+    }
+
+    if (resultStatus !== "success" && resultStatus !== "error") {
+      return null;
+    }
+
+    return {
+      status: resultStatus,
+      message:
+        searchParams.get("message")?.trim() ||
+        (resultStatus === "success"
+          ? "Email verified successfully."
+          : "Verification failed. Please request a new link."),
+    };
+  }, [searchParams]);
   const [status, setStatus] = useState<"loading" | "success" | "error">(
     "loading",
   );
+  const [message, setMessage] = useState("Please wait.");
   const navigate = useNavigate();
 
   useEffect(() => {
+    let timer: number | undefined;
+    let cancelled = false;
+
+    if (redirectedResult) {
+      setStatus(redirectedResult.status);
+      setMessage(redirectedResult.message);
+
+      if (redirectedResult.status === "success") {
+        timer = window.setTimeout(() => navigate("/signin"), 3000);
+      }
+
+      return () => {
+        cancelled = true;
+        if (timer) window.clearTimeout(timer);
+      };
+    }
+
     if (!token) {
       setStatus("error");
+      setMessage("Verification token is missing or invalid.");
       return;
     }
 
     authService
       .verifyEmail(token)
-      .then(() => {
+      .then((apiMessage) => {
+        if (cancelled) return;
         setStatus("success");
-        setTimeout(() => navigate("/signin"), 3000);
+        setMessage(apiMessage || "Email verified successfully.");
+        timer = window.setTimeout(() => navigate("/signin"), 3000);
       })
-      .catch(() => setStatus("error"));
-  }, [navigate, token]);
+      .catch((error) => {
+        if (cancelled) return;
+        setStatus("error");
+        setMessage(
+          error?.message || "Verification failed. Please request a new link.",
+        );
+      });
+
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [navigate, redirectedResult, token]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
@@ -34,7 +92,7 @@ export default function EmailVerifyPage() {
             <h2 className="text-2xl font-semibold text-gray-900">
               Verifying your email...
             </h2>
-            <p className="mt-2 text-sm text-gray-500">Please wait.</p>
+            <p className="mt-2 text-sm text-gray-500">{message}</p>
           </>
         )}
         {status === "success" && (
@@ -44,7 +102,7 @@ export default function EmailVerifyPage() {
               Email Verified!
             </h2>
             <p className="mt-2 text-sm text-gray-500">
-              Your account is now active. Redirecting to sign in...
+              {message} Redirecting to sign in...
             </p>
           </>
         )}
@@ -55,7 +113,7 @@ export default function EmailVerifyPage() {
               Verification Failed
             </h2>
             <p className="mt-2 mb-6 text-sm text-gray-500">
-              Link may be invalid or expired.
+              {message}
             </p>
             <button
               onClick={() => navigate("/signin")}

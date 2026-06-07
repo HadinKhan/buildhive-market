@@ -617,6 +617,7 @@ const AppContent: React.FC = () => {
         <Route path="/reset-password" element={<ResetPasswordPage />} />
 
         <Route path="/verify-email" element={<EmailVerifyPage />} />
+        <Route path="/auth/verify-email" element={<EmailVerifyPage />} />
 
         <Route
           path="/get-started"
