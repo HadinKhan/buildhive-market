@@ -1,4 +1,5 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "";
 
 type ImageSource = {
   images?: Array<{ image_url?: string | null }>;
@@ -32,6 +33,11 @@ export const resolveMarketplaceImageSrc = (source: ImageSource | null | undefine
 
   if (rawImage.startsWith("/")) {
     return `${API_BASE_URL}${rawImage}`;
+  }
+
+  if (SUPABASE_URL && /^(product-images|products|public)\//i.test(rawImage)) {
+    const cleanPath = rawImage.replace(/^public\//i, "");
+    return `${SUPABASE_URL.replace(/\/+$/, "")}/storage/v1/object/public/${cleanPath}`;
   }
 
   return rawImage;

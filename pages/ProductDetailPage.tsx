@@ -3,6 +3,7 @@ import { Icons } from "../components/Icons";
 import { Button } from "../components/Button";
 import { Product } from "../types";
 import api from "../src/services/api";
+import { productService } from "../src/services/productService";
 import { useNavigate } from "react-router-dom";
 import {
   getMarketplaceInitials,
@@ -21,6 +22,9 @@ interface ProductReview {
   name?: string;
   created_at?: string;
   createdAt?: string;
+  verified_purchase?: boolean;
+  seller_response?: string;
+  responses?: Array<{ response_text?: string; response_type?: string }>;
 }
 
 interface ProductDetailPageProps {
@@ -45,20 +49,38 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [reviewsError, setReviewsError] = useState<string | null>(null);
 
-  const gallerySource =
-    (product as any).images || (product as any).product_images || [];
+  const gallerySource = [
+    ...(((product as any).product_images || []) as any[]),
+    ...(((product as any).images || []) as any[]),
+  ];
 
   const galleryImages = useMemo(
     () =>
-      gallerySource
-        .filter(
-          (img) => img.product_id === product.id && Boolean(img.image_url),
-        )
-        .sort((a, b) => a.display_order - b.display_order)
-        .map((img) => resolveMarketplaceImageSrc(img) || img.image_url || "")
-        .filter(Boolean),
-    [gallerySource, product.id],
+      Array.from(
+        new Set(
+          gallerySource
+            .sort((a, b) => Number(a?.display_order || 0) - Number(b?.display_order || 0))
+            .map((img) =>
+              resolveMarketplaceImageSrc(img) ||
+              img?.image_url ||
+              img?.imageUrl ||
+              img?.url ||
+              (typeof img === "string" ? img : ""),
+            )
+            .filter(Boolean),
+        ),
+      ),
+    [gallerySource],
   );
+  const productReviews = ((product as any).reviews || (product as any).product_reviews || []) as ProductReview[];
+  const productQuestions = ((product as any).questions || (product as any).q_and_a || []) as any[];
+  const productTimeline = ((product as any).timeline || (product as any).timeline_events || []) as any[];
+  const productTags = Array.isArray((product as any).tags)
+    ? (product as any).tags
+    : String((product as any).tags || "")
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean);
   const activeImage =
     galleryImages[selectedImage] ||
     galleryImages[0] ||
@@ -77,11 +99,8 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       try {
         setReviewsLoading(true);
         setReviewsError(null);
-        const response = await api.get(`/products/${product.id}/reviews`);
-        const data = Array.isArray(response.data)
-          ? response.data
-          : response.data?.data || response.data?.reviews || [];
-        setReviews(data);
+        const data = await productService.getProductReviews(product.id);
+        setReviews(data.length ? data : productReviews);
       } catch (error) {
         console.error("Failed to load reviews:", error);
         setReviewsError("Failed to load reviews.");
@@ -262,8 +281,24 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 </span>
               </div>
               <span className="text-gray-400">
-                ({product.sales || 0} reviews)
+                ({(product as any).total_reviews || (product as any).review_count || reviews.length || product.sales || 0} reviews)
               </span>
+            </div>
+
+            <div className="mb-6 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+              {[
+                ["SKU", (product as any).sku || "N/A"],
+                ["Barcode", (product as any).barcode || "N/A"],
+                ["Status", (product as any).status || "N/A"],
+                ["Featured", (product as any).is_featured ? "Yes" : "No"],
+                ["Low Stock", (product as any).low_stock_threshold ?? "N/A"],
+                ["Weight", (product as any).weight ? `${(product as any).weight} ${(product as any).weight_unit || ""}` : "N/A"],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-2xl border border-gray-100 bg-gray-50 p-3">
+                  <div className="text-xs font-bold uppercase text-gray-400">{label}</div>
+                  <div className="mt-1 font-semibold text-gray-900">{String(value)}</div>
+                </div>
+              ))}
             </div>
 
             <div className="mb-8 text-3xl font-bold text-gray-900">
@@ -373,27 +408,74 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                       <li>All-weather protection</li>
                       <li>1 Year Manufacturer Warranty</li>
                     </ul>
+                    {productTags.length > 0 && (
+                      <div>
+                        <h3 className="font-bold text-gray-900">Tags</h3>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {productTags.map((tag) => (
+                            <span key={String(tag)} className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
+                              {String(tag)}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
                 {activeTab === "Specs" && (
                   <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div className="font-medium text-gray-900">Weight</div>
-                    <div className="text-gray-500">15 kg</div>
-                    <div className="font-medium text-gray-900">Dimensions</div>
-                    <div className="text-gray-500">45 x 30 x 20 cm</div>
-                    <div className="font-medium text-gray-900">Material</div>
-                    <div className="text-gray-500">
-                      Reinforced Steel / Composite
-                    </div>
-                    <div className="font-medium text-gray-900">Origin</div>
-                    <div className="text-gray-500">Imported</div>
+                    {[
+                      ["SKU", (product as any).sku || "N/A"],
+                      ["Barcode", (product as any).barcode || "N/A"],
+                      ["Weight", (product as any).weight ? `${(product as any).weight} ${(product as any).weight_unit || ""}` : "N/A"],
+                      ["Cost Price", (product as any).cost_per_item ? `PKR ${Number((product as any).cost_per_item).toLocaleString()}` : "N/A"],
+                      ["Compare At", (product as any).compare_at_price ? `PKR ${Number((product as any).compare_at_price).toLocaleString()}` : "N/A"],
+                      ["Low Stock Threshold", (product as any).low_stock_threshold ?? "N/A"],
+                      ["Track Quantity", (product as any).track_quantity ? "Yes" : "No"],
+                      ["Requires Shipping", (product as any).requires_shipping ? "Yes" : "No"],
+                      ["Created", (product as any).created_at ? new Date((product as any).created_at).toLocaleDateString() : "N/A"],
+                      ["Updated", (product as any).updated_at ? new Date((product as any).updated_at).toLocaleDateString() : "N/A"],
+                    ].map(([label, value]) => (
+                      <React.Fragment key={label}>
+                        <div className="font-medium text-gray-900">{label}</div>
+                        <div className="text-gray-500">{String(value)}</div>
+                      </React.Fragment>
+                    ))}
                   </div>
                 )}
                 {activeTab === "Guide" && (
-                  <p className="text-sm text-gray-500">
-                    User manuals and safety guides are available for download
-                    after purchase.
-                  </p>
+                  <div className="space-y-5 text-sm text-gray-500">
+                    <p>User manuals and safety guides are available for download after purchase.</p>
+                    <div>
+                      <h3 className="font-bold text-gray-900">Q&A</h3>
+                      {productQuestions.length === 0 ? (
+                        <p className="mt-2">No questions yet.</p>
+                      ) : (
+                        productQuestions.map((item, index) => (
+                          <div key={item.id || index} className="mt-3 rounded-2xl border border-gray-100 p-4">
+                            <p className="font-semibold text-gray-900">{item.question}</p>
+                            <p>{item.answer || "No answer yet."}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-gray-900">Timeline</h3>
+                      {productTimeline.length === 0 ? (
+                        <p className="mt-2">No timeline entries yet.</p>
+                      ) : (
+                        productTimeline.map((item, index) => (
+                          <div key={item.id || index} className="mt-3 rounded-2xl border border-gray-100 p-4">
+                            <p className="font-semibold text-gray-900">{item.title || item.event_type || "Event"}</p>
+                            <p>{item.description || ""}</p>
+                            <p className="mt-1 text-xs text-gray-400">
+                              {item.created_at ? new Date(item.created_at).toLocaleString() : ""}
+                            </p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
                 )}
                 {activeTab === "Reviews" && (
                   <div className="space-y-4">
@@ -415,6 +497,12 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                           "Verified buyer";
                         const comment =
                           review.comment || review.body || review.title || "";
+                        const sellerResponse =
+                          review.seller_response ||
+                          review.responses?.find((response) =>
+                            ["seller", "admin"].includes(String(response.response_type || "")),
+                          )?.response_text ||
+                          review.responses?.[0]?.response_text;
 
                         return (
                           <div
@@ -437,10 +525,28 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                                 {Number(review.rating || 0).toFixed(1)}
                               </div>
                             </div>
+                            <div className="mt-2 flex items-center gap-2 text-xs text-gray-400">
+                              <span>
+                                {review.created_at || review.createdAt
+                                  ? new Date(review.created_at || review.createdAt || "").toLocaleDateString()
+                                  : "Recent review"}
+                              </span>
+                              {review.verified_purchase && (
+                                <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700">
+                                  Verified purchase
+                                </span>
+                              )}
+                            </div>
                             {comment && (
                               <p className="mt-3 text-sm leading-relaxed text-gray-600">
                                 {comment}
                               </p>
+                            )}
+                            {sellerResponse && (
+                              <div className="mt-3 rounded-xl bg-violet-50 p-3 text-sm text-violet-800">
+                                <span className="font-bold">Seller response: </span>
+                                {sellerResponse}
+                              </div>
                             )}
                           </div>
                         );

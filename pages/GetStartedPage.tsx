@@ -52,8 +52,8 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
         role: formData.accountType as "buyer" | "contractor" | "supplier",
         termsAccepted: formData.termsAccepted,
       });
-      // Success - User is now logged in
-      onNavigate("home");
+      onRegister(formData.name, formData.email);
+      onNavigate("signin");
     } catch (err: any) {
       setError(err.message || "Registration failed");
     } finally {

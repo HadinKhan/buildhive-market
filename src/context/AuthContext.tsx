@@ -308,9 +308,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         throw new Error("Invalid user returned from login");
       }
 
+      if (!authData.accessToken) {
+        throw new Error("Login did not return an access token");
+      }
+
       syncAuthState({
         token: authData.accessToken,
-        refreshToken: authData.refreshToken,
+        refreshToken: authData.refreshToken ?? null,
         user: normalizedUser,
       });
     },
@@ -319,20 +323,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const register = useCallback(
     async (data: RegisterData): Promise<void> => {
-      const authData: AuthResponse = await authService.register(data);
-      const normalizedUser = normalizeUser(authData.user);
-
-      if (!normalizedUser) {
-        throw new Error("Invalid user returned from registration");
-      }
-
-      syncAuthState({
-        token: authData.accessToken,
-        refreshToken: authData.refreshToken,
-        user: normalizedUser,
-      });
+      await authService.register(data);
     },
-    [syncAuthState],
+    [],
   );
 
   const value = useMemo<AuthContextType>(

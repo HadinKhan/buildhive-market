@@ -38,8 +38,10 @@ export interface AuthResponse {
     emailVerified: boolean;
     profileImage: string | null;
   };
-  accessToken: string;
-  refreshToken: string;
+  accessToken?: string;
+  refreshToken?: string;
+  accountStatus?: string;
+  requiresAdminApproval?: boolean;
 }
 
 export interface ForgotPasswordData {
@@ -71,11 +73,8 @@ class AuthService {
    */
   async register(data: RegisterData): Promise<AuthResponse> {
     const response = await api.post<ApiResponse<AuthResponse>>('/auth/register', data);
-    
-    if (response.data.success && response.data.data.accessToken) {
-      // Store authentication data
-      this.storeAuthData(response.data.data);
-    }
+
+    this.clearAuthData();
     
     return response.data.data;
   }
@@ -175,12 +174,18 @@ class AuthService {
    * Store authentication data in cookies
    */
   private storeAuthData(authData: AuthResponse): void {
+    if (!authData.accessToken) {
+      return;
+    }
+
     tokenStorage.setToken(authData.accessToken);
     tokenStorage.setUserId(authData.user.id);
     
     // Store role, refresh token, and user data in cookies
     document.cookie = `user_role=${encodeURIComponent(authData.user.role)}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
-    document.cookie = `refresh_token=${encodeURIComponent(authData.refreshToken)}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
+    if (authData.refreshToken) {
+      document.cookie = `refresh_token=${encodeURIComponent(authData.refreshToken)}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
+    }
     document.cookie = `user_data=${encodeURIComponent(JSON.stringify(authData.user))}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
   }
 

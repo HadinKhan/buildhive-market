@@ -71,6 +71,11 @@ export interface Product {
     business_name: string;
   };
   product_images?: ProductImage[];
+  images?: ProductImage[];
+  reviews?: any[];
+  product_reviews?: any[];
+  questions?: any[];
+  timeline?: any[];
 }
 
 // =============================================
@@ -86,7 +91,7 @@ export interface GetProductsParams {
   limit?: number;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
-  status?: 'approved' | 'pending' | 'rejected';
+  status?: 'approved' | 'pending' | 'rejected' | 'inactive' | 'draft';
   isActive?: boolean;
 }
 
@@ -195,9 +200,11 @@ class ProductService {
    * Get product reviews
    */
   async getProductReviews(productId: string): Promise<any[]> {
-    const response = await api.get<ApiResponse<any[]>>(`/products/${productId}/reviews`);
-    
-    return response.data.data;
+    const response = await api.get<ApiResponse<any>>(`/products/${productId}/reviews`);
+    const payload = response.data.data;
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.reviews)) return payload.reviews;
+    return [];
   }
 
   /**
