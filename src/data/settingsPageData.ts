@@ -71,7 +71,6 @@ export const settingsPageData = {
     ],
     currencies: [
       { value: "pkr", label: "Pakistani Rupee (₨)" },
-      { value: "usd", label: "US Dollar ($)" },
       { value: "aed", label: "UAE Dirham (د.إ)" },
       { value: "sar", label: "Saudi Riyal (﷼)" },
     ],
