@@ -48,8 +48,6 @@ export interface Address {
 export interface UpdateProfileData {
   full_name?: string;
   phone?: string;
-  date_of_birth?: string;
-  gender?: string;
   profile_image?: string;
 }
 
@@ -118,8 +116,13 @@ class UserService {
    */
   async updateProfile(userId: string, data: UpdateProfileData): Promise<UserProfile> {
     console.log('✏️ [UserService] Updating profile:', userId, data);
+
+    const apiData = {
+      fullName: data.full_name,
+      phone: data.phone,
+    };
     
-    const response = await api.put<ApiResponse<UserProfile>>(`/users/${userId}`, data);
+    const response = await api.put<ApiResponse<UserProfile>>(`/users/${userId}`, apiData);
     
     console.log('✅ [UserService] Profile updated');
     
