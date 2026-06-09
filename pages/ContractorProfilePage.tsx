@@ -17,14 +17,16 @@ interface HireFormState {
   title: string;
   description: string;
   budget: string;
-  timeline: string;
+  startDate: string;
+  deadline: string;
 }
 
 const emptyHireForm: HireFormState = {
   title: "",
   description: "",
   budget: "",
-  timeline: "",
+  startDate: "",
+  deadline: "",
 };
 
 const formatPrice = (value?: number): string => {
@@ -97,18 +99,17 @@ const HireModal: React.FC<{
 
     try {
       await api.post("/projects", {
-        contractorId: contractor.businessId || contractor.id,
-        preferredContractorId: contractor.businessId || contractor.id,
+        contractorId: contractor.userId || contractor.id,
         title: form.title,
         description: form.description,
         budget: Number(form.budget),
-        timeline: form.timeline,
+        startDate: form.startDate || undefined,
+        deadline: form.deadline || undefined,
       });
       toast.success("Project posted! The contractor has been notified.");
       onSuccess();
       onClose();
-    } catch (error) {
-      console.error("Failed to post project:", error);
+    } catch {
       toast.error("Unable to post the project right now.");
     } finally {
       setIsSubmitting(false);
@@ -168,16 +169,26 @@ const HireModal: React.FC<{
             />
           </label>
 
-          <label className="grid gap-2 text-sm font-semibold text-slate-200">
-            Timeline
-            <input
-              className="rounded-2xl border border-white/8 bg-white/5 px-4 py-3 text-white outline-none focus:border-violet-300/40"
-              value={form.timeline}
-              onChange={(event) => updateField("timeline", event.target.value)}
-              placeholder="2 weeks"
-              required
-            />
-          </label>
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="grid gap-2 text-sm font-semibold text-slate-200">
+              Start date
+              <input
+                className="rounded-2xl border border-white/8 bg-white/5 px-4 py-3 text-white outline-none focus:border-violet-300/40"
+                value={form.startDate}
+                onChange={(event) => updateField("startDate", event.target.value)}
+                type="date"
+              />
+            </label>
+            <label className="grid gap-2 text-sm font-semibold text-slate-200">
+              Deadline
+              <input
+                className="rounded-2xl border border-white/8 bg-white/5 px-4 py-3 text-white outline-none focus:border-violet-300/40"
+                value={form.deadline}
+                onChange={(event) => updateField("deadline", event.target.value)}
+                type="date"
+              />
+            </label>
+          </div>
 
           <div className="flex flex-wrap justify-end gap-3 pt-2">
             <Button variant="outline" type="button" onClick={onClose}>
@@ -218,8 +229,7 @@ export const ContractorProfilePage: React.FC = () => {
         if (!cancelled) {
           setProfile(contractor);
         }
-      } catch (error) {
-        console.error("Failed to load contractor profile:", error);
+      } catch {
         if (!cancelled) {
           setProfile(null);
         }
@@ -256,7 +266,21 @@ export const ContractorProfilePage: React.FC = () => {
       return;
     }
 
-    navigate(`/messages?participantId=${encodeURIComponent(profile.userId || profile.businessId || profile.id)}`);
+    void api
+      .post("/chat/conversations", {
+        participantId: profile.userId || profile.id,
+      })
+      .then((response) => {
+        const conversationId =
+          response.data?.data?.conversationId ||
+          response.data?.data?.id ||
+          response.data?.conversationId ||
+          response.data?.id;
+        navigate(`/messages${conversationId ? `?conversationId=${encodeURIComponent(conversationId)}` : ""}`);
+      })
+      .catch(() => {
+        toast.error("Unable to start the conversation right now.");
+      });
   };
 
   const orderService = (service: ContractorServiceOffer) => {
@@ -472,6 +496,12 @@ export const ContractorProfilePage: React.FC = () => {
                     </div>
                   </div>
                   <p className="mt-4 text-sm leading-7 text-slate-300">{review.comment}</p>
+                  {review.response && (
+                    <div className="mt-4 rounded-2xl border border-violet-300/10 bg-violet-300/8 p-4">
+                      <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-200">Contractor Response</p>
+                      <p className="mt-2 text-sm leading-6 text-slate-300">{review.response}</p>
+                    </div>
+                  )}
                 </article>
               ))}
             </div>

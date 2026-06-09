@@ -2050,6 +2050,7 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
   } = useFilters(products);
 
   const [searchParams, setSearchParams] = useSearchParams();
+  const activeTag = searchParams.get("tag") || "";
   const [activeCategory, setActiveCategory] = useState<string>(
     initialCategory || searchParams.get("categoryId") || "all",
   );
@@ -2063,6 +2064,8 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
   const [aiResults, setAiResults] = useState<Product[]>([]);
   const [aiSearchLabel, setAiSearchLabel] = useState("");
   const [toast, setToast] = useState<string | null>(null);
+  const [recentSearches, setRecentSearches] = useState<any[]>([]);
+  const [showSearchHistory, setShowSearchHistory] = useState(false);
   const [categoryNavSearch, setCategoryNavSearch] = useState("");
   const [categorySearches, setCategorySearches] = useState<
     Record<string, string>
@@ -2077,16 +2080,12 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
     },
   );
 
-  const hasFetchedRef = useRef(false);
-
   useEffect(() => {
-    if (hasFetchedRef.current) return;
-    hasFetchedRef.current = true;
-
     productService
       .getProducts({
         status: "approved",
         limit: 20,
+        ...(activeTag ? { tag: activeTag } : {}),
       })
       .then((response) => {
         const prods = (response.products ||
@@ -2097,8 +2096,7 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
         setProductsError(null);
         setIsLoadingProducts(false);
       })
-      .catch((error) => {
-        console.error("Failed to load products:", error);
+      .catch(() => {
         setProducts([]);
         setProductsError("Products are unavailable right now.");
         setIsLoadingProducts(false);
@@ -2106,17 +2104,24 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
       .finally(() => {
         setIsLoadingProducts(false);
       });
-  }, []);
+  }, [activeTag]);
   const categoryProducts = useMemo(() => {
     let filtered =
       activeCategory === "all"
         ? filteredProducts
         : filteredProducts.filter((p) => p.category === activeCategory);
+    if (activeTag) {
+      filtered = filtered.filter((p) =>
+        (p.tags || []).some(
+          (tag) => tag.toLowerCase() === activeTag.toLowerCase(),
+        ),
+      );
+    }
     if (showWishlistOnly) {
       filtered = filtered.filter((p) => isInWishlist(p.id));
     }
     return filtered;
-  }, [activeCategory, filteredProducts, showWishlistOnly, isInWishlist]);
+  }, [activeCategory, activeTag, filteredProducts, showWishlistOnly, isInWishlist]);
 
   const displayedProducts = useMemo(() => {
     const startIdx = (filters.page - 1) * filters.itemsPerPage;
@@ -2176,6 +2181,11 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
     const trimmed = query.trim();
 
     if (trimmed.length > 2) {
+      if (isAuthenticated) {
+        api.get("/search", {
+          params: { q: trimmed, type: "products", limit: 10 },
+        }).catch(() => undefined);
+      }
       try {
         const result = await aiService.searchProducts(trimmed, 20);
         const items = Array.isArray(result?.results) ? result.results : [];
@@ -2195,6 +2205,28 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
     setUseAiSearch(false);
     setAiResults([]);
     setAiSearchLabel("");
+  };
+
+  const loadSearchHistory = async () => {
+    if (!isAuthenticated) return;
+    try {
+      const response = await api.get("/search/history", {
+        params: { limit: 8 },
+      });
+      setRecentSearches(response.data?.data?.searches || []);
+    } catch {
+      setRecentSearches([]);
+    }
+  };
+
+  const clearSearchHistory = async () => {
+    try {
+      await api.delete("/search/history");
+      setRecentSearches([]);
+    } catch {
+      setToast("Failed to clear search history.");
+      setTimeout(() => setToast(null), 2000);
+    }
   };
 
   const toCartProduct = (product: Product): CartProduct => ({
@@ -2234,28 +2266,26 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
 
   const handleAddToCart = async (product: Product) => {
     if (!user) {
-      navigate("/signin");
+      navigate(
+        `/signin?returnUrl=${encodeURIComponent(
+          `${window.location.pathname}${window.location.search}`,
+        )}`,
+      );
       return;
     }
 
     try {
-      // Add to backend cart
-      const sellerId = product.seller_id || product.business_id;
-      await api.post("/cart", {
-        product_id: product.id,
-        quantity: 1,
-        seller_id: sellerId,
-      });
-
+      if (onAddToCart) {
+        await Promise.resolve(onAddToCart(toCartProduct(product), 1));
+      } else {
+        await api.post("/cart", {
+          productId: product.id,
+          quantity: 1,
+        });
+      }
       setToast(`${product.name} added to cart`);
       setTimeout(() => setToast(null), 2000);
-
-      // Also call the prop handler if provided (for page-based navigation)
-      if (onAddToCart) {
-        onAddToCart(toCartProduct(product), 1);
-      }
     } catch (error) {
-      console.error("Failed to add to cart:", error);
       setToast("Failed to add to cart. Please try again.");
       setTimeout(() => setToast(null), 2000);
     }
@@ -2356,8 +2386,8 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
       try {
         const res = await api.get(`/business/${businessId}`);
         business = res.data?.data || res.data || business;
-      } catch (error) {
-        console.error("Failed to fetch business profile:", error);
+      } catch {
+        business = null;
       }
     }
 
@@ -3336,7 +3366,44 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
                   placeholder="Search products, sellers, or tags"
                   value={searchQuery}
                   onChange={(event) => void handleSearch(event.target.value)}
+                  onFocus={() => {
+                    setShowSearchHistory(true);
+                    void loadSearchHistory();
+                  }}
                 />
+                {isAuthenticated && showSearchHistory && recentSearches.length > 0 && (
+                  <div className="absolute left-0 top-full z-20 mt-2 w-full rounded-2xl border border-gray-200 bg-white p-2 shadow-xl">
+                    <div className="flex items-center justify-between px-3 py-2">
+                      <span className="text-xs font-bold uppercase text-gray-400">
+                        Recent searches
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void clearSearchHistory()}
+                        className="text-xs font-semibold text-red-500"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    {recentSearches.map((item) => {
+                      const query = item.query_text || item.query || "";
+                      return (
+                        <button
+                          key={item.id || query}
+                          type="button"
+                          onClick={() => {
+                            setShowSearchHistory(false);
+                            void handleSearch(query);
+                          }}
+                          className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                        >
+                          <Icons.Search className="h-4 w-4 text-gray-400" />
+                          {query}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
               <span className="results-summary">
                 {useAiSearch

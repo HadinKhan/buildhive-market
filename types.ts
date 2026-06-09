@@ -384,6 +384,7 @@ export interface ContractorReviewEntry {
   reviewerName: string;
   rating: number;
   comment: string;
+  response?: string;
   createdAt?: string;
 }
 

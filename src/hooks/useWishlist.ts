@@ -1,5 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
-import { userService } from '../services/userService';
+import { useCallback, useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { userService } from "../services/userService";
 
 export interface WishlistItem {
   productId: string;
@@ -10,108 +12,101 @@ export interface WishlistItem {
   price: number;
 }
 
-const WISHLIST_KEY = 'buildhive_wishlist';
+const mapWishlistItem = (item: any): WishlistItem => {
+  const product = item.product || item.products || item;
+  return {
+    productId: item.product_id || product.id,
+    addedAt: item.created_at ? new Date(item.created_at) : new Date(),
+    category:
+      product.categories?.slug ||
+      product.categories?.name ||
+      product.category_id ||
+      product.category ||
+      "products",
+    productName: product.name || item.product_name || "Product",
+    image:
+      product.product_images?.[0]?.image_url ||
+      product.images?.[0]?.image_url ||
+      product.image_url ||
+      product.image ||
+      "",
+    price: Number(product.price || item.price || 0),
+  };
+};
 
 export const useWishlist = () => {
+  const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [wishlist, setWishlist] = useState<WishlistItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load wishlist from localStorage on mount
-  useEffect(() => {
-    let cancelled = false;
-    try {
-      userService
-        .getWishlist()
-        .then((items) => {
-          if (cancelled) return;
-          setWishlist(
-            items.map((item: any) => {
-              const product = item.product || item.products || item;
-              return {
-                productId: item.product_id || product.id,
-                addedAt: item.created_at ? new Date(item.created_at) : new Date(),
-                category: product.category_id || product.category || "products",
-                productName: product.name || item.product_name || "Product",
-                image: product.product_images?.[0]?.image_url || product.images?.[0]?.image_url || product.image || "",
-                price: product.price || item.price || 0,
-              };
-            })
-          );
-        })
-        .catch(() => {
-          const stored = localStorage.getItem(WISHLIST_KEY);
-          if (stored && !cancelled) {
-            setWishlist(JSON.parse(stored));
-          }
-        })
-        .finally(() => {
-          if (!cancelled) setIsLoading(false);
-        });
-    } catch (error) {
-      console.error('Failed to load wishlist:', error);
-    }
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const requireAuth = useCallback(() => {
+    if (isAuthenticated) return true;
+    const returnUrl = `${location.pathname}${location.search}`;
+    navigate(`/signin?returnUrl=${encodeURIComponent(returnUrl)}`);
+    return false;
+  }, [isAuthenticated, location.pathname, location.search, navigate]);
 
-  // Save wishlist to localStorage whenever it changes
-  useEffect(() => {
-    if (!isLoading) {
-      try {
-        localStorage.setItem(WISHLIST_KEY, JSON.stringify(wishlist));
-      } catch (error) {
-        console.error('Failed to save wishlist:', error);
-      }
+  const reloadWishlist = useCallback(async () => {
+    if (!isAuthenticated) {
+      setWishlist([]);
+      setIsLoading(false);
+      return;
     }
-  }, [wishlist, isLoading]);
+
+    setIsLoading(true);
+    try {
+      const items = await userService.getWishlist();
+      setWishlist(items.map(mapWishlistItem));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    void reloadWishlist();
+  }, [reloadWishlist]);
 
   const addToWishlist = useCallback(
-    (item: WishlistItem) => {
-      setWishlist((prev) => {
-        const exists = prev.find((w) => w.productId === item.productId);
-        if (exists) return prev;
-        userService.addToWishlist(item.productId).catch((error) => {
-          console.error('Failed to add wishlist item:', error);
-        });
-        return [...prev, { ...item, addedAt: new Date() }];
-      });
+    async (item: WishlistItem) => {
+      if (!requireAuth()) return;
+      await userService.addToWishlist(item.productId);
+      await reloadWishlist();
     },
-    []
+    [reloadWishlist, requireAuth],
   );
 
-  const removeFromWishlist = useCallback((productId: string) => {
-    userService.removeFromWishlist(productId).catch((error) => {
-      console.error('Failed to remove wishlist item:', error);
-    });
-    setWishlist((prev) => prev.filter((w) => w.productId !== productId));
-  }, []);
+  const removeFromWishlist = useCallback(
+    async (productId: string) => {
+      if (!requireAuth()) return;
+      await userService.removeFromWishlist(productId);
+      setWishlist((prev) => prev.filter((w) => w.productId !== productId));
+    },
+    [requireAuth],
+  );
 
   const toggleWishlist = useCallback(
-    (item: WishlistItem) => {
+    async (item: WishlistItem) => {
       const exists = wishlist.some((w) => w.productId === item.productId);
       if (exists) {
-        removeFromWishlist(item.productId);
+        await removeFromWishlist(item.productId);
       } else {
-        addToWishlist(item);
+        await addToWishlist(item);
       }
     },
-    [wishlist, addToWishlist, removeFromWishlist]
+    [addToWishlist, removeFromWishlist, wishlist],
   );
 
   const isInWishlist = useCallback(
     (productId: string) => wishlist.some((w) => w.productId === productId),
-    [wishlist]
+    [wishlist],
   );
 
   const getWishlistByCategory = useCallback(
     (category: string) => wishlist.filter((w) => w.category === category),
-    [wishlist]
+    [wishlist],
   );
-
-  const clearWishlist = useCallback(() => {
-    setWishlist([]);
-  }, []);
 
   return {
     wishlist,
@@ -121,7 +116,8 @@ export const useWishlist = () => {
     toggleWishlist,
     isInWishlist,
     getWishlistByCategory,
-    clearWishlist,
+    clearWishlist: () => setWishlist([]),
     wishlistCount: wishlist.length,
+    reloadWishlist,
   };
 };

@@ -1,21 +1,18 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { toast } from "react-toastify";
 import { Icons } from "../components/Icons";
 import { Button } from "../components/Button";
 import { User } from "../types";
 import { useAuth } from "../src/context/AuthContext";
-import apiClient from "../src/services/api";
+import api from "../src/services/api";
+import { authService } from "../src/services/authService";
 import {
-  userService,
-  UserProfile,
-  UpdateProfileData,
   Address,
   CreateAddressData,
+  UpdateProfileData,
+  userService,
 } from "../src/services/userService";
-import {
-  Order,
-  OrderTracking,
-  orderService,
-} from "../src/services/orderService";
 
 interface AccountPageProps {
   user: User;
@@ -23,2425 +20,1213 @@ interface AccountPageProps {
   onLogout: () => void;
 }
 
-export const AccountPage: React.FC<AccountPageProps> = ({
-  user,
-  onNavigate,
-  onLogout,
-}) => {
+type TabId =
+  | "overview"
+  | "orders"
+  | "active"
+  | "saved"
+  | "finance"
+  | "projects"
+  | "disputes"
+  | "support"
+  | "profile"
+  | "addresses";
+
+type ModalState =
+  | null
+  | { type: "order"; order: any }
+  | { type: "refund"; order: any }
+  | { type: "project"; project: any }
+  | { type: "project-form" }
+  | { type: "dispute-form"; order?: any }
+  | { type: "dispute"; dispute: any }
+  | { type: "ticket"; ticket: any }
+  | { type: "ticket-form" }
+  | { type: "confirm"; title: string; message: string; onConfirm: () => void };
+
+const tabs: Array<{ id: TabId; label: string; icon: React.ElementType }> = [
+  { id: "overview", label: "Overview", icon: Icons.Dashboard },
+  { id: "orders", label: "Purchase History", icon: Icons.Package },
+  { id: "active", label: "Active Orders", icon: Icons.Truck },
+  { id: "saved", label: "Saved Items", icon: Icons.Heart },
+  { id: "finance", label: "Financial Overview", icon: Icons.Wallet },
+  { id: "projects", label: "My Projects", icon: Icons.Briefcase },
+  { id: "disputes", label: "My Disputes", icon: Icons.AlertCircle },
+  { id: "support", label: "Support", icon: Icons.HelpCircle },
+  { id: "profile", label: "Profile & Settings", icon: Icons.Settings },
+  { id: "addresses", label: "My Addresses", icon: Icons.MapPin },
+];
+
+const emptyAddress: CreateAddressData = {
+  address_type: "shipping",
+  full_name: "",
+  phone: "",
+  address_line1: "",
+  address_line2: "",
+  city: "",
+  state: "",
+  postal_code: "",
+  country: "Pakistan",
+  is_default: false,
+};
+
+const unwrap = (payload: any) => payload?.data?.data ?? payload?.data ?? payload ?? {};
+const asArray = (value: any, keys: string[] = []) => {
+  if (Array.isArray(value)) return value;
+  for (const key of keys) {
+    const candidate = value?.[key];
+    if (Array.isArray(candidate)) return candidate;
+  }
+  return [];
+};
+const text = (value: any, fallback = "") => String(value ?? fallback);
+const money = (value: any) => `PKR ${Number(value || 0).toLocaleString("en-PK")}`;
+const dateLabel = (value?: string) => {
+  if (!value) return "N/A";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString();
+};
+const statusClass = (status: string) => {
+  const value = status.toLowerCase();
+  if (/delivered|completed|approved|accepted|resolved|paid/.test(value)) return "bg-emerald-50 text-emerald-700 border-emerald-100";
+  if (/cancelled|rejected|failed|refunded/.test(value)) return "bg-red-50 text-red-700 border-red-100";
+  if (/processing|confirmed|in_progress|shipped|requested/.test(value)) return "bg-blue-50 text-blue-700 border-blue-100";
+  return "bg-amber-50 text-amber-700 border-amber-100";
+};
+const StatusBadge = ({ status }: { status: string }) => (
+  <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold capitalize ${statusClass(status)}`}>
+    {status.replace(/_/g, " ")}
+  </span>
+);
+
+const accountOutlineButton =
+  "!border-violet-300 !bg-white !text-violet-800 hover:!border-violet-500 hover:!bg-violet-50 hover:!text-violet-950";
+const accountDangerButton =
+  "!border-red-300 !bg-white !text-red-700 hover:!border-red-500 hover:!bg-red-50 hover:!text-red-800";
+
+export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLogout }) => {
+  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
   const { refreshUser } = useAuth();
+  const activeTab = (params.get("tab") as TabId) || "overview";
+  const setActiveTab = (tab: TabId) => setParams({ tab });
 
-  // Orders state for dashboard and orders tab
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [ordersLoading, setOrdersLoading] = useState(true);
-  const [ordersError, setOrdersError] = useState<string | null>(null);
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
-  const [orderTracking, setOrderTracking] = useState<OrderTracking | null>(
-    null,
-  );
-  const [trackingLoading, setTrackingLoading] = useState(false);
-  const [reviewedProducts, setReviewedProducts] = useState<
-    Record<string, boolean>
-  >({});
-  const [reviewModalOpen, setReviewModalOpen] = useState(false);
-  const [reviewTarget, setReviewTarget] = useState<{
-    productId: string;
-    productName: string;
-  } | null>(null);
-  const [reviewSubmitting, setReviewSubmitting] = useState(false);
-  const [reviewError, setReviewError] = useState<string | null>(null);
-  const [reviewForm, setReviewForm] = useState({
-    rating: 5,
-    title: "",
-    body: "",
-  });
+  const [orders, setOrders] = useState<any[]>([]);
+  const [wishlist, setWishlist] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
-  const [loadingProjects, setLoadingProjects] = useState(false);
-  const [showPostProject, setShowPostProject] = useState(false);
   const [disputes, setDisputes] = useState<any[]>([]);
-  const [loadingDisputes, setLoadingDisputes] = useState(false);
-  const [disputeModal, setDisputeModal] = useState<{
-    open: boolean;
-    order: Order | null;
-  }>({ open: false, order: null });
-  const [disputeForm, setDisputeForm] = useState({
-    reason: "",
-    description: "",
-  });
-  const [submittingDispute, setSubmittingDispute] = useState(false);
-
-  useEffect(() => {
-    // Fetch orders for the logged-in user only
-    const fetchOrders = async () => {
-      setOrdersLoading(true);
-      setOrdersError(null);
-      try {
-        // Use the correct response shape: { orders, meta }
-        const data = await (
-          await import("../src/services/orderService")
-        ).orderService.getOrders();
-        const orders = Array.isArray(data.orders)
-          ? data.orders
-          : Array.isArray(data)
-            ? data
-            : [];
-
-        setOrders(orders);
-      } catch (err: any) {
-        setOrdersError("Failed to load orders");
-      } finally {
-        setOrdersLoading(false);
-      }
-    };
-    fetchOrders();
-  }, [user.id]);
-  const [activeTab, setActiveTab] = useState("dashboard");
-
-  useEffect(() => {
-    if (activeTab === "projects") {
-      void fetchProjects();
-    }
-
-    if (activeTab === "disputes") {
-      void fetchDisputes();
-    }
-  }, [activeTab]);
-
-  // Use user prop data directly instead of fetching from API to avoid 403 errors
-  // Handle both camelCase (from AuthContext) and snake_case (from types.ts) user objects
-  const profileImage = (user as any).profileImage || user.profile_image || null;
-  const fullName = (user as any).fullName || user.full_name || "";
-
-  const [profile, setProfile] = useState<UserProfile | null>({
-    id: user.id,
-    email: user.email,
-    full_name: fullName,
-    phone: user.phone,
-    role: user.role,
-    email_verified: true,
-    phone_verified: false,
-    profile_image: profileImage,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  });
-  const [profileLoading, setProfileLoading] = useState(false);
-  const [profileError, setProfileError] = useState<string | null>(null);
-  const [editProfile, setEditProfile] = useState<UpdateProfileData>({
-    full_name: fullName,
-    phone: user.phone,
-    profile_image: profileImage,
-  });
-
-  const [editLoading, setEditLoading] = useState(false);
-  const [editSuccess, setEditSuccess] = useState<string | null>(null);
-  const [editError, setEditError] = useState<string | null>(null);
-  const [profileImageUploading, setProfileImageUploading] = useState(false);
+  const [tickets, setTickets] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [trackingByOrder, setTrackingByOrder] = useState<Record<string, any>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [modal, setModal] = useState<ModalState>(null);
+  const [busy, setBusy] = useState("");
+  const [refundReason, setRefundReason] = useState("Damaged or incomplete order");
+  const [ticketMessage, setTicketMessage] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const orderStatusStep =
-    selectedOrder?.status === "processing"
-      ? 2
-      : selectedOrder?.status === "shipped"
-        ? 3
-        : selectedOrder?.status === "delivered"
-          ? 4
-          : 1;
 
-  // Address state
-  const [address, setAddress] = useState<Address | null>(null);
-  const [addressLoading, setAddressLoading] = useState(true);
-  const [editingAddress, setEditingAddress] = useState(false);
-  const [addressForm, setAddressForm] = useState<CreateAddressData>({
-    address_type: "shipping",
-    full_name: "",
-    phone: "",
-    address_line1: "",
-    address_line2: "",
-    city: "",
-    state: "",
-    postal_code: "",
-    country: "Pakistan",
-    is_default: true,
+  const [profileForm, setProfileForm] = useState<UpdateProfileData>({
+    full_name: (user as any).fullName || user.full_name || "",
+    phone: user.phone || "",
+    profile_image: (user as any).profileImage || user.profile_image || "",
   });
-  const [addressSaving, setAddressSaving] = useState(false);
-  const [addressSuccess, setAddressSuccess] = useState<string | null>(null);
-  const [addressError, setAddressError] = useState<string | null>(null);
-
-  // Status filter for orders page
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-
-  // Password change state
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: "",
     newPassword: "",
     confirmPassword: "",
   });
-  const [passwordLoading, setPasswordLoading] = useState(false);
-  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
-  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [addressForm, setAddressForm] = useState<CreateAddressData>(emptyAddress);
+  const [editingAddressId, setEditingAddressId] = useState("");
+  const [projectForm, setProjectForm] = useState({
+    title: "",
+    description: "",
+    budget: "",
+    startDate: "",
+    deadline: "",
+    milestones: [{ name: "", dueDate: "" }],
+  });
+  const [disputeForm, setDisputeForm] = useState({
+    relatedType: "order",
+    relatedId: "",
+    reason: "",
+    description: "",
+  });
+  const [ticketForm, setTicketForm] = useState({
+    subject: "",
+    description: "",
+    category: "general",
+    priority: "medium",
+  });
 
-  const handleProfileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setEditProfile({ ...editProfile, [e.target.name]: e.target.value });
-  };
-
-  const handleProfileSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setEditLoading(true);
-    setEditSuccess(null);
-    setEditError(null);
+  const loadAll = async () => {
+    setLoading(true);
+    setError("");
     try {
-      const updated = await userService.updateProfile(user.id, editProfile);
-      setProfile(updated);
-      setEditSuccess("Profile updated successfully.");
-    } catch (err: any) {
-      setEditError("Failed to update profile.");
+      const [
+        orderRes,
+        wishlistRes,
+        projectsRes,
+        disputesRes,
+        ticketsRes,
+        notificationsRes,
+        addressesRes,
+        invoicesRes,
+      ] = await Promise.all([
+        api.get("/orders"),
+        api.get("/wishlist").catch(() => null),
+        api.get("/projects").catch(() => null),
+        api.get("/disputes").catch(() => null),
+        api.get("/tickets").catch(() => null),
+        api.get("/notifications", { params: { limit: 10 } }).catch(() => null),
+        userService.getAddresses(user.id).catch(() => []),
+        api.get("/orders/buyer/invoices").catch(() => null),
+      ]);
+
+      setOrders(asArray(unwrap(orderRes), ["orders"]).sort((a, b) => Date.parse(b.created_at || b.createdAt || "") - Date.parse(a.created_at || a.createdAt || "")));
+      setWishlist(asArray(unwrap(wishlistRes), ["items", "wishlist"]));
+      setProjects(asArray(unwrap(projectsRes), ["projects"]));
+      setDisputes(asArray(unwrap(disputesRes), ["disputes"]));
+      setTickets(asArray(unwrap(ticketsRes), ["tickets"]));
+      setNotifications(asArray(unwrap(notificationsRes), ["notifications"]));
+      setAddresses(addressesRes);
+      setInvoices(asArray(unwrap(invoicesRes), ["invoices"]));
+    } catch {
+      setError("Unable to load your account data.");
     } finally {
-      setEditLoading(false);
+      setLoading(false);
     }
   };
 
-  const handleProfileImageChange = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    if (!e.target.files || e.target.files.length === 0) return;
-    const file = e.target.files[0];
-    setProfileImageUploading(true);
-    setEditError(null);
-    try {
-      const url = await userService.uploadProfileImage(user.id, file);
-      // If URL doesn't start with http, prepend base URL
-      const imageUrl = url.startsWith("http")
-        ? url
-        : `${import.meta.env.VITE_API_URL || "http://localhost:3000"}${url}`;
-      setEditProfile((prev) => ({ ...prev, profile_image: imageUrl }));
-      setProfile((prev) =>
-        prev ? { ...prev, profile_image: imageUrl } : prev,
-      );
-
-      // Refresh user in AuthContext to update profile image globally
-      try {
-        await refreshUser();
-      } catch (refreshErr) {
-        console.warn("⚠️ Failed to refresh AuthContext user:", refreshErr);
-      }
-
-      setEditSuccess("Profile image updated successfully.");
-    } catch (err: any) {
-      setEditError("Failed to upload image.");
-    } finally {
-      setProfileImageUploading(false);
-    }
-  };
-
-  const handleDeleteProfileImage = async () => {
-    if (
-      !window.confirm("Are you sure you want to remove your profile picture?")
-    )
-      return;
-    setProfileImageUploading(true);
-    setEditError(null);
-    try {
-      await userService.deleteProfileImage(user.id);
-      setEditProfile((prev) => ({ ...prev, profile_image: "" }));
-      setProfile((prev) => (prev ? { ...prev, profile_image: "" } : prev));
-
-      // Refresh user in AuthContext to update profile image globally
-      try {
-        await refreshUser();
-      } catch (refreshErr) {
-        console.warn("⚠️ Failed to refresh AuthContext user:", refreshErr);
-      }
-
-      setEditSuccess("Profile image removed successfully.");
-    } catch (err: any) {
-      setEditError("Failed to remove image.");
-    } finally {
-      setProfileImageUploading(false);
-    }
-  };
-
-  // Fetch user address
   useEffect(() => {
-    const fetchAddress = async () => {
-      setAddressLoading(true);
-      try {
-        const addresses = await userService.getAddresses(user.id);
-        // Get the first address (single address only)
-        if (addresses.length > 0) {
-          setAddress(addresses[0]);
-          setAddressForm({
-            address_type: addresses[0].address_type,
-            full_name: addresses[0].full_name,
-            phone: addresses[0].phone,
-            address_line1: addresses[0].address_line1,
-            address_line2: addresses[0].address_line2 || "",
-            city: addresses[0].city,
-            state: addresses[0].state,
-            postal_code: addresses[0].postal_code,
-            country: addresses[0].country,
-            is_default: addresses[0].is_default,
-          });
-        }
-      } catch (error) {
-        console.error("Failed to fetch address:", error);
-      } finally {
-        setAddressLoading(false);
-      }
-    };
-    fetchAddress();
-  }, []);
+    if (!tabs.some((tab) => tab.id === activeTab)) setActiveTab("overview");
+  }, [activeTab]);
 
-  const handleAddressChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
-  ) => {
-    setAddressForm({ ...addressForm, [e.target.name]: e.target.value });
-  };
+  useEffect(() => {
+    void loadAll();
+  }, [user.id]);
 
-  const handleAddressSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAddressSaving(true);
-    setAddressSuccess(null);
-    setAddressError(null);
+  const activeOrders = useMemo(
+    () => orders.filter((order) => !/completed|delivered|cancelled/i.test(text(order.status))),
+    [orders],
+  );
+  const completedOrders = useMemo(
+    () => orders.filter((order) => /completed|delivered/i.test(text(order.status))),
+    [orders],
+  );
+  const totalSpent = completedOrders.reduce((sum, order) => sum + Number(order.total_amount || order.totalAmount || 0), 0);
+  const refundOrders = orders.filter((order) => {
+    const payment = Array.isArray(order.payments) ? order.payments[0] : null;
+    return payment?.refund_status || order.refund_status;
+  });
+
+  const loadTracking = async (order: any) => {
+    const orderId = order.id;
+    if (!orderId || trackingByOrder[orderId]) return;
     try {
-      if (address) {
-        // Update existing address
-        const updated = await userService.updateAddress(
-          user.id,
-          address.id,
-          addressForm,
-        );
-        setAddress(updated);
-        setAddressSuccess("Address updated successfully!");
-      } else {
-        // Create new address
-        const created = await userService.createAddress(user.id, addressForm);
-        setAddress(created);
-        setAddressSuccess("Address added successfully!");
-      }
-      setEditingAddress(false);
-    } catch (error: any) {
-      console.error("❌ Address error:", error.response?.data);
-      setAddressError(
-        error.response?.data?.message ||
-          error.response?.data?.error ||
-          "Failed to save address",
-      );
-    } finally {
-      setAddressSaving(false);
+      const response = await api.get(`/orders/${orderId}/tracking`);
+      setTrackingByOrder((current) => ({ ...current, [orderId]: unwrap(response) }));
+    } catch {
+      setTrackingByOrder((current) => ({ ...current, [orderId]: { events: [] } }));
     }
   };
 
-  const handleDeleteAddress = async () => {
-    if (!address) return;
-    if (!window.confirm("Are you sure you want to delete this address?"))
-      return;
+  const openOrder = async (order: any) => {
+    setModal({ type: "order", order });
+    await loadTracking(order);
+  };
 
+  const canCancel = (order: any) => !/delivered|completed|cancelled|refunded|shipped/i.test(text(order.status));
+
+  const cancelOrder = async (order: any) => {
+    setBusy(`cancel-${order.id}`);
     try {
-      await userService.deleteAddress(user.id, address.id);
-      setAddress(null);
-      setAddressForm({
-        address_type: "shipping",
-        full_name: "",
-        phone: "",
-        address_line1: "",
-        address_line2: "",
-        city: "",
-        state: "",
-        postal_code: "",
-        country: "Pakistan",
-        is_default: true,
+      await api.post(`/orders/${order.id}/cancel`, { reason: "Cancelled by buyer" });
+      toast.success("Order cancelled.");
+      await loadAll();
+      setModal(null);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Unable to cancel order.");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const requestRefund = async () => {
+    if (modal?.type !== "refund") return;
+    setBusy("refund");
+    try {
+      await api.post("/payments/refund-request", {
+        orderId: modal.order.id,
+        reason: refundReason,
       });
-      setAddressSuccess("Address deleted successfully!");
-    } catch (error: any) {
-      setAddressError(
-        error.response?.data?.message || "Failed to delete address",
-      );
+      toast.success("Refund request submitted.");
+      await loadAll();
+      setModal(null);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Unable to request refund.");
+    } finally {
+      setBusy("");
     }
   };
 
-  const handleEditAddress = () => {
-    setEditingAddress(true);
-    setAddressSuccess(null);
-    setAddressError(null);
+  const wishlistProduct = (item: any) => item.product || item.products || item;
+  const addWishlistToCart = async (item: any) => {
+    const product = wishlistProduct(item);
+    setBusy(`cart-${product.id}`);
+    try {
+      await api.post("/cart", { productId: item.product_id || product.id, quantity: 1 });
+      toast.success("Added to cart.");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Unable to add to cart.");
+    } finally {
+      setBusy("");
+    }
+  };
+  const removeWishlist = async (item: any) => {
+    const product = wishlistProduct(item);
+    setBusy(`wishlist-${product.id}`);
+    try {
+      await api.delete(`/wishlist/${item.product_id || product.id}`);
+      setWishlist((current) => current.filter((row) => (row.product_id || wishlistProduct(row).id) !== (item.product_id || product.id)));
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Unable to remove saved item.");
+    } finally {
+      setBusy("");
+    }
   };
 
-  const handleCancelEditAddress = () => {
-    setEditingAddress(false);
-    if (address) {
-      // Reset form to current address
-      setAddressForm({
-        address_type: address.address_type,
-        full_name: address.full_name,
-        phone: address.phone,
-        address_line1: address.address_line1,
-        address_line2: address.address_line2 || "",
-        city: address.city,
-        state: address.state,
-        postal_code: address.postal_code,
-        country: address.country,
-        is_default: address.is_default,
+  const openProject = async (project: any) => {
+    setModal({ type: "project", project });
+    try {
+      const [detailRes, proposalRes] = await Promise.all([
+        api.get(`/projects/${project.id}`).catch(() => null),
+        api.get("/proposals", { params: { projectId: project.id } }).catch(() => null),
+      ]);
+      const detail = detailRes ? unwrap(detailRes) : project;
+      const proposals = asArray(unwrap(proposalRes), ["proposals"]);
+      setModal({ type: "project", project: { ...project, ...detail, proposals } });
+    } catch {
+      setModal({ type: "project", project });
+    }
+  };
+
+  const updateProposal = async (proposalId: string, status: "accepted" | "rejected") => {
+    setBusy(`proposal-${proposalId}`);
+    try {
+      await api.put(`/proposals/${proposalId}/status`, { status });
+      toast.success(`Proposal ${status}.`);
+      if (modal?.type === "project") await openProject(modal.project);
+      await loadAll();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Unable to update proposal.");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const createProject = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setBusy("project");
+    try {
+      await api.post("/projects", {
+        title: projectForm.title,
+        description: projectForm.description,
+        budget: Number(projectForm.budget),
+        startDate: projectForm.startDate || undefined,
+        deadline: projectForm.deadline || undefined,
+        milestones: projectForm.milestones
+          .filter((milestone) => milestone.name && milestone.dueDate)
+          .map((milestone) => ({ name: milestone.name, dueDate: milestone.dueDate })),
       });
-    }
-    setAddressSuccess(null);
-    setAddressError(null);
-  };
-
-  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setPasswordForm({ ...passwordForm, [e.target.name]: e.target.value });
-  };
-
-  const handlePasswordSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setPasswordLoading(true);
-    setPasswordSuccess(null);
-    setPasswordError(null);
-
-    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      setPasswordError("New passwords do not match");
-      setPasswordLoading(false);
-      return;
-    }
-
-    if (passwordForm.newPassword.length < 8) {
-      setPasswordError("Password must be at least 8 characters long");
-      setPasswordLoading(false);
-      return;
-    }
-
-    try {
-      const { authService } = await import("../src/services/authService");
-      await authService.changePassword(
-        passwordForm.currentPassword,
-        passwordForm.newPassword,
-      );
-      setPasswordSuccess("Password updated successfully!");
-      setPasswordForm({
-        currentPassword: "",
-        newPassword: "",
-        confirmPassword: "",
-      });
-    } catch (error: any) {
-      setPasswordError(
-        error.response?.data?.message ||
-          error.response?.data?.error ||
-          "Failed to update password",
-      );
+      toast.success("Project created.");
+      setModal(null);
+      setProjectForm({ title: "", description: "", budget: "", startDate: "", deadline: "", milestones: [{ name: "", dueDate: "" }] });
+      await loadAll();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Unable to create project.");
     } finally {
-      setPasswordLoading(false);
+      setBusy("");
     }
   };
 
-  const handleViewOrder = async (order: Order) => {
-    setSelectedOrder(order);
-    setShowInvoiceModal(true);
-
-    // Fetch tracking info if order is shipped or delivered
-    if (order.status === "shipped" || order.status === "delivered") {
-      setTrackingLoading(true);
-      try {
-        const tracking = await orderService.getOrderTracking(order.id);
-        setOrderTracking(tracking);
-      } catch {
-        setOrderTracking(null);
-      } finally {
-        setTrackingLoading(false);
-      }
-    } else {
-      setOrderTracking(null);
-    }
-  };
-
-  const canCancelOrder = (order: Order) =>
-    order.status !== "delivered" &&
-    order.status !== "refunded" &&
-    order.status !== "shipped";
-
-  const handleCancelOrder = async (order: Order) => {
-    const confirmed = window.confirm(`Cancel order #${order.order_number}?`);
-    if (!confirmed) return;
-
+  const createDispute = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setBusy("dispute");
     try {
-      const updatedOrder = await orderService.cancelOrder(order.id);
-      setOrders((current) =>
-        current.map((item) =>
-          item.id === order.id ? { ...item, ...updatedOrder } : item,
-        ),
-      );
-      if (selectedOrder?.id === order.id) {
-        setSelectedOrder((current) =>
-          current ? { ...current, ...updatedOrder } : current,
-        );
-      }
-    } catch (error) {
-      console.error("Failed to cancel order:", error);
-      window.alert("Failed to cancel order. Please try again.");
-    }
-  };
-
-  const fetchProjects = async () => {
-    setLoadingProjects(true);
-    try {
-      const res = await apiClient.get("/projects");
-      const data = res.data?.data ?? res.data ?? [];
-      setProjects(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error("Projects fetch error:", error);
-      setProjects([]);
-    } finally {
-      setLoadingProjects(false);
-    }
-  };
-
-  const fetchDisputes = async () => {
-    setLoadingDisputes(true);
-    try {
-      const res = await apiClient.get("/disputes");
-      const data = res.data?.data ?? res.data ?? [];
-      setDisputes(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error("Disputes fetch error:", error);
-      setDisputes([]);
-    } finally {
-      setLoadingDisputes(false);
-    }
-  };
-
-  const openRaiseDisputeModal = (order: Order) => {
-    setDisputeModal({ open: true, order });
-    setDisputeForm({ reason: "", description: "" });
-  };
-
-  const submitDispute = async () => {
-    if (!disputeForm.reason || !disputeForm.description) return;
-
-    setSubmittingDispute(true);
-    try {
-      await apiClient.post("/disputes", {
-        orderId: disputeModal.order?.id,
-        filedAgainst:
-          (disputeModal.order as any)?.sellerId ??
-          (disputeModal.order as any)?.seller_id,
+      await api.post("/disputes", {
+        orderId: disputeForm.relatedType === "order" ? disputeForm.relatedId : undefined,
+        projectId: disputeForm.relatedType === "project" ? disputeForm.relatedId : undefined,
         reason: disputeForm.reason,
         description: disputeForm.description,
       });
-      setDisputeModal({ open: false, order: null });
-      alert("Dispute filed successfully! Admin will review within 24 hours.");
-    } catch (error: any) {
-      alert(error?.response?.data?.message || "Failed to file dispute");
+      toast.success("Dispute filed.");
+      setModal(null);
+      setDisputeForm({ relatedType: "order", relatedId: "", reason: "", description: "" });
+      await loadAll();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Unable to file dispute.");
     } finally {
-      setSubmittingDispute(false);
+      setBusy("");
     }
   };
 
-  const openReviewModal = (productId: string, productName: string) => {
-    setReviewTarget({ productId, productName });
-    setReviewForm({ rating: 5, title: "", body: "" });
-    setReviewError(null);
-    setReviewModalOpen(true);
-  };
-
-  const closeReviewModal = () => {
-    setReviewModalOpen(false);
-    setReviewTarget(null);
-    setReviewError(null);
-  };
-
-  const closeInvoiceModal = () => {
-    setShowInvoiceModal(false);
-    closeReviewModal();
-  };
-
-  const submitReview = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!reviewTarget) return;
-
-    setReviewSubmitting(true);
-    setReviewError(null);
-
+  const createTicket = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setBusy("ticket");
     try {
-      await apiClient.post(
-        `/products/${reviewTarget.productId}/reviews`,
-        {
-          rating: reviewForm.rating,
-          title: reviewForm.title,
-          body: reviewForm.body,
-        },
-      );
-      setReviewedProducts((prev) => ({
-        ...prev,
-        [reviewTarget.productId]: true,
-      }));
-      closeReviewModal();
-    } catch (error) {
-      console.error("Failed to submit review:", error);
-      setReviewError("Failed to submit review. Please try again.");
+      await api.post("/tickets", ticketForm);
+      toast.success("Ticket created.");
+      setModal(null);
+      setTicketForm({ subject: "", description: "", category: "general", priority: "medium" });
+      await loadAll();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Unable to create ticket.");
     } finally {
-      setReviewSubmitting(false);
+      setBusy("");
     }
   };
 
-  // Calculate dashboard stats
-  const totalOrders = orders.length;
-  const pendingOrders = orders.filter(
-    (o) =>
-      o.status === "pending_payment" ||
-      o.status === "pending" ||
-      o.status === "processing",
-  ).length;
-  const totalSpent = orders.reduce((sum, o) => sum + (o.total_amount || 0), 0);
+  const sendTicketMessage = async () => {
+    if (modal?.type !== "ticket" || !ticketMessage.trim()) return;
+    setBusy("ticket-message");
+    try {
+      await api.post(`/tickets/${modal.ticket.id}/messages`, { message: ticketMessage.trim(), attachments: [] });
+      toast.success("Reply sent.");
+      setTicketMessage("");
+      await loadAll();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Unable to send reply.");
+    } finally {
+      setBusy("");
+    }
+  };
 
-  const menuItems = [
-    { id: "dashboard", label: "Dashboard", icon: Icons.Dashboard },
-    { id: "orders", label: "My Orders", icon: Icons.Package },
-    { id: "projects", label: "My Projects", icon: Icons.Folder },
-    { id: "disputes", label: "My Disputes", icon: Icons.AlertCircle },
-    { id: "profile", label: "Profile Settings", icon: Icons.Settings },
-    { id: "addresses", label: "Addresses", icon: Icons.MapPin },
-    { id: "password", label: "Change Password", icon: Icons.Lock },
-  ];
+  const saveProfile = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setBusy("profile");
+    try {
+      await userService.updateProfile(user.id, profileForm);
+      await refreshUser();
+      toast.success("Profile updated.");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Unable to update profile.");
+    } finally {
+      setBusy("");
+    }
+  };
 
-  const renderContent = () => {
-    switch (activeTab) {
-      case "dashboard":
-        return (
-          <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
-            {/* Stats */}
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
-                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-                  <Icons.Package className="h-5 w-5" />
-                </div>
-                <div className="text-2xl font-bold text-gray-900">
-                  {ordersLoading ? "..." : totalOrders}
-                </div>
-                <div className="text-sm text-gray-500">Total Orders</div>
-              </div>
-              <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
-                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-orange-50 text-orange-600">
-                  <Icons.Clock className="h-5 w-5" />
-                </div>
-                <div className="text-2xl font-bold text-gray-900">
-                  {ordersLoading ? "..." : pendingOrders}
-                </div>
-                <div className="text-sm text-gray-500">Pending Orders</div>
-              </div>
-              <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
-                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-green-50 text-green-600">
-                  <Icons.Banknote className="h-5 w-5" />
-                </div>
-                <div className="text-2xl font-bold text-gray-900">
-                  {ordersLoading ? "..." : `PKR ${totalSpent.toLocaleString()}`}
-                </div>
-                <div className="text-sm text-gray-500">Total Spent</div>
-              </div>
-            </div>
+  const uploadProfileImage = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setBusy("profile-image");
+    try {
+      const imageUrl = await userService.uploadProfileImage(user.id, file);
+      setProfileForm((current) => ({ ...current, profile_image: imageUrl }));
+      await refreshUser();
+      toast.success("Profile image updated.");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Unable to upload image.");
+    } finally {
+      setBusy("");
+    }
+  };
 
-            {/* Recent Orders Preview */}
-            <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
-              <div className="mb-6 flex items-center justify-between">
-                <h3 className="text-lg font-bold text-gray-900">
-                  Recent Orders
-                </h3>
-                <button
-                  onClick={() => setActiveTab("orders")}
-                  className="text-sm font-medium text-primary hover:underline"
-                >
-                  View All
-                </button>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-gray-50 text-gray-500">
-                    <tr>
-                      <th className="px-4 py-3 font-medium">Order ID</th>
-                      <th className="px-4 py-3 font-medium">Date</th>
-                      <th className="px-4 py-3 font-medium">Status</th>
-                      <th className="px-4 py-3 font-medium">Total</th>
-                      <th className="px-4 py-3 font-medium">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {orders.slice(0, 5).map((order) => (
-                      <tr key={order.id}>
-                        <td className="px-4 py-3 font-medium text-gray-900">
-                          #{order.order_number}
-                        </td>
-                        <td className="px-4 py-3 text-gray-500">
-                          {new Date(order.created_at).toLocaleDateString(
-                            "en-US",
-                            { month: "short", day: "numeric", year: "numeric" },
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span
-                            className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                              order.status === "delivered"
-                                ? "bg-green-100 text-green-700"
-                                : order.status === "processing"
-                                  ? "bg-blue-100 text-blue-700"
-                                  : "bg-yellow-100 text-yellow-700"
-                            }`}
-                          >
-                            {order.status.charAt(0).toUpperCase() +
-                              order.status.slice(1).replace("_", " ")}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 font-medium text-gray-900">
-                          PKR {(order.total_amount || 0).toLocaleString()}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end gap-3">
-                            <button
-                              onClick={() => handleViewOrder(order)}
-                              className="text-primary hover:underline"
-                            >
-                              View
-                            </button>
-                            {canCancelOrder(order) && (
-                              <button
-                                onClick={() => handleCancelOrder(order)}
-                                className="text-red-600 hover:underline"
-                              >
-                                Cancel
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        );
-      case "orders":
-        const filteredOrders =
-          statusFilter === "all"
-            ? orders
-            : orders.filter((o) => o.status === statusFilter);
+  const changePassword = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast.error("New passwords do not match.");
+      return;
+    }
+    setBusy("password");
+    try {
+      await authService.changePassword(passwordForm.currentPassword, passwordForm.newPassword);
+      setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+      toast.success("Password changed.");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Unable to change password.");
+    } finally {
+      setBusy("");
+    }
+  };
 
-        return (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-gray-900">My Orders</h2>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                aria-label="Filter orders by status"
-              >
-                <option value="all">All Orders</option>
-                <option value="pending_payment">Pending Payment</option>
-                <option value="pending">Pending</option>
-                <option value="processing">Processing</option>
-                <option value="shipped">Shipped</option>
-                <option value="delivered">Delivered</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
-            </div>
-            <div className="rounded-xl border border-gray-100 bg-white shadow-sm overflow-hidden">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-gray-50 text-gray-500">
-                  <tr>
-                    <th className="px-6 py-4 font-medium">Order ID</th>
-                    <th className="px-6 py-4 font-medium">Date</th>
-                    <th className="px-6 py-4 font-medium">Status</th>
-                    <th className="px-6 py-4 font-medium">Total</th>
-                    <th className="px-6 py-4 font-medium"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {filteredOrders.map((order) => (
-                    <tr key={order.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 font-medium text-gray-900">
-                        #{order.order_number}
-                      </td>
-                      <td className="px-6 py-4 text-gray-500">
-                        {new Date(order.created_at).toLocaleDateString(
-                          "en-US",
-                          { month: "short", day: "numeric", year: "numeric" },
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-medium ${
-                            order.status === "delivered"
-                              ? "bg-green-100 text-green-700"
-                              : order.status === "processing"
-                                ? "bg-blue-100 text-blue-700"
-                                : "bg-yellow-100 text-yellow-700"
-                          }`}
-                        >
-                          {order.status.charAt(0).toUpperCase() +
-                            order.status.slice(1).replace("_", " ")}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 font-medium text-gray-900">
-                        PKR {(order.total_amount || 0).toLocaleString()}
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-3">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleViewOrder(order)}
-                          >
-                            View Invoice
-                          </Button>
-                          {order.status !== "cancelled" && (
-                            <button
-                              onClick={() => openRaiseDisputeModal(order)}
-                              style={{
-                                fontSize: "12px",
-                                color: "#EF4444",
-                                background: "#FEF2F2",
-                                border: "1px solid #FECACA",
-                                borderRadius: "6px",
-                                padding: "4px 10px",
-                                cursor: "pointer",
-                                marginLeft: "8px",
-                              }}
-                            >
-                              Raise Dispute
-                            </button>
-                          )}
-                          {canCancelOrder(order) && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleCancelOrder(order)}
-                              className="border-red-200 text-red-600 hover:border-red-300 hover:bg-red-50"
-                            >
-                              Cancel Order
-                            </Button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        );
-      case "projects":
-        return (
+  const saveAddress = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setBusy("address");
+    try {
+      if (editingAddressId) {
+        await userService.updateAddress(user.id, editingAddressId, addressForm);
+      } else {
+        await userService.createAddress(user.id, addressForm);
+      }
+      setAddressForm(emptyAddress);
+      setEditingAddressId("");
+      setAddresses(await userService.getAddresses(user.id));
+      toast.success("Address saved.");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Unable to save address.");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const editAddress = (address: Address) => {
+    setEditingAddressId(address.id);
+    setAddressForm({
+      address_type: address.address_type || "shipping",
+      full_name: address.full_name || "",
+      phone: address.phone || "",
+      address_line1: address.address_line1 || "",
+      address_line2: address.address_line2 || "",
+      city: address.city || "",
+      state: address.state || "",
+      postal_code: address.postal_code || "",
+      country: address.country || "Pakistan",
+      is_default: Boolean(address.is_default),
+    });
+  };
+
+  const deleteAddress = async (address: Address) => {
+    setBusy(`address-${address.id}`);
+    try {
+      await userService.deleteAddress(user.id, address.id);
+      setAddresses((current) => current.filter((item) => item.id !== address.id));
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Unable to delete address.");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const setDefaultAddress = async (address: Address) => {
+    setBusy(`default-${address.id}`);
+    try {
+      await userService.setDefaultAddress(user.id, address.id);
+      setAddresses(await userService.getAddresses(user.id));
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Unable to set default.");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const orderItems = (order: any) => asArray(order.items || order.order_items, []);
+  const sellerName = (order: any) => order.businesses?.business_name || order.businessName || order.sellerName || "Seller";
+  const orderNumber = (order: any) => order.order_number || order.orderNumber || order.id?.slice?.(0, 8)?.toUpperCase() || "Order";
+  const productImage = (product: any) => product.product_images?.[0]?.image_url || product.images?.[0]?.image_url || product.image_url || product.image || "";
+
+  const renderOrderCard = (order: any, includeTracking = false) => {
+    const tracking = trackingByOrder[order.id];
+    const payment = Array.isArray(order.payments) ? order.payments[0] : null;
+    return (
+      <article key={order.id} className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: "16px",
-              }}
-            >
-              <h2 style={{ fontSize: "20px", fontWeight: 600 }}>My Projects</h2>
-              <button
-                onClick={() => setShowPostProject(true)}
-                style={{
-                  background: "#F59E0B",
-                  color: "white",
-                  padding: "8px 16px",
-                  borderRadius: "8px",
-                  fontWeight: 500,
-                  border: "none",
-                  cursor: "pointer",
-                }}
+            <h3 className="font-bold text-gray-900">#{orderNumber(order)}</h3>
+            <p className="mt-1 text-sm text-gray-500">{dateLabel(order.created_at || order.createdAt)} · {sellerName(order)}</p>
+            <p className="mt-2 text-sm text-gray-600">
+              {orderItems(order).length
+                ? orderItems(order).map((item: any) => `${item.product?.name || item.product_name || item.name || "Item"} x${item.quantity}`).join(", ")
+                : "Order items unavailable"}
+            </p>
+            {(payment?.refund_status || order.refund_status) && (
+              <div className="mt-2"><StatusBadge status={`Refund ${payment?.refund_status || order.refund_status}`} /></div>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-3 lg:justify-end">
+            <StatusBadge status={text(order.status, "pending")} />
+            <span className="font-bold text-gray-900">{money(order.total_amount || order.totalAmount)}</span>
+            <Button className={accountOutlineButton} variant="outline" size="sm" onClick={() => void openOrder(order)}>View Details</Button>
+            {canCancel(order) && (
+              <Button
+                variant="outline"
+                size="sm"
+                className={accountDangerButton}
+                onClick={() =>
+                  setModal({
+                    type: "confirm",
+                    title: "Cancel order?",
+                    message: `Cancel order #${orderNumber(order)}?`,
+                    onConfirm: () => void cancelOrder(order),
+                  })
+                }
               >
-                + Post New Project
+                Cancel
+              </Button>
+            )}
+            {/delivered|completed/i.test(text(order.status)) && (
+              <Button className={accountOutlineButton} variant="outline" size="sm" onClick={() => setModal({ type: "refund", order })}>
+                Request Refund
+              </Button>
+            )}
+          </div>
+        </div>
+        {includeTracking && (
+          <div className="mt-4 rounded-lg bg-gray-50 p-4">
+            {!tracking ? (
+              <button className="text-sm font-semibold text-primary" onClick={() => void loadTracking(order)}>
+                Load tracking timeline
               </button>
-            </div>
-
-            {loadingProjects ? (
-              <p style={{ color: "#6B7280" }}>Loading projects...</p>
-            ) : projects.length === 0 ? (
-              <div
-                style={{
-                  textAlign: "center",
-                  padding: "40px",
-                  background: "#F9FAFB",
-                  borderRadius: "12px",
-                }}
-              >
-                <div style={{ fontSize: "40px", marginBottom: "8px" }}>🏗️</div>
-                <p style={{ color: "#6B7280" }}>
-                  No projects yet. Post your first project to find contractors.
-                </p>
-                <button
-                  onClick={() => setShowPostProject(true)}
-                  style={{
-                    marginTop: "12px",
-                    background: "#F59E0B",
-                    color: "white",
-                    padding: "8px 16px",
-                    borderRadius: "8px",
-                    border: "none",
-                    cursor: "pointer",
-                  }}
-                >
-                  Post a Project
-                </button>
-              </div>
             ) : (
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "12px",
-                }}
-              >
-                {projects.map((project: any) => (
-                  <div
-                    key={project.id}
-                    style={{
-                      background: "white",
-                      border: "1px solid #E5E7EB",
-                      borderRadius: "12px",
-                      padding: "16px",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "flex-start",
-                      }}
-                    >
-                      <div>
-                        <h3
-                          style={{
-                            fontWeight: 600,
-                            color: "#111827",
-                            marginBottom: "4px",
-                          }}
-                        >
-                          {project.title}
-                        </h3>
-                        <p
-                          style={{
-                            fontSize: "13px",
-                            color: "#6B7280",
-                            marginBottom: "8px",
-                          }}
-                        >
-                          {project.description?.slice(0, 100)}...
-                        </p>
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: "16px",
-                            fontSize: "13px",
-                            color: "#6B7280",
-                          }}
-                        >
-                          {project.budgetMin && (
-                            <span>
-                              💰 PKR{" "}
-                              {Number(project.budgetMin).toLocaleString()} –{" "}
-                              {Number(project.budgetMax).toLocaleString()}
-                            </span>
-                          )}
-                          <span>
-                            📋 {project.proposalsCount ?? 0} proposals
-                          </span>
-                          <span>
-                            📅{" "}
-                            {new Date(
-                              project.createdAt ?? project.created_at,
-                            ).toLocaleDateString("en-PK")}
-                          </span>
-                        </div>
-                      </div>
-                      <span
-                        style={{
-                          padding: "4px 10px",
-                          borderRadius: "20px",
-                          fontSize: "12px",
-                          fontWeight: 500,
-                          background:
-                            project.status === "open" ? "#DCFCE7" : "#F3F4F6",
-                          color:
-                            project.status === "open" ? "#166534" : "#6B7280",
-                        }}
-                      >
-                        {project.status}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {showPostProject && (
-              <div
-                style={{
-                  position: "fixed",
-                  inset: 0,
-                  background: "rgba(0,0,0,0.5)",
-                  zIndex: 1000,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: "16px",
-                }}
-              >
-                <div
-                  style={{
-                    background: "white",
-                    borderRadius: "16px",
-                    padding: "24px",
-                    width: "100%",
-                    maxWidth: "520px",
-                    maxHeight: "90vh",
-                    overflowY: "auto",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: "20px",
-                    }}
-                  >
-                    <h2 style={{ fontSize: "18px", fontWeight: 600 }}>
-                      Post a Project
-                    </h2>
-                    <button
-                      onClick={() => setShowPostProject(false)}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        fontSize: "20px",
-                        cursor: "pointer",
-                        color: "#6B7280",
-                      }}
-                    >
-                      ×
-                    </button>
-                  </div>
-                  <PostProjectForm
-                    onSuccess={() => {
-                      setShowPostProject(false);
-                      void fetchProjects();
-                    }}
-                    onCancel={() => setShowPostProject(false)}
-                  />
-                </div>
-              </div>
+              <TrackingTimeline tracking={tracking} status={order.status} />
             )}
           </div>
-        );
-      case "disputes":
-        return (
-          <div>
-            <h2
-              style={{
-                fontSize: "20px",
-                fontWeight: 600,
-                marginBottom: "16px",
-              }}
-            >
-              My Disputes
-            </h2>
-            {loadingDisputes ? (
-              <p style={{ color: "#6B7280" }}>Loading...</p>
-            ) : disputes.length === 0 ? (
-              <div
-                style={{
-                  textAlign: "center",
-                  padding: "40px",
-                  background: "#F9FAFB",
-                  borderRadius: "12px",
-                }}
-              >
-                <div style={{ fontSize: "40px", marginBottom: "8px" }}>✅</div>
-                <p style={{ color: "#6B7280" }}>No disputes filed. All good!</p>
-              </div>
-            ) : (
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "10px",
-                }}
-              >
-                {disputes.map((d: any) => (
-                  <div
-                    key={d.id}
-                    style={{
-                      background: "white",
-                      border: "1px solid #E5E7EB",
-                      borderRadius: "12px",
-                      padding: "16px",
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}
-                  >
-                    <div>
-                      <p
-                        style={{
-                          fontWeight: 500,
-                          color: "#111827",
-                          marginBottom: "4px",
-                        }}
-                      >
-                        {d.reason}
-                      </p>
-                      <p style={{ fontSize: "13px", color: "#6B7280" }}>
-                        {d.description?.slice(0, 80)}...
-                      </p>
-                      <p
-                        style={{
-                          fontSize: "12px",
-                          color: "#9CA3AF",
-                          marginTop: "4px",
-                        }}
-                      >
-                        {new Date(
-                          d.createdAt ?? d.created_at,
-                        ).toLocaleDateString("en-PK")}
-                      </p>
-                    </div>
-                    <span
-                      style={{
-                        padding: "4px 12px",
-                        borderRadius: "20px",
-                        fontSize: "12px",
-                        fontWeight: 500,
-                        whiteSpace: "nowrap",
-                        background:
-                          d.status === "resolved"
-                            ? "#DCFCE7"
-                            : d.status === "in-progress"
-                              ? "#DBEAFE"
-                              : "#FEF3C7",
-                        color:
-                          d.status === "resolved"
-                            ? "#166534"
-                            : d.status === "in-progress"
-                              ? "#1E40AF"
-                              : "#92400E",
-                      }}
-                    >
-                      {d.status}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      case "profile":
-        return (
-          <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-gray-900">
-              Profile Settings
-            </h2>
-            <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm max-w-2xl">
-              {profileLoading ? (
-                <div>Loading...</div>
-              ) : profileError ? (
-                <div className="text-red-600">{profileError}</div>
-              ) : profile ? (
-                <form className="space-y-4" onSubmit={handleProfileSubmit}>
-                  {editSuccess && (
-                    <div className="bg-green-100 text-green-700 p-2 rounded">
-                      {editSuccess}
-                    </div>
-                  )}
-                  {editError && (
-                    <div className="bg-red-100 text-red-700 p-2 rounded">
-                      {editError}
-                    </div>
-                  )}
-                  <div className="flex items-center gap-6 mb-4">
-                    <div className="relative">
-                      <img
-                        src={
-                          editProfile.profile_image || "/avatar-placeholder.png"
-                        }
-                        alt="Profile"
-                        className="w-20 h-20 rounded-full object-cover border"
-                      />
-                      <button
-                        type="button"
-                        className="absolute bottom-0 right-0 bg-primary text-white rounded-full p-1 shadow"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={profileImageUploading}
-                        title="Change profile picture"
-                      >
-                        <Icons.User className="h-5 w-5" />
-                      </button>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        ref={fileInputRef}
-                        className="hidden"
-                        onChange={handleProfileImageChange}
-                        disabled={profileImageUploading}
-                        aria-label="Upload profile picture"
-                      />
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      {profileImageUploading && (
-                        <span className="text-sm text-gray-600">
-                          Uploading...
-                        </span>
-                      )}
-                      {editProfile.profile_image && (
-                        <button
-                          type="button"
-                          onClick={handleDeleteProfileImage}
-                          disabled={profileImageUploading}
-                          className="text-sm text-red-600 hover:text-red-700 disabled:opacity-50"
-                        >
-                          Remove Image
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-gray-700">
-                        Full Name
-                      </label>
-                      <input
-                        type="text"
-                        name="full_name"
-                        value={editProfile.full_name || ""}
-                        onChange={handleProfileChange}
-                        aria-label="Full Name"
-                        className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-gray-700">
-                        Phone
-                      </label>
-                      <input
-                        type="tel"
-                        name="phone"
-                        value={editProfile.phone || ""}
-                        onChange={handleProfileChange}
-                        aria-label="Phone Number"
-                        className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-700">
-                      Email Address
-                    </label>
-                    <input
-                      type="email"
-                      value={profile.email}
-                      disabled
-                      aria-label="Email Address"
-                      className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 text-sm text-gray-500"
-                    />
-                  </div>
-                  <Button type="submit" className="mt-4" disabled={editLoading}>
-                    {editLoading ? "Saving..." : "Save Changes"}
-                  </Button>
-                </form>
-              ) : null}
-            </div>
-          </div>
-        );
-      case "addresses":
-        return (
-          <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-gray-900">My Address</h2>
-
-            {addressSuccess && (
-              <div className="rounded-lg bg-green-50 p-4 text-sm text-green-800">
-                {addressSuccess}
-              </div>
-            )}
-            {addressError && (
-              <div className="rounded-lg bg-red-50 p-4 text-sm text-red-800">
-                {addressError}
-              </div>
-            )}
-
-            {addressLoading ? (
-              <div className="rounded-xl border border-gray-100 bg-white p-8 shadow-sm text-center">
-                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                <p className="mt-2 text-sm text-gray-600">Loading address...</p>
-              </div>
-            ) : editingAddress || !address ? (
-              <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                  {address ? "Edit Address" : "Add Address"}
-                </h3>
-                <form onSubmit={handleAddressSubmit} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-gray-700">
-                        Full Name *
-                      </label>
-                      <input
-                        type="text"
-                        name="full_name"
-                        value={addressForm.full_name}
-                        onChange={handleAddressChange}
-                        required
-                        aria-label="Full Name"
-                        className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-gray-700">
-                        Phone *
-                      </label>
-                      <input
-                        type="tel"
-                        name="phone"
-                        value={addressForm.phone}
-                        onChange={handleAddressChange}
-                        required
-                        aria-label="Phone Number"
-                        className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-700">
-                      Address Line 1 *
-                    </label>
-                    <input
-                      type="text"
-                      name="address_line1"
-                      value={addressForm.address_line1}
-                      onChange={handleAddressChange}
-                      required
-                      aria-label="Address Line 1"
-                      className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-700">
-                      Address Line 2
-                    </label>
-                    <input
-                      type="text"
-                      name="address_line2"
-                      value={addressForm.address_line2}
-                      onChange={handleAddressChange}
-                      placeholder="Address Line 2 (optional)"
-                      title="Address Line 2 (optional)"
-                      className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-gray-700">
-                        City *
-                      </label>
-                      <input
-                        type="text"
-                        name="city"
-                        value={addressForm.city}
-                        onChange={handleAddressChange}
-                        required
-                        aria-label="City"
-                        className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-gray-700">
-                        State/Province *
-                      </label>
-                      <input
-                        type="text"
-                        name="state"
-                        value={addressForm.state}
-                        onChange={handleAddressChange}
-                        required
-                        aria-label="State or Province"
-                        className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-gray-700">
-                        Postal Code *
-                      </label>
-                      <input
-                        type="text"
-                        name="postal_code"
-                        value={addressForm.postal_code}
-                        onChange={handleAddressChange}
-                        required
-                        aria-label="Postal Code"
-                        className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-gray-700">
-                        Country *
-                      </label>
-                      <input
-                        type="text"
-                        name="country"
-                        value={addressForm.country}
-                        onChange={handleAddressChange}
-                        required
-                        aria-label="Country"
-                        className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex gap-3 pt-4">
-                    <Button type="submit" disabled={addressSaving}>
-                      {addressSaving
-                        ? "Saving..."
-                        : address
-                          ? "Update Address"
-                          : "Add Address"}
-                    </Button>
-                    {address && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={handleCancelEditAddress}
-                        disabled={addressSaving}
-                      >
-                        Cancel
-                      </Button>
-                    )}
-                  </div>
-                </form>
-              </div>
-            ) : (
-              <div className="rounded-xl border border-primary bg-primary/5 p-6 relative">
-                <div className="absolute top-4 right-4">
-                  <span className="inline-block rounded-full bg-primary px-3 py-1 text-xs font-bold text-white">
-                    Default
-                  </span>
-                </div>
-                <h3 className="font-bold text-gray-900 text-lg mb-3">
-                  {address.full_name}
-                </h3>
-                <p className="text-sm text-gray-600 space-y-1">
-                  <span className="block">{address.address_line1}</span>
-                  {address.address_line2 && (
-                    <span className="block">{address.address_line2}</span>
-                  )}
-                  <span className="block">
-                    {address.city}, {address.state} {address.postal_code}
-                  </span>
-                  <span className="block">{address.country}</span>
-                  <span className="block font-medium mt-2">
-                    Phone: {address.phone}
-                  </span>
-                </p>
-                <div className="mt-4 flex gap-3">
-                  <button
-                    onClick={handleEditAddress}
-                    className="text-sm font-medium text-primary hover:underline"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={handleDeleteAddress}
-                    className="text-sm font-medium text-red-600 hover:text-red-700"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        );
-      case "password":
-        return (
-          <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-gray-900">
-              Change Password
-            </h2>
-            <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm max-w-xl">
-              {passwordSuccess && (
-                <div className="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800">
-                  {passwordSuccess}
-                </div>
-              )}
-              {passwordError && (
-                <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">
-                  {passwordError}
-                </div>
-              )}
-              <form className="space-y-4" onSubmit={handlePasswordSubmit}>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    Current Password
-                  </label>
-                  <input
-                    type="password"
-                    name="currentPassword"
-                    value={passwordForm.currentPassword}
-                    onChange={handlePasswordChange}
-                    required
-                    aria-label="Current Password"
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    New Password
-                  </label>
-                  <input
-                    type="password"
-                    name="newPassword"
-                    value={passwordForm.newPassword}
-                    onChange={handlePasswordChange}
-                    required
-                    aria-label="New Password"
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    Confirm New Password
-                  </label>
-                  <input
-                    type="password"
-                    name="confirmPassword"
-                    value={passwordForm.confirmPassword}
-                    onChange={handlePasswordChange}
-                    required
-                    aria-label="Confirm New Password"
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                  />
-                </div>
-                <Button
-                  type="submit"
-                  className="mt-4"
-                  disabled={passwordLoading}
-                >
-                  {passwordLoading ? "Updating..." : "Update Password"}
-                </Button>
-              </form>
-            </div>
-          </div>
-        );
-      default:
-        return null;
-    }
+        )}
+      </article>
+    );
   };
+
+  const panelTitle = tabs.find((tab) => tab.id === activeTab)?.label || "Overview";
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 py-16">
+        <div className="container mx-auto px-4 text-center text-gray-500">Loading buyer dashboard...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-slate-50 py-16">
+        <div className="container mx-auto px-4">
+          <div className="rounded-xl border border-red-100 bg-white p-8 text-center">
+            <h1 className="text-xl font-bold text-red-700">Unable to load account</h1>
+            <p className="mt-2 text-sm text-gray-500">{error}</p>
+            <Button className="mt-5" onClick={() => void loadAll()}>Retry</Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
-      {/* Review Modal */}
-      {reviewModalOpen && reviewTarget && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl">
-            <div className="border-b border-gray-200 p-6 flex items-center justify-between">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">
-                  Write Review
-                </h2>
-                <p className="text-sm text-gray-500">
-                  {reviewTarget.productName}
-                </p>
-              </div>
-              <button
-                onClick={closeReviewModal}
-                className="text-gray-400 hover:text-gray-600"
-                aria-label="Close review modal"
-              >
-                <Icons.Close className="h-6 w-6" />
-              </button>
+      <div className="min-h-screen bg-slate-50 py-8">
+        <div className="container mx-auto px-4 lg:px-8">
+          <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-wide text-primary">Buyer Account</p>
+              <h1 className="text-3xl font-black text-gray-900">{panelTitle}</h1>
             </div>
-            <form onSubmit={submitReview} className="space-y-5 p-6">
-              <div>
-                <p className="mb-2 text-sm font-medium text-gray-700">Rating</p>
-                <div className="flex gap-2">
-                  {[1, 2, 3, 4, 5].map((value) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() =>
-                        setReviewForm((prev) => ({ ...prev, rating: value }))
-                      }
-                      className={`h-10 w-10 rounded-full border text-sm font-bold transition-colors ${
-                        reviewForm.rating >= value
-                          ? "border-yellow-400 bg-yellow-400 text-white"
-                          : "border-gray-300 bg-white text-gray-400 hover:border-yellow-300"
-                      }`}
-                    >
-                      {value}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-gray-700">
-                  Title
-                </label>
-                <input
-                  type="text"
-                  value={reviewForm.title}
-                  onChange={(e) =>
-                    setReviewForm((prev) => ({
-                      ...prev,
-                      title: e.target.value,
-                    }))
-                  }
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                  placeholder="Short review title"
-                  required
-                />
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-gray-700">
-                  Review
-                </label>
-                <textarea
-                  value={reviewForm.body}
-                  onChange={(e) =>
-                    setReviewForm((prev) => ({ ...prev, body: e.target.value }))
-                  }
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                  placeholder="Tell others what you think"
-                  rows={5}
-                  required
-                />
-              </div>
-              {reviewError && (
-                <p className="text-sm text-red-600">{reviewError}</p>
-              )}
-              <div className="flex justify-end gap-3">
-                <Button
-                  variant="outline"
-                  type="button"
-                  onClick={closeReviewModal}
-                  disabled={reviewSubmitting}
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={reviewSubmitting}>
-                  {reviewSubmitting ? "Submitting..." : "Submit Review"}
-                </Button>
-              </div>
-            </form>
+            <Button className={accountOutlineButton} variant="outline" onClick={onLogout}>
+              <Icons.LogOut className="mr-2 h-4 w-4" /> Logout
+            </Button>
           </div>
-        </div>
-      )}
 
-      {/* Raise Dispute Modal */}
-      {disputeModal.open && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
-            <div className="border-b border-gray-200 p-6 flex items-center justify-between">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">
-                  Raise a Dispute
-                </h2>
-                <p className="text-sm text-gray-500">
-                  Order: #{disputeModal.order?.id?.slice(0, 8)}
-                </p>
-              </div>
-              <button
-                onClick={() => setDisputeModal({ open: false, order: null })}
-                className="text-gray-400 hover:text-gray-600"
-                aria-label="Close dispute modal"
-              >
-                <Icons.Close className="h-6 w-6" />
-              </button>
-            </div>
-            <div className="space-y-4 p-6">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-gray-700">
-                  Reason *
-                </label>
-                <select
-                  style={{
-                    width: "100%",
-                    border: "1px solid #D1D5DB",
-                    borderRadius: "8px",
-                    padding: "8px 12px",
-                    fontSize: "14px",
-                  }}
-                  value={disputeForm.reason}
-                  onChange={(e) =>
-                    setDisputeForm((prev) => ({
-                      ...prev,
-                      reason: e.target.value,
-                    }))
-                  }
-                >
-                  <option value="">Select reason</option>
-                  <option value="Product Quality Issue">
-                    Product Quality Issue
-                  </option>
-                  <option value="Item Not Received">Item Not Received</option>
-                  <option value="Wrong Item Delivered">
-                    Wrong Item Delivered
-                  </option>
-                  <option value="Quantity Mismatch">Quantity Mismatch</option>
-                  <option value="Damaged Product">Damaged Product</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-gray-700">
-                  Description *
-                </label>
-                <textarea
-                  style={{
-                    width: "100%",
-                    border: "1px solid #D1D5DB",
-                    borderRadius: "8px",
-                    padding: "8px 12px",
-                    fontSize: "14px",
-                    minHeight: "80px",
-                    resize: "vertical",
-                  }}
-                  placeholder="Describe the issue in detail..."
-                  value={disputeForm.description}
-                  onChange={(e) =>
-                    setDisputeForm((prev) => ({
-                      ...prev,
-                      description: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button
-                  onClick={() => setDisputeModal({ open: false, order: null })}
-                  style={{
-                    flex: 1,
-                    padding: "10px",
-                    border: "1px solid #D1D5DB",
-                    borderRadius: "8px",
-                    background: "white",
-                    cursor: "pointer",
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={submitDispute}
-                  disabled={submittingDispute}
-                  style={{
-                    flex: 1,
-                    padding: "10px",
-                    background: "#EF4444",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "8px",
-                    fontWeight: 500,
-                    cursor: "pointer",
-                    opacity: submittingDispute ? 0.6 : 1,
-                  }}
-                >
-                  {submittingDispute ? "Submitting..." : "File Dispute"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Invoice Modal */}
-      {showInvoiceModal && selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-gray-900">
-                  Order Invoice
-                </h2>
-                <button
-                  onClick={closeInvoiceModal}
-                  className="text-gray-400 hover:text-gray-600"
-                  aria-label="Close invoice modal"
-                >
-                  <Icons.Close className="h-6 w-6" />
-                </button>
-              </div>
-            </div>
-            <div className="p-6 space-y-6">
-              {/* Order Details */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-500">Order Number</p>
-                  <p className="font-semibold text-gray-900">
-                    #{selectedOrder.order_number}
-                  </p>
+          <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
+            <aside className="hidden rounded-xl border border-gray-100 bg-white p-4 shadow-sm lg:block">
+              <div className="mb-4 flex items-center gap-3 border-b border-gray-100 pb-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <Icons.User className="h-6 w-6" />
                 </div>
-                <div>
-                  <p className="text-sm text-gray-500">Order Date</p>
-                  <p className="font-semibold text-gray-900">
-                    {new Date(
-                      (selectedOrder as any).createdAt ||
-                        selectedOrder.created_at,
-                    ).toLocaleDateString("en-US", {
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                    })}
-                  </p>
+                <div className="min-w-0">
+                  <p className="truncate font-bold text-gray-900">{profileForm.full_name || user.full_name || "Buyer"}</p>
+                  <p className="truncate text-xs text-gray-500">{user.email}</p>
                 </div>
-                <div>
-                  <p className="text-sm text-gray-500">Status</p>
-                  <span
-                    className={`inline-block rounded-full px-3 py-1 text-xs font-medium ${
-                      selectedOrder.status === "delivered"
-                        ? "bg-green-100 text-green-700"
-                        : selectedOrder.status === "processing"
-                          ? "bg-blue-100 text-blue-700"
-                          : "bg-yellow-100 text-yellow-700"
+              </div>
+              <nav className="space-y-1">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold ${
+                      activeTab === tab.id ? "bg-primary text-white" : "text-gray-600 hover:bg-gray-50"
                     }`}
                   >
-                    {selectedOrder.status.charAt(0).toUpperCase() +
-                      selectedOrder.status.slice(1).replace("_", " ")}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Payment Status</p>
-                  <span
-                    className={`inline-block rounded-full px-3 py-1 text-xs font-medium ${
-                      selectedOrder.payment_status === "paid"
-                        ? "bg-green-100 text-green-700"
-                        : "bg-yellow-100 text-yellow-700"
+                    <tab.icon className="h-4 w-4" />
+                    {tab.label}
+                  </button>
+                ))}
+              </nav>
+            </aside>
+
+            <div>
+              <div className="mb-4 flex gap-2 overflow-x-auto rounded-xl border border-gray-100 bg-white p-2 shadow-sm lg:hidden">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold ${
+                      activeTab === tab.id ? "bg-primary text-white" : "text-gray-600"
                     }`}
                   >
-                    {selectedOrder.payment_status.charAt(0).toUpperCase() +
-                      selectedOrder.payment_status.slice(1)}
-                  </span>
-                </div>
+                    {tab.label}
+                  </button>
+                ))}
               </div>
 
-              {/* Shipping Address */}
-              {selectedOrder.shipping_address && (
-                <div className="border-t pt-4">
-                  <h3 className="font-semibold text-gray-900 mb-2">
-                    Shipping Address
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    {selectedOrder.shipping_address.full_name}
-                    <br />
-                    {selectedOrder.shipping_address.address_line1}
-                    {selectedOrder.shipping_address.address_line2 && (
-                      <>, {selectedOrder.shipping_address.address_line2}</>
-                    )}
-                    <br />
-                    {selectedOrder.shipping_address.city},{" "}
-                    {selectedOrder.shipping_address.state}{" "}
-                    {selectedOrder.shipping_address.postal_code}
-                    <br />
-                    {selectedOrder.shipping_address.country}
-                    <br />
-                    Phone: {selectedOrder.shipping_address.phone}
-                  </p>
-                </div>
+              {activeTab === "overview" && (
+                <section className="space-y-6">
+                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                    <StatCard icon={Icons.Package} label="Total Orders" value={orders.length} />
+                    <StatCard icon={Icons.Wallet} label="Total Spent" value={money(totalSpent)} />
+                    <StatCard icon={Icons.Truck} label="Active Orders" value={activeOrders.length} />
+                    <StatCard icon={Icons.Heart} label="Saved Items" value={wishlist.length} />
+                  </div>
+                  <TwoColumn>
+                    <QuickList title="Recent Orders" action="View All" onAction={() => setActiveTab("orders")}>
+                      {orders.slice(0, 3).map((order) => renderOrderMini(order))}
+                      {orders.length === 0 && <EmptyLine text="No orders yet." />}
+                    </QuickList>
+                    <QuickList title="Recent Notifications" action="View All" onAction={() => navigate("/notifications")}>
+                      {notifications.slice(0, 3).map((item) => (
+                        <div key={item.id} className="rounded-lg border border-gray-100 p-3">
+                          <p className="font-semibold text-gray-900">{item.title || item.type || "Notification"}</p>
+                          <p className="mt-1 text-sm text-gray-500">{item.message || item.body || "No message"}</p>
+                        </div>
+                      ))}
+                      {notifications.length === 0 && <EmptyLine text="No notifications yet." />}
+                    </QuickList>
+                  </TwoColumn>
+                </section>
               )}
 
-              {/* Order Status Progression */}
-              <div className="border-t pt-4">
-                <h3 className="font-semibold text-gray-900 mb-4">
-                  Order Status Progression
-                </h3>
-                <div className="grid grid-cols-4 gap-3">
-                  {[
-                    "Payment Received",
-                    "Processing",
-                    "Shipped",
-                    "Delivered",
-                  ].map((stepLabel, index) => {
-                    const stepNumber = index + 1;
-                    const isCompleted = stepNumber < orderStatusStep;
-                    const isCurrent = stepNumber === orderStatusStep;
-                    const isFuture = stepNumber > orderStatusStep;
+              {activeTab === "orders" && (
+                <ListPanel empty="No purchase history yet.">
+                  {orders.map((order) => renderOrderCard(order))}
+                </ListPanel>
+              )}
 
-                    return (
-                      <div
-                        key={stepLabel}
-                        className="relative flex flex-col items-center"
-                      >
-                        {index < 3 && (
-                          <div
-                            className={`absolute left-1/2 top-3.5 h-0.5 w-full translate-x-1/2 ${
-                              stepNumber <= orderStatusStep
-                                ? "bg-green-500"
-                                : "bg-gray-300"
-                            }`}
-                          />
-                        )}
-                        <div
-                          className={`relative z-10 flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-bold ${
-                            isCompleted
-                              ? "border-green-500 bg-green-500 text-white"
-                              : isCurrent
-                                ? "border-blue-500 bg-blue-500 text-white"
-                                : "border-gray-300 bg-white text-gray-400"
-                          }`}
-                        >
-                          {stepNumber}
-                        </div>
-                        <p
-                          className={`mt-2 text-center text-xs font-medium leading-tight ${
-                            isCompleted
-                              ? "text-green-700"
-                              : isCurrent
-                                ? "text-blue-700"
-                                : "text-gray-400"
-                          }`}
-                        >
-                          {stepLabel}
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+              {activeTab === "active" && (
+                <ListPanel empty="No active orders right now.">
+                  {activeOrders.map((order) => renderOrderCard(order, true))}
+                </ListPanel>
+              )}
 
-              {/* Tracking Information */}
-              {(selectedOrder.status === "shipped" ||
-                selectedOrder.status === "delivered") && (
-                <div className="border-t pt-4">
-                  <h3 className="font-semibold text-gray-900 mb-3">
-                    Tracking Information
-                  </h3>
-                  {trackingLoading ? (
-                    <div className="flex items-center justify-center py-4">
-                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-                      <span className="ml-2 text-sm text-gray-600">
-                        Loading tracking info...
-                      </span>
-                    </div>
-                  ) : orderTracking ? (
-                    <div className="space-y-3">
-                      <div className="bg-blue-50 p-3 rounded-lg">
-                        <div className="grid grid-cols-2 gap-2 text-sm">
-                          <div>
-                            <span className="text-gray-600">
-                              Tracking Number:
-                            </span>
-                            <p className="font-semibold text-gray-900">
-                              {orderTracking.tracking_number}
-                            </p>
-                          </div>
-                          <div>
-                            <span className="text-gray-600">Carrier:</span>
-                            <p className="font-semibold text-gray-900">
-                              {orderTracking.carrier}
-                            </p>
-                          </div>
-                          {orderTracking.estimated_delivery && (
-                            <div>
-                              <span className="text-gray-600">
-                                Est. Delivery:
-                              </span>
-                              <p className="font-semibold text-gray-900">
-                                {new Date(
-                                  orderTracking.estimated_delivery,
-                                ).toLocaleDateString()}
-                              </p>
-                            </div>
-                          )}
-                          {orderTracking.tracking_url && (
-                            <div className="col-span-2">
-                              <a
-                                href={orderTracking.tracking_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-primary hover:underline text-sm font-medium"
-                              >
-                                Track Package →
-                              </a>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Tracking History */}
-                      {orderTracking.tracking_history &&
-                        orderTracking.tracking_history.length > 0 && (
-                          <div className="space-y-2">
-                            <p className="text-sm font-medium text-gray-700">
-                              Tracking History
-                            </p>
-                            <div className="space-y-2">
-                              {orderTracking.tracking_history.map(
-                                (event, index) => (
-                                  <div key={index} className="flex gap-3">
-                                    <div className="flex flex-col items-center">
-                                      <div
-                                        className={`w-2 h-2 rounded-full ${
-                                          index === 0
-                                            ? "bg-primary"
-                                            : "bg-gray-300"
-                                        }`}
-                                      ></div>
-                                      {index <
-                                        orderTracking.tracking_history!.length -
-                                          1 && (
-                                        <div className="w-px h-full bg-gray-200 my-1"></div>
-                                      )}
-                                    </div>
-                                    <div className="flex-1 pb-4">
-                                      <p className="text-sm font-medium text-gray-900">
-                                        {event.status}
-                                      </p>
-                                      {event.location && (
-                                        <p className="text-xs text-gray-500">
-                                          {event.location}
-                                        </p>
-                                      )}
-                                      {event.description && (
-                                        <p className="text-xs text-gray-600">
-                                          {event.description}
-                                        </p>
-                                      )}
-                                      <p className="text-xs text-gray-400 mt-1">
-                                        {new Date(
-                                          event.timestamp,
-                                        ).toLocaleString()}
-                                      </p>
-                                    </div>
-                                  </div>
-                                ),
-                              )}
-                            </div>
-                          </div>
-                        )}
-                    </div>
-                  ) : selectedOrder.tracking_number ? (
-                    <div className="bg-gray-50 p-3 rounded-lg">
-                      <p className="text-sm text-gray-600">Tracking Number:</p>
-                      <p className="font-semibold text-gray-900">
-                        {selectedOrder.tracking_number}
-                      </p>
+              {activeTab === "saved" && (
+                <section className="space-y-4">
+                  {wishlist.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-gray-200 bg-white p-10 text-center">
+                      <p className="text-gray-500">No saved items yet.</p>
+                      <Button className="mt-4" onClick={() => onNavigate("products")}>Browse Products</Button>
                     </div>
                   ) : (
-                    <p className="text-sm text-gray-500">
-                      Tracking information not available yet.
-                    </p>
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                      {wishlist.map((item) => {
+                        const product = wishlistProduct(item);
+                        return (
+                          <article key={item.id || product.id} className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+                            <div className="flex gap-3">
+                              <div className="h-20 w-20 overflow-hidden rounded-lg bg-gray-100">
+                                {productImage(product) ? <img src={productImage(product)} alt={product.name} className="h-full w-full object-cover" /> : null}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <h3 className="truncate font-bold text-gray-900">{product.name || item.product_name || "Product"}</h3>
+                                <p className="text-sm text-gray-500">{product.businesses?.business_name || product.businessName || "Seller"}</p>
+                                <p className="mt-1 font-bold text-gray-900">{money(product.price || item.price)}</p>
+                              </div>
+                            </div>
+                            <div className="mt-4 flex gap-2">
+                              <Button size="sm" className="flex-1" disabled={busy === `cart-${product.id}`} onClick={() => void addWishlistToCart(item)}>Add to Cart</Button>
+                              <Button size="sm" className={accountDangerButton} variant="outline" disabled={busy === `wishlist-${product.id}`} onClick={() => void removeWishlist(item)}>Remove</Button>
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
                   )}
-                </div>
+                </section>
               )}
 
-              {/* Order Items */}
-              {selectedOrder.items && selectedOrder.items.length > 0 && (
-                <div className="border-t pt-4">
-                  <h3 className="font-semibold text-gray-900 mb-3">
-                    Order Items
-                  </h3>
-                  <div className="space-y-3">
-                    {selectedOrder.items.map((item) => {
-                      const isReviewed = reviewedProducts[item.product_id];
-                      const canReview = selectedOrder.status === "delivered";
+              {activeTab === "finance" && (
+                <section className="space-y-6">
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <StatCard icon={Icons.Wallet} label="Total Spent" value={money(totalSpent)} />
+                    <StatCard icon={Icons.Check} label="Completed Orders" value={completedOrders.length} />
+                    <StatCard icon={Icons.FileText} label="Invoices" value={invoices.length || orders.length} />
+                  </div>
+                  <QuickList title="Receipts & Invoices">
+                    {orders.map((order) => (
+                      <div key={order.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-100 p-3">
+                        <div>
+                          <p className="font-semibold text-gray-900">#{orderNumber(order)}</p>
+                          <p className="text-sm text-gray-500">{money(order.total_amount || order.totalAmount)}</p>
+                        </div>
+                        <a className="text-sm font-semibold text-primary hover:underline" href={`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/orders/${order.id}/receipt`} target="_blank" rel="noreferrer">
+                          Download Receipt
+                        </a>
+                      </div>
+                    ))}
+                    {orders.length === 0 && <EmptyLine text="No receipts available." />}
+                  </QuickList>
+                  <QuickList title="Refund History">
+                    {refundOrders.map((order) => {
+                      const payment = Array.isArray(order.payments) ? order.payments[0] : null;
                       return (
-                        <div
-                          key={item.id}
-                          className="rounded-lg border border-gray-100 p-4"
-                        >
-                          <div className="flex items-start justify-between gap-4">
-                            <div>
-                              <p className="font-medium text-gray-900">
-                                {item.product?.name || "Product"}
-                              </p>
-                              <p className="text-sm text-gray-500">
-                                Qty: {item.quantity}
-                              </p>
-                            </div>
-                            <p className="font-semibold text-gray-900">
-                              PKR {item.subtotal.toLocaleString()}
-                            </p>
+                        <div key={order.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-100 p-3">
+                          <div>
+                            <p className="font-semibold text-gray-900">#{orderNumber(order)}</p>
+                            <p className="text-sm text-gray-500">{money(payment?.amount || order.total_amount)}</p>
                           </div>
-                          {canReview && (
-                            <div className="mt-3 flex justify-end">
-                              {isReviewed ? (
-                                <span className="inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
-                                  Reviewed ✓
-                                </span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    openReviewModal(
-                                      item.product_id,
-                                      item.product?.name || "Product",
-                                    )
-                                  }
-                                  className="inline-flex items-center rounded-full bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700"
-                                >
-                                  Write Review
-                                </button>
-                              )}
-                            </div>
-                          )}
+                          <StatusBadge status={payment?.refund_status || order.refund_status || "requested"} />
                         </div>
                       );
                     })}
-                  </div>
-                </div>
+                    {refundOrders.length === 0 && <EmptyLine text="No refund requests yet." />}
+                  </QuickList>
+                </section>
               )}
 
-              {/* Order Summary */}
-              <div className="border-t pt-4 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Subtotal</span>
-                  <span className="font-medium text-gray-900">
-                    PKR {selectedOrder.subtotal.toLocaleString()}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Tax (5%)</span>
-                  <span className="font-medium text-gray-900">
-                    PKR{" "}
-                    {(
-                      selectedOrder.tax_amount ?? selectedOrder.subtotal * 0.05
-                    ).toLocaleString()}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Shipping</span>
-                  <span className="font-medium text-gray-900">
-                    PKR {(selectedOrder.shipping_fee || 0).toLocaleString()}
-                  </span>
-                </div>
-                {selectedOrder.discount_amount > 0 && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Discount</span>
-                    <span className="font-medium text-green-600">
-                      - PKR {selectedOrder.discount_amount.toLocaleString()}
-                    </span>
+              {activeTab === "projects" && (
+                <section className="space-y-4">
+                  <div className="flex justify-end">
+                    <Button onClick={() => setModal({ type: "project-form" })}><Icons.Plus className="mr-2 h-4 w-4" /> Create New Project</Button>
                   </div>
-                )}
-                <div className="flex justify-between text-lg font-bold border-t pt-2 mt-2">
-                  <span>Total</span>
-                  <span className="text-primary">
-                    PKR {(selectedOrder.total_amount || 0).toLocaleString()}
-                  </span>
-                </div>
-              </div>
+                  <ListPanel empty="No projects posted yet.">
+                    {projects.map((project) => (
+                      <article key={project.id} className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                          <div>
+                            <h3 className="font-bold text-gray-900">{project.title || "Untitled project"}</h3>
+                            <p className="mt-1 line-clamp-2 text-sm text-gray-500">{project.description || "No description"}</p>
+                            <p className="mt-2 text-sm font-semibold text-gray-700">{money(project.budget || project.budget_max || project.budgetMax)}</p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <StatusBadge status={project.status || "open"} />
+                            <Button className={accountOutlineButton} variant="outline" size="sm" onClick={() => void openProject(project)}>View Details</Button>
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+                  </ListPanel>
+                </section>
+              )}
 
-              {selectedOrder.notes && (
-                <div className="border-t pt-4">
-                  <h3 className="font-semibold text-gray-900 mb-2">Notes</h3>
-                  <p className="text-sm text-gray-600">{selectedOrder.notes}</p>
-                </div>
+              {activeTab === "disputes" && (
+                <section className="space-y-4">
+                  <div className="flex justify-end">
+                    <Button onClick={() => setModal({ type: "dispute-form" })}><Icons.Plus className="mr-2 h-4 w-4" /> Raise Dispute</Button>
+                  </div>
+                  <ListPanel empty="No disputes filed yet.">
+                    {disputes.map((dispute) => (
+                      <article key={dispute.id} className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+                        <div>
+                          <h3 className="font-bold text-gray-900">#{dispute.dispute_number || dispute.id?.slice?.(0, 8) || "Dispute"}</h3>
+                          <p className="text-sm text-gray-500">{dispute.reason || dispute.description || "No reason"} · {dateLabel(dispute.created_at)}</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <StatusBadge status={dispute.status || "open"} />
+                          <Button className={accountOutlineButton} variant="outline" size="sm" onClick={() => setModal({ type: "dispute", dispute })}>View</Button>
+                        </div>
+                      </article>
+                    ))}
+                  </ListPanel>
+                </section>
+              )}
+
+              {activeTab === "support" && (
+                <section className="space-y-4">
+                  <div className="flex justify-end">
+                    <Button onClick={() => setModal({ type: "ticket-form" })}><Icons.Plus className="mr-2 h-4 w-4" /> Create Ticket</Button>
+                  </div>
+                  <ListPanel empty="No support tickets yet.">
+                    {tickets.map((ticket) => (
+                      <article key={ticket.id} className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+                        <div>
+                          <h3 className="font-bold text-gray-900">{ticket.subject}</h3>
+                          <p className="text-sm text-gray-500">{ticket.priority || "medium"} · {dateLabel(ticket.created_at || ticket.createdAt)}</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <StatusBadge status={ticket.status || "open"} />
+                          <Button className={accountOutlineButton} variant="outline" size="sm" onClick={() => setModal({ type: "ticket", ticket })}>View</Button>
+                        </div>
+                      </article>
+                    ))}
+                  </ListPanel>
+                </section>
+              )}
+
+              {activeTab === "profile" && (
+                <TwoColumn>
+                  <form onSubmit={(event) => void saveProfile(event)} className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+                    <h2 className="text-lg font-bold text-gray-900">Personal Information</h2>
+                    <div className="mt-4 space-y-3">
+                      <TextInput label="Full Name" value={profileForm.full_name || ""} onChange={(value) => setProfileForm((current) => ({ ...current, full_name: value }))} />
+                      <TextInput label="Phone" value={profileForm.phone || ""} onChange={(value) => setProfileForm((current) => ({ ...current, phone: value }))} />
+                      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(event) => void uploadProfileImage(event)} />
+                      <Button type="button" className={accountOutlineButton} variant="outline" onClick={() => fileInputRef.current?.click()} disabled={busy === "profile-image"}>Upload Profile Image</Button>
+                      <Button type="submit" disabled={busy === "profile"}>Save Profile</Button>
+                    </div>
+                  </form>
+                  <form onSubmit={(event) => void changePassword(event)} className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+                    <h2 className="text-lg font-bold text-gray-900">Change Password</h2>
+                    <div className="mt-4 space-y-3">
+                      <TextInput label="Current Password" type="password" value={passwordForm.currentPassword} onChange={(value) => setPasswordForm((current) => ({ ...current, currentPassword: value }))} />
+                      <TextInput label="New Password" type="password" value={passwordForm.newPassword} onChange={(value) => setPasswordForm((current) => ({ ...current, newPassword: value }))} />
+                      <TextInput label="Confirm New Password" type="password" value={passwordForm.confirmPassword} onChange={(value) => setPasswordForm((current) => ({ ...current, confirmPassword: value }))} />
+                      <Button type="submit" disabled={busy === "password"}>Change Password</Button>
+                    </div>
+                  </form>
+                </TwoColumn>
+              )}
+
+              {activeTab === "addresses" && (
+                <TwoColumn>
+                  <section className="space-y-3">
+                    {addresses.map((address) => (
+                      <article key={address.id} className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <h3 className="font-bold text-gray-900">{address.full_name}</h3>
+                            <p className="mt-1 text-sm text-gray-500">{[address.address_line1, address.address_line2, address.city, address.state, address.postal_code, address.country].filter(Boolean).join(", ")}</p>
+                            {address.is_default && <div className="mt-2"><StatusBadge status="Default" /></div>}
+                          </div>
+                          <div className="flex gap-2">
+                            <Button size="sm" className={accountOutlineButton} variant="outline" onClick={() => editAddress(address)}>Edit</Button>
+                            {!address.is_default && <Button size="sm" className={accountOutlineButton} variant="outline" onClick={() => void setDefaultAddress(address)}>Default</Button>}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className={accountDangerButton}
+                              onClick={() =>
+                                setModal({
+                                  type: "confirm",
+                                  title: "Delete address?",
+                                  message: "This saved address will be removed.",
+                                  onConfirm: () => void deleteAddress(address),
+                                })
+                              }
+                            >
+                              Delete
+                            </Button>
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+                    {addresses.length === 0 && <EmptyCard text="No saved addresses yet." />}
+                  </section>
+                  <form onSubmit={(event) => void saveAddress(event)} className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+                    <h2 className="text-lg font-bold text-gray-900">{editingAddressId ? "Edit Address" : "Add Address"}</h2>
+                    <div className="mt-4 space-y-3">
+                      <TextInput label="Full Name" value={addressForm.full_name} onChange={(value) => setAddressForm((current) => ({ ...current, full_name: value }))} />
+                      <TextInput label="Phone" value={addressForm.phone} onChange={(value) => setAddressForm((current) => ({ ...current, phone: value }))} />
+                      <TextInput label="Address Line 1" value={addressForm.address_line1} onChange={(value) => setAddressForm((current) => ({ ...current, address_line1: value }))} />
+                      <TextInput label="Address Line 2" value={addressForm.address_line2 || ""} onChange={(value) => setAddressForm((current) => ({ ...current, address_line2: value }))} />
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <TextInput label="City" value={addressForm.city} onChange={(value) => setAddressForm((current) => ({ ...current, city: value }))} />
+                        <TextInput label="State" value={addressForm.state} onChange={(value) => setAddressForm((current) => ({ ...current, state: value }))} />
+                      </div>
+                      <TextInput label="Postal Code" value={addressForm.postal_code} onChange={(value) => setAddressForm((current) => ({ ...current, postal_code: value }))} />
+                      <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                        <input type="checkbox" checked={Boolean(addressForm.is_default)} onChange={(event) => setAddressForm((current) => ({ ...current, is_default: event.target.checked }))} />
+                        Set as default
+                      </label>
+                      <Button type="submit" disabled={busy === "address"}>{editingAddressId ? "Update Address" : "Add Address"}</Button>
+                    </div>
+                  </form>
+                </TwoColumn>
               )}
             </div>
-            <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
-              <Button
-                variant="outline"
-                onClick={() => setShowInvoiceModal(false)}
-              >
-                Close
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="min-h-screen bg-slate-50 py-10">
-        <div className="container mx-auto px-4 lg:px-8">
-          <div className="flex flex-col gap-8 lg:flex-row">
-            {/* Sidebar */}
-            <div className="w-full lg:w-72 flex-shrink-0">
-              <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm sticky top-24">
-                <div className="mb-8 flex items-center gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    <Icons.User className="h-6 w-6" />
-                  </div>
-                  <div className="overflow-hidden">
-                    <h2 className="font-bold text-gray-900 truncate">
-                      {user.full_name}
-                    </h2>
-                    <p className="text-xs text-gray-500 truncate">
-                      {user.email}
-                    </p>
-                  </div>
-                </div>
-
-                <nav className="space-y-1">
-                  {menuItems.map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => setActiveTab(item.id)}
-                      className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
-                        activeTab === item.id
-                          ? "bg-primary text-white shadow-md shadow-primary/20"
-                          : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                      }`}
-                    >
-                      <item.icon className="h-5 w-5" />
-                      {item.label}
-                    </button>
-                  ))}
-                  <div className="pt-4 mt-4 border-t border-gray-100">
-                    <button
-                      onClick={onLogout}
-                      className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-red-600 transition-colors hover:bg-red-50"
-                    >
-                      <Icons.LogOut className="h-5 w-5" />
-                      Logout
-                    </button>
-                  </div>
-                </nav>
-              </div>
-            </div>
-
-            {/* Content Area */}
-            <div className="flex-1">{renderContent()}</div>
           </div>
         </div>
       </div>
+
+      {modal && (
+        <AccountModal onClose={() => setModal(null)}>
+          {modal.type === "order" && (
+            <OrderDetail order={modal.order} tracking={trackingByOrder[modal.order.id]} />
+          )}
+          {modal.type === "refund" && (
+            <div className="space-y-4">
+              <h2 className="text-xl font-bold text-gray-900">Request Refund</h2>
+              <select className="w-full rounded-lg border border-gray-200 px-3 py-2" value={refundReason} onChange={(event) => setRefundReason(event.target.value)}>
+                <option>Damaged or incomplete order</option>
+                <option>Wrong item delivered</option>
+                <option>Quality issue</option>
+                <option>Other</option>
+              </select>
+              <Button disabled={busy === "refund"} onClick={() => void requestRefund()}>Submit Refund Request</Button>
+            </div>
+          )}
+          {modal.type === "project" && (
+            <ProjectDetail project={modal.project} busy={busy} onProposalUpdate={updateProposal} />
+          )}
+          {modal.type === "project-form" && (
+            <ProjectForm form={projectForm} setForm={setProjectForm} busy={busy} onSubmit={createProject} />
+          )}
+          {modal.type === "dispute-form" && (
+            <DisputeForm form={disputeForm} setForm={setDisputeForm} orders={orders} projects={projects} busy={busy} onSubmit={createDispute} />
+          )}
+          {modal.type === "dispute" && (
+            <DetailBlock title={`Dispute ${modal.dispute.dispute_number || modal.dispute.id}`} rows={[
+              ["Status", modal.dispute.status],
+              ["Reason", modal.dispute.reason],
+              ["Description", modal.dispute.description],
+              ["Filed", dateLabel(modal.dispute.created_at)],
+            ]} />
+          )}
+          {modal.type === "ticket-form" && (
+            <TicketForm form={ticketForm} setForm={setTicketForm} busy={busy} onSubmit={createTicket} />
+          )}
+          {modal.type === "ticket" && (
+            <div className="space-y-4">
+              <DetailBlock title={modal.ticket.subject} rows={[
+                ["Status", modal.ticket.status],
+                ["Priority", modal.ticket.priority],
+                ["Description", modal.ticket.description || modal.ticket.message],
+              ]} />
+              <textarea className="w-full rounded-lg border border-gray-200 px-3 py-2" rows={4} placeholder="Add a reply..." value={ticketMessage} onChange={(event) => setTicketMessage(event.target.value)} />
+              <Button disabled={busy === "ticket-message" || !ticketMessage.trim()} onClick={() => void sendTicketMessage()}>Send Reply</Button>
+            </div>
+          )}
+          {modal.type === "confirm" && (
+            <div className="space-y-4">
+              <h2 className="text-xl font-bold text-gray-900">{modal.title}</h2>
+              <p className="text-gray-600">{modal.message}</p>
+              <div className="flex justify-end gap-3">
+                <Button className={accountOutlineButton} variant="outline" onClick={() => setModal(null)}>Cancel</Button>
+                <Button
+                  onClick={() => {
+                    const confirm = modal.onConfirm;
+                    setModal(null);
+                    confirm();
+                  }}
+                >
+                  Confirm
+                </Button>
+              </div>
+            </div>
+          )}
+        </AccountModal>
+      )}
     </>
+  );
+
+  function renderOrderMini(order: any) {
+    return (
+      <button key={order.id} onClick={() => void openOrder(order)} className="w-full rounded-lg border border-gray-100 p-3 text-left hover:bg-gray-50">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="font-semibold text-gray-900">#{orderNumber(order)}</p>
+            <p className="text-sm text-gray-500">{sellerName(order)}</p>
+          </div>
+          <span className="font-bold text-gray-900">{money(order.total_amount || order.totalAmount)}</span>
+        </div>
+      </button>
+    );
+  }
+};
+
+const StatCard = ({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: React.ReactNode }) => (
+  <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+    <Icon className="h-5 w-5 text-primary" />
+    <p className="mt-3 text-sm text-gray-500">{label}</p>
+    <p className="mt-1 text-2xl font-black text-gray-900">{value}</p>
+  </div>
+);
+
+const TwoColumn = ({ children }: { children: React.ReactNode }) => <div className="grid gap-5 xl:grid-cols-2">{children}</div>;
+const ListPanel = ({ children, empty }: { children: React.ReactNode[] | React.ReactNode; empty: string }) => {
+  const list = React.Children.toArray(children).filter(Boolean);
+  return <div className="space-y-4">{list.length ? list : <EmptyCard text={empty} />}</div>;
+};
+const QuickList = ({ title, action, onAction, children }: { title: string; action?: string; onAction?: () => void; children: React.ReactNode }) => (
+  <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+    <div className="mb-4 flex items-center justify-between gap-3">
+      <h2 className="text-lg font-bold text-gray-900">{title}</h2>
+      {action && <button className="text-sm font-semibold text-primary" onClick={onAction}>{action}</button>}
+    </div>
+    <div className="space-y-3">{children}</div>
+  </section>
+);
+const EmptyLine = ({ text }: { text: string }) => <p className="text-sm text-gray-500">{text}</p>;
+const EmptyCard = ({ text }: { text: string }) => <div className="rounded-xl border border-dashed border-gray-200 bg-white p-10 text-center text-gray-500">{text}</div>;
+
+const TextInput = ({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (value: string) => void; type?: string }) => (
+  <label className="block text-sm font-semibold text-gray-700">
+    {label}
+    <input className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 outline-none focus:border-primary" type={type} value={value} onChange={(event) => onChange(event.target.value)} />
+  </label>
+);
+
+const AccountModal = ({ children, onClose }: { children: React.ReactNode; onClose: () => void }) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
+      <div className="mb-4 flex justify-end">
+        <button aria-label="Close" onClick={onClose} className="rounded-full p-2 text-gray-500 hover:bg-gray-100">
+          <Icons.Close className="h-5 w-5" />
+        </button>
+      </div>
+      {children}
+    </div>
+  </div>
+);
+
+const TrackingTimeline = ({ tracking, status }: { tracking: any; status: string }) => {
+  const events = asArray(tracking?.tracking_history || tracking?.events || tracking?.timeline, []);
+  const fallback = ["confirmed", "processing", "shipped", "delivered"];
+  const steps = events.length ? events.map((event: any) => event.status || event.title) : fallback;
+  return (
+    <div className="grid gap-2 sm:grid-cols-4">
+      {steps.map((step: string, index: number) => (
+        <div key={`${step}-${index}`} className={`rounded-lg px-3 py-2 text-xs font-semibold ${status.toLowerCase().includes(step.toLowerCase()) || index === 0 ? "bg-primary/10 text-primary" : "bg-white text-gray-500"}`}>
+          {step.replace(/_/g, " ")}
+        </div>
+      ))}
+    </div>
   );
 };
 
-function PostProjectForm({
-  onSuccess,
-  onCancel,
-}: {
-  onSuccess: () => void;
-  onCancel: () => void;
-}) {
-  const [form, setForm] = useState({
-    title: "",
-    description: "",
-    category: "",
-    budgetMin: "",
-    budgetMax: "",
-    deadline: "",
-  });
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
-  const [generating, setGenerating] = useState(false);
+const OrderDetail = ({ order, tracking }: { order: any; tracking?: any }) => (
+  <div className="space-y-5">
+    <DetailBlock title={`Order #${order.order_number || order.id}`} rows={[
+      ["Seller", order.businesses?.business_name || order.businessName || "Seller"],
+      ["Status", order.status],
+      ["Total", money(order.total_amount || order.totalAmount)],
+      ["Date", dateLabel(order.created_at || order.createdAt)],
+    ]} />
+    <TrackingTimeline tracking={tracking} status={order.status || ""} />
+    <QuickList title="Items">
+      {asArray(order.items || order.order_items, []).map((item: any) => (
+        <div key={item.id || item.product_id} className="flex justify-between rounded-lg border border-gray-100 p-3">
+          <span>{item.product?.name || item.product_name || item.name || "Item"} x{item.quantity}</span>
+          <span className="font-semibold">{money(item.subtotal || item.total_price || item.price)}</span>
+        </div>
+      ))}
+      {asArray(order.items || order.order_items, []).length === 0 && <EmptyLine text="No item rows returned." />}
+    </QuickList>
+  </div>
+);
 
-  const generateDescription = async () => {
-    if (!form.title) {
-      setError("Enter a title first");
-      return;
-    }
+const DetailBlock = ({ title, rows }: { title: string; rows: Array<[string, any]> }) => (
+  <section className="rounded-xl border border-gray-100 bg-white p-5">
+    <h2 className="text-xl font-bold text-gray-900">{title}</h2>
+    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      {rows.map(([label, value]) => (
+        <div key={label} className="rounded-lg bg-gray-50 p-3">
+          <p className="text-xs font-semibold uppercase text-gray-400">{label}</p>
+          <p className="mt-1 text-sm font-semibold text-gray-900">{text(value, "N/A")}</p>
+        </div>
+      ))}
+    </div>
+  </section>
+);
 
-    setGenerating(true);
-    try {
-      const response = await fetch(
-        "https://ai-backend-production-d13d.up.railway.app/chat",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            query: `Write a professional project description for: ${form.title}, Category: ${form.category || "Construction"}, Budget: PKR ${form.budgetMax || "50000"}. Location: Lahore Pakistan. 3-4 sentences only.`,
-            use_llm: true,
-          }),
-        },
-      );
-      const data = await response.json();
-      setForm((prev) => ({ ...prev, description: data.answer ?? "" }));
-    } catch {
-      setError("AI unavailable");
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  const handleSubmit = async () => {
-    if (!form.title || !form.description) {
-      setError("Title and description required");
-      return;
-    }
-
-    setSubmitting(true);
-    setError("");
-    try {
-      await apiClient.post("/projects", {
-        title: form.title,
-        description: form.description,
-        category: form.category,
-        budgetMin: form.budgetMin ? Number(form.budgetMin) : undefined,
-        budgetMax: form.budgetMax ? Number(form.budgetMax) : undefined,
-        deadline: form.deadline || undefined,
-      });
-      onSuccess();
-    } catch (err: any) {
-      setError(err?.response?.data?.message || "Failed to post project");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const inputStyle = {
-    width: "100%",
-    border: "1px solid #D1D5DB",
-    borderRadius: "8px",
-    padding: "8px 12px",
-    fontSize: "14px",
-    outline: "none",
-    boxSizing: "border-box" as const,
-  };
-  const labelStyle = {
-    display: "block",
-    fontSize: "13px",
-    fontWeight: 500,
-    color: "#374151",
-    marginBottom: "4px",
-  };
-
+const ProjectDetail = ({ project, busy, onProposalUpdate }: { project: any; busy: string; onProposalUpdate: (id: string, status: "accepted" | "rejected") => Promise<void> }) => {
+  const proposals = asArray(project.proposals, []);
+  const milestones = asArray(project.milestones, []);
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-      <div>
-        <label style={labelStyle}>Project Title *</label>
-        <input
-          style={inputStyle}
-          placeholder="e.g. Bathroom Renovation in Gulberg"
-          value={form.title}
-          onChange={(e) =>
-            setForm((prev) => ({ ...prev, title: e.target.value }))
-          }
-        />
-      </div>
-      <div>
-        <label style={labelStyle}>Category</label>
-        <select
-          style={inputStyle}
-          value={form.category}
-          onChange={(e) =>
-            setForm((prev) => ({ ...prev, category: e.target.value }))
-          }
-        >
-          <option value="">Select category</option>
-          {[
-            "Electrical",
-            "Plumbing",
-            "Carpentry",
-            "Masonry",
-            "Painting",
-            "Tiling",
-            "Civil Works",
-            "Interior Design",
-            "Renovation",
-            "Other",
-          ].map((category) => (
-            <option key={category} value={category}>
-              {category}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "4px",
-          }}
-        >
-          <label style={{ ...labelStyle, marginBottom: 0 }}>
-            Description *
-          </label>
-          <button
-            onClick={generateDescription}
-            disabled={generating}
-            style={{
-              fontSize: "12px",
-              color: "#7C3AED",
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-            }}
-          >
-            {generating ? "Generating..." : "✨ Generate with AI"}
-          </button>
-        </div>
-        <textarea
-          style={{ ...inputStyle, minHeight: "80px", resize: "vertical" }}
-          placeholder="Describe your project requirements..."
-          value={form.description}
-          onChange={(e) =>
-            setForm((prev) => ({ ...prev, description: e.target.value }))
-          }
-        />
-      </div>
-      <div
-        style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}
-      >
-        <div>
-          <label style={labelStyle}>Min Budget (PKR)</label>
-          <input
-            style={inputStyle}
-            type="number"
-            placeholder="25000"
-            value={form.budgetMin}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, budgetMin: e.target.value }))
-            }
-          />
-        </div>
-        <div>
-          <label style={labelStyle}>Max Budget (PKR)</label>
-          <input
-            style={inputStyle}
-            type="number"
-            placeholder="75000"
-            value={form.budgetMax}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, budgetMax: e.target.value }))
-            }
-          />
-        </div>
-      </div>
-      <div>
-        <label style={labelStyle}>Deadline</label>
-        <input
-          style={inputStyle}
-          type="date"
-          value={form.deadline}
-          onChange={(e) =>
-            setForm((prev) => ({ ...prev, deadline: e.target.value }))
-          }
-          min={new Date().toISOString().split("T")[0]}
-        />
-      </div>
-      {error && <p style={{ color: "#EF4444", fontSize: "13px" }}>{error}</p>}
-      <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
-        <button
-          onClick={onCancel}
-          style={{
-            flex: 1,
-            padding: "10px",
-            border: "1px solid #D1D5DB",
-            borderRadius: "8px",
-            background: "white",
-            cursor: "pointer",
-            fontSize: "14px",
-          }}
-        >
-          Cancel
-        </button>
-        <button
-          onClick={handleSubmit}
-          disabled={submitting}
-          style={{
-            flex: 1,
-            padding: "10px",
-            background: "#F59E0B",
-            color: "white",
-            border: "none",
-            borderRadius: "8px",
-            fontWeight: 500,
-            cursor: "pointer",
-            fontSize: "14px",
-            opacity: submitting ? 0.6 : 1,
-          }}
-        >
-          {submitting ? "Posting..." : "Post Project"}
-        </button>
-      </div>
+    <div className="space-y-5">
+      <DetailBlock title={project.title || "Project"} rows={[
+        ["Status", project.status || "open"],
+        ["Budget", money(project.budget || project.budget_max || project.budgetMax)],
+        ["Posted", dateLabel(project.created_at || project.createdAt)],
+        ["Deadline", dateLabel(project.deadline || project.due_date)],
+        ["Description", project.description],
+      ]} />
+      <QuickList title="Proposals">
+        {proposals.map((proposal: any) => (
+          <div key={proposal.id} className="rounded-lg border border-gray-100 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="font-bold text-gray-900">{proposal.contractor?.full_name || proposal.contractorName || proposal.contractor_name || "Contractor"}</p>
+                <p className="text-sm text-gray-500">{proposal.cover_letter || proposal.coverLetter || proposal.message || "No cover note"}</p>
+                <p className="mt-1 font-semibold text-gray-900">{money(proposal.amount || proposal.bid_amount)} · {proposal.delivery_time || proposal.deliveryTime || "N/A"}</p>
+              </div>
+              <StatusBadge status={proposal.status || "pending"} />
+            </div>
+            {String(proposal.status || "pending").toLowerCase() === "pending" && (
+              <div className="mt-3 flex gap-2">
+                <Button size="sm" disabled={busy === `proposal-${proposal.id}`} onClick={() => void onProposalUpdate(proposal.id, "accepted")}>Accept</Button>
+                <Button size="sm" className={accountDangerButton} variant="outline" disabled={busy === `proposal-${proposal.id}`} onClick={() => void onProposalUpdate(proposal.id, "rejected")}>Reject</Button>
+              </div>
+            )}
+          </div>
+        ))}
+        {proposals.length === 0 && <EmptyLine text="No proposals received yet." />}
+      </QuickList>
+      <QuickList title="Milestone Timeline">
+        {milestones.map((milestone: any) => (
+          <div key={milestone.id || milestone.name} className="flex justify-between rounded-lg border border-gray-100 p-3">
+            <div>
+              <p className="font-semibold text-gray-900">{milestone.name || milestone.title}</p>
+              <p className="text-sm text-gray-500">Due: {dateLabel(milestone.due_date || milestone.dueDate)}</p>
+            </div>
+            <StatusBadge status={milestone.status || "pending"} />
+          </div>
+        ))}
+        {milestones.length === 0 && <EmptyLine text="No milestones available." />}
+      </QuickList>
     </div>
   );
-}
+};
+
+const ProjectForm = ({ form, setForm, busy, onSubmit }: { form: any; setForm: React.Dispatch<React.SetStateAction<any>>; busy: string; onSubmit: (event: React.FormEvent) => void }) => (
+  <form onSubmit={onSubmit} className="space-y-4">
+    <h2 className="text-xl font-bold text-gray-900">Create New Project</h2>
+    <TextInput label="Title" value={form.title} onChange={(value) => setForm((current: any) => ({ ...current, title: value }))} />
+    <label className="block text-sm font-semibold text-gray-700">
+      Description
+      <textarea className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2" rows={4} value={form.description} onChange={(event) => setForm((current: any) => ({ ...current, description: event.target.value }))} />
+    </label>
+    <TextInput label="Budget (PKR)" type="number" value={form.budget} onChange={(value) => setForm((current: any) => ({ ...current, budget: value }))} />
+    <div className="grid gap-3 sm:grid-cols-2">
+      <TextInput label="Start Date" type="date" value={form.startDate} onChange={(value) => setForm((current: any) => ({ ...current, startDate: value }))} />
+      <TextInput label="Deadline" type="date" value={form.deadline} onChange={(value) => setForm((current: any) => ({ ...current, deadline: value }))} />
+    </div>
+    <QuickList title="Milestones">
+      {form.milestones.map((milestone: any, index: number) => (
+        <div key={index} className="grid gap-3 sm:grid-cols-2">
+          <TextInput label="Name" value={milestone.name} onChange={(value) => setForm((current: any) => ({ ...current, milestones: current.milestones.map((item: any, currentIndex: number) => currentIndex === index ? { ...item, name: value } : item) }))} />
+          <TextInput label="Due Date" type="date" value={milestone.dueDate} onChange={(value) => setForm((current: any) => ({ ...current, milestones: current.milestones.map((item: any, currentIndex: number) => currentIndex === index ? { ...item, dueDate: value } : item) }))} />
+        </div>
+      ))}
+      <Button type="button" className={accountOutlineButton} variant="outline" onClick={() => setForm((current: any) => ({ ...current, milestones: [...current.milestones, { name: "", dueDate: "" }] }))}>Add Milestone</Button>
+    </QuickList>
+    <Button type="submit" disabled={busy === "project"}>Create Project</Button>
+  </form>
+);
+
+const DisputeForm = ({ form, setForm, orders, projects, busy, onSubmit }: { form: any; setForm: React.Dispatch<React.SetStateAction<any>>; orders: any[]; projects: any[]; busy: string; onSubmit: (event: React.FormEvent) => void }) => (
+  <form onSubmit={onSubmit} className="space-y-4">
+    <h2 className="text-xl font-bold text-gray-900">Raise Dispute</h2>
+    <select className="w-full rounded-lg border border-gray-200 px-3 py-2" value={form.relatedType} onChange={(event) => setForm((current: any) => ({ ...current, relatedType: event.target.value, relatedId: "" }))}>
+      <option value="order">Order</option>
+      <option value="project">Project</option>
+    </select>
+    <select className="w-full rounded-lg border border-gray-200 px-3 py-2" value={form.relatedId} onChange={(event) => setForm((current: any) => ({ ...current, relatedId: event.target.value }))}>
+      <option value="">Select related {form.relatedType}</option>
+      {(form.relatedType === "order" ? orders : projects).map((item) => (
+        <option key={item.id} value={item.id}>{item.order_number || item.title || item.id}</option>
+      ))}
+    </select>
+    <TextInput label="Reason" value={form.reason} onChange={(value) => setForm((current: any) => ({ ...current, reason: value }))} />
+    <label className="block text-sm font-semibold text-gray-700">
+      Description
+      <textarea className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2" rows={4} value={form.description} onChange={(event) => setForm((current: any) => ({ ...current, description: event.target.value }))} />
+    </label>
+    <Button type="submit" disabled={busy === "dispute"}>File Dispute</Button>
+  </form>
+);
+
+const TicketForm = ({ form, setForm, busy, onSubmit }: { form: any; setForm: React.Dispatch<React.SetStateAction<any>>; busy: string; onSubmit: (event: React.FormEvent) => void }) => (
+  <form onSubmit={onSubmit} className="space-y-4">
+    <h2 className="text-xl font-bold text-gray-900">Create Support Ticket</h2>
+    <TextInput label="Subject" value={form.subject} onChange={(value) => setForm((current: any) => ({ ...current, subject: value }))} />
+    <label className="block text-sm font-semibold text-gray-700">
+      Description
+      <textarea className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2" rows={4} value={form.description} onChange={(event) => setForm((current: any) => ({ ...current, description: event.target.value }))} />
+    </label>
+    <div className="grid gap-3 sm:grid-cols-2">
+      <select className="rounded-lg border border-gray-200 px-3 py-2" value={form.category} onChange={(event) => setForm((current: any) => ({ ...current, category: event.target.value }))}>
+        <option value="general">General</option>
+        <option value="billing">Billing</option>
+        <option value="technical">Technical</option>
+        <option value="dispute">Dispute</option>
+        <option value="other">Other</option>
+      </select>
+      <select className="rounded-lg border border-gray-200 px-3 py-2" value={form.priority} onChange={(event) => setForm((current: any) => ({ ...current, priority: event.target.value }))}>
+        <option value="low">Low</option>
+        <option value="medium">Medium</option>
+        <option value="high">High</option>
+        <option value="urgent">Urgent</option>
+      </select>
+    </div>
+    <Button type="submit" disabled={busy === "ticket"}>Create Ticket</Button>
+  </form>
+);
+
+export default AccountPage;

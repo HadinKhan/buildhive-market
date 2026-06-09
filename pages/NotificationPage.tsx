@@ -497,8 +497,7 @@ export const NotificationPage: React.FC<NotificationPageProps> = ({ onNavigate }
         );
         setNotificationsError(null);
       })
-      .catch((error) => {
-        console.error("Failed to load notifications:", error);
+      .catch(() => {
         if (!cancelled) {
           setNotifications([]);
           setNotificationsError("Notifications are unavailable right now.");
@@ -523,18 +522,14 @@ export const NotificationPage: React.FC<NotificationPageProps> = ({ onNavigate }
   const starredCount = notifications.filter((notification) => notification.starred).length;
 
   const markAsRead = useCallback((id: string) => {
-    userService.markNotificationRead(id).catch((error) => {
-      console.error("Failed to mark notification read:", error);
-    });
+    userService.markNotificationRead(id).catch(() => undefined);
     setNotifications((current) =>
       current.map((notification) => notification.id === id ? { ...notification, read: true } : notification)
     );
   }, []);
 
   const markAllAsRead = useCallback(() => {
-    userService.markAllNotificationsRead().catch((error) => {
-      console.error("Failed to mark all notifications read:", error);
-    });
+    userService.markAllNotificationsRead().catch(() => undefined);
     setNotifications((current) => current.map((notification) => ({ ...notification, read: true })));
   }, []);
 
@@ -750,7 +745,7 @@ export const NotificationPage: React.FC<NotificationPageProps> = ({ onNavigate }
                             onClick={(event) => {
                               event.stopPropagation();
                               markAsRead(notification.id);
-                              if (notification.type === "order") onNavigate("account");
+                              if (notification.type === "order") onNavigate("account?tab=orders");
                               else if (notification.type === "message") onNavigate("contact");
                               else if (notification.type === "payment") onNavigate("checkout");
                               else if (notification.type === "alert") onNavigate("products");

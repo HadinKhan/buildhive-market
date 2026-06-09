@@ -1,4 +1,4 @@
-import api from './api';
+﻿import api from './api';
 
 // =============================================
 // API Response Types
@@ -102,11 +102,9 @@ class UserService {
    * Get current user profile
    */
   async getProfile(): Promise<UserProfile> {
-    console.log('👤 [UserService] Fetching user profile');
     
     const response = await api.get<ApiResponse<UserProfile>>('/users/profile');
     
-    console.log('✅ [UserService] Profile fetched:', response.data.data.full_name);
     
     return response.data.data;
   }
@@ -115,7 +113,6 @@ class UserService {
    * Update user profile
    */
   async updateProfile(userId: string, data: UpdateProfileData): Promise<UserProfile> {
-    console.log('✏️ [UserService] Updating profile:', userId, data);
 
     const apiData = {
       fullName: data.full_name,
@@ -124,7 +121,6 @@ class UserService {
     
     const response = await api.put<ApiResponse<UserProfile>>(`/users/${userId}`, apiData);
     
-    console.log('✅ [UserService] Profile updated');
     
     return response.data.data;
   }
@@ -133,17 +129,10 @@ class UserService {
    * Upload profile image
    */
   async uploadProfileImage(userId: string, file: File): Promise<string> {
-    console.log('📸 [UserService] Uploading profile image for user:', userId);
-    console.log('📸 [UserService] File details:', {
-      name: file.name,
-      type: file.type,
-      size: file.size
-    });
     
     const formData = new FormData();
     formData.append('image', file);
     
-    console.log('📸 [UserService] FormData created, sending request...');
     
     const response = await api.put<ApiResponse<{ imageUrl: string }>>(`/users/${userId}/profile-image`, formData, {
       headers: {
@@ -151,8 +140,6 @@ class UserService {
       },
     });
     
-    console.log('✅ [UserService] Full response:', response.data);
-    console.log('✅ [UserService] Image uploaded, URL:', response.data.data?.imageUrl);
     
     return response.data.data.imageUrl;
   }
@@ -161,22 +148,18 @@ class UserService {
    * Delete profile image
    */
   async deleteProfileImage(userId: string): Promise<void> {
-    console.log('🗑️ [UserService] Deleting profile image for user:', userId);
     
     await api.delete(`/users/${userId}/profile-image`);
     
-    console.log('✅ [UserService] Profile image deleted');
   }
 
   /**
    * Get user addresses
    */
   async getAddresses(userId: string): Promise<Address[]> {
-    console.log('📍 [UserService] Fetching user addresses:', userId);
     
     const response = await api.get<ApiResponse<Address[]>>(`/users/${userId}/addresses`);
     
-    console.log('✅ [UserService] Addresses fetched:', response.data.data.length);
     
     return response.data.data;
   }
@@ -185,11 +168,9 @@ class UserService {
    * Get address by ID
    */
   async getAddressById(id: string): Promise<Address> {
-    console.log('🔍 [UserService] Fetching address by ID:', id);
     
     const response = await api.get<ApiResponse<Address>>(`/users/addresses/${id}`);
     
-    console.log('✅ [UserService] Address fetched');
     
     return response.data.data;
   }
@@ -198,14 +179,11 @@ class UserService {
    * Create new address
    */
   async createAddress(userId: string, data: CreateAddressData): Promise<Address> {
-    console.log('📝 [UserService] Creating address for user:', userId, data);
     
     const apiData = toApiAddressData(data);
-    console.log('📝 [UserService] Transformed to API format:', apiData);
     
     const response = await api.post<ApiResponse<Address>>(`/users/${userId}/addresses`, apiData);
     
-    console.log('✅ [UserService] Address created');
     
     return response.data.data;
   }
@@ -214,14 +192,11 @@ class UserService {
    * Update address
    */
   async updateAddress(userId: string, addressId: string, data: Partial<CreateAddressData>): Promise<Address> {
-    console.log('✏️ [UserService] Updating address:', userId, addressId, data);
     
     const apiData = toApiAddressData(data);
-    console.log('✏️ [UserService] Transformed to API format:', apiData);
     
     const response = await api.put<ApiResponse<Address>>(`/users/${userId}/addresses/${addressId}`, apiData);
     
-    console.log('✅ [UserService] Address updated');
     
     return response.data.data;
   }
@@ -230,74 +205,54 @@ class UserService {
    * Delete address
    */
   async deleteAddress(userId: string, addressId: string): Promise<void> {
-    console.log('🗑️ [UserService] Deleting address:', userId, addressId);
     
     await api.delete(`/users/${userId}/addresses/${addressId}`);
     
-    console.log('✅ [UserService] Address deleted');
   }
 
   /**
    * Set default address
    */
   async setDefaultAddress(userId: string, addressId: string): Promise<Address> {
-    console.log('⭐ [UserService] Setting default address:', userId, addressId);
     
     const response = await api.put<ApiResponse<Address>>(`/users/${userId}/addresses/${addressId}/default`);
     
-    console.log('✅ [UserService] Default address set');
     
     return response.data.data;
-  }
-
-  /**
+  }  /**
    * Get user wishlist
    */
   async getWishlist(): Promise<any[]> {
-    console.log('💝 [UserService] Fetching wishlist');
-    
-    const response = await api.get<ApiResponse<any[]>>('/users/wishlist');
-    
-    console.log('✅ [UserService] Wishlist fetched:', response.data.data.length);
-    
-    return response.data.data;
-  }
-
-  /**
+    const response = await api.get<ApiResponse<any>>('/wishlist');
+    return response.data.data?.items || [];
+  }  /**
    * Add to wishlist
    */
   async addToWishlist(productId: string): Promise<void> {
-    console.log('➕ [UserService] Adding to wishlist:', productId);
-    
-    await api.post('/users/wishlist', { product_id: productId });
-    
-    console.log('✅ [UserService] Added to wishlist');
-  }
-
-  /**
+    await api.post('/wishlist', { productId });
+  }  /**
    * Remove from wishlist
    */
   async removeFromWishlist(productId: string): Promise<void> {
-    console.log('➖ [UserService] Removing from wishlist:', productId);
-    
-    await api.delete(`/users/wishlist/${productId}`);
-    
-    console.log('✅ [UserService] Removed from wishlist');
+    await api.delete(`/wishlist/${productId}`);
+  }
+
+  async getWishlistCount(): Promise<number> {
+    const response = await api.get<ApiResponse<any>>('/wishlist/count');
+    return Number(response.data.data?.count || 0);
   }
 
   /**
    * Get user notifications
    */
   async getNotifications(page = 1, limit = 20): Promise<{ notifications: any[]; meta: any }> {
-    console.log('🔔 [UserService] Fetching notifications');
     
-    const response = await api.get<ApiResponse<{ notifications: any[]; pagination: any }>>('/users/notifications', {
+    const response = await api.get<ApiResponse<{ notifications: any[]; pagination: any }>>('/notifications', {
       params: { page, limit },
     });
     
     const data = response.data.data;
     
-    console.log('✅ [UserService] Notifications fetched:', data.notifications?.length);
     
     return {
       notifications: data.notifications || [],
@@ -309,23 +264,16 @@ class UserService {
    * Mark notification as read
    */
   async markNotificationRead(id: string): Promise<void> {
-    console.log('✅ [UserService] Marking notification as read:', id);
-    
-    await api.put(`/users/notifications/${id}/read`);
-    
-    console.log('✅ [UserService] Notification marked as read');
+    await api.put('/notifications/mark-as-read', { notificationIds: [id] });
   }
 
   /**
    * Mark all notifications as read
    */
   async markAllNotificationsRead(): Promise<void> {
-    console.log('✅ [UserService] Marking all notifications as read');
-    
-    await api.put('/users/notifications/read-all');
-    
-    console.log('✅ [UserService] All notifications marked as read');
+    await api.put('/notifications/mark-all-as-read');
   }
 }
 
 export const userService = new UserService();
+

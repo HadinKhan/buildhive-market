@@ -4,7 +4,10 @@ import { Button } from "../components/Button";
 import { Product } from "../types";
 import api from "../src/services/api";
 import { productService } from "../src/services/productService";
+import { useWishlist } from "../src/hooks/useWishlist";
 import { useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
+import { useAuth } from "../src/context/AuthContext";
 import {
   getMarketplaceInitials,
   resolveMarketplaceImageSrc,
@@ -41,6 +44,8 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   onMessageSeller,
 }) => {
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+  const { toggleWishlist, isInWishlist } = useWishlist();
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState("Overview");
   const [selectedImage, setSelectedImage] = useState(0);
@@ -48,6 +53,16 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   const [reviews, setReviews] = useState<ProductReview[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [reviewsError, setReviewsError] = useState<string | null>(null);
+  const [questions, setQuestions] = useState<any[]>([]);
+  const [timeline, setTimeline] = useState<any[]>([]);
+  const [questionText, setQuestionText] = useState("");
+  const [questionLoading, setQuestionLoading] = useState(false);
+  const [reportTarget, setReportTarget] = useState<null | {
+    type: "product" | "review";
+    reviewId?: string;
+  }>(null);
+  const [reportReason, setReportReason] = useState("");
+  const [reportSubmitting, setReportSubmitting] = useState(false);
 
   const gallerySource = [
     ...(((product as any).product_images || []) as any[]),
@@ -73,8 +88,12 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     [gallerySource],
   );
   const productReviews = ((product as any).reviews || (product as any).product_reviews || []) as ProductReview[];
-  const productQuestions = ((product as any).questions || (product as any).q_and_a || []) as any[];
-  const productTimeline = ((product as any).timeline || (product as any).timeline_events || []) as any[];
+  const productQuestions = questions.length
+    ? questions
+    : (((product as any).questions || (product as any).q_and_a || []) as any[]);
+  const productTimeline = timeline.length
+    ? timeline
+    : (((product as any).timeline || (product as any).timeline_events || []) as any[]);
   const productTags = Array.isArray((product as any).tags)
     ? (product as any).tags
     : String((product as any).tags || "")
@@ -102,7 +121,6 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
         const data = await productService.getProductReviews(product.id);
         setReviews(data.length ? data : productReviews);
       } catch (error) {
-        console.error("Failed to load reviews:", error);
         setReviewsError("Failed to load reviews.");
       } finally {
         setReviewsLoading(false);
@@ -110,6 +128,38 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     };
 
     loadReviews();
+  }, [product.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadQuestions = async () => {
+      try {
+        const data = await productService.getProductQuestions(product.id);
+        if (!cancelled) setQuestions(data);
+      } catch {
+        if (!cancelled) setQuestions([]);
+      }
+    };
+    void loadQuestions();
+    return () => {
+      cancelled = true;
+    };
+  }, [product.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadTimeline = async () => {
+      try {
+        const data = await productService.getProductTimeline(product.id);
+        if (!cancelled) setTimeline(data);
+      } catch {
+        if (!cancelled) setTimeline([]);
+      }
+    };
+    void loadTimeline();
+    return () => {
+      cancelled = true;
+    };
   }, [product.id]);
 
   const renderStars = (rating: number) =>
@@ -124,28 +174,83 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     onAddToCart(product, quantity);
   };
 
+  const handleWishlistToggle = async () => {
+    await toggleWishlist({
+      productId: product.id,
+      addedAt: new Date(),
+      category: (product as any).category_id || (product as any).category || "products",
+      productName: product.name,
+      image: activeImageSrc || "",
+      price: product.price,
+    });
+  };
+
   const handleBuyNow = () => {
     onAddToCart(product, quantity);
     onNavigate("checkout");
   };
 
   const handleMessageSeller = async () => {
-    console.log("CHAT START:", (product as any).business);
-
     const participantId =
       (product as any).business?.user_id ||
       (product as any).business?.userId ||
       product.seller_id;
 
     if (!participantId) {
-      console.log(
-        "MISSING PARTICIPANT_ID for product.business",
-        (product as any).business,
-      );
+      toast.error("Seller information is unavailable right now.");
       return;
     }
 
     navigate(`/messages?participantId=${encodeURIComponent(participantId)}`);
+  };
+
+  const requireAuth = () => {
+    if (isAuthenticated) return true;
+    navigate(
+      `/signin?returnUrl=${encodeURIComponent(
+        `${window.location.pathname}${window.location.search}`,
+      )}`,
+    );
+    return false;
+  };
+
+  const submitQuestion = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!requireAuth()) return;
+    if (questionText.trim().length < 5) {
+      toast.error("Question must be at least 5 characters.");
+      return;
+    }
+    setQuestionLoading(true);
+    try {
+      await productService.askProductQuestion(product.id, questionText.trim());
+      setQuestionText("");
+      setQuestions(await productService.getProductQuestions(product.id));
+      toast.success("Question submitted.");
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Failed to submit question.");
+    } finally {
+      setQuestionLoading(false);
+    }
+  };
+
+  const submitReport = async () => {
+    if (!reportTarget || !reportReason) return;
+    setReportSubmitting(true);
+    try {
+      if (reportTarget.type === "product") {
+        await productService.reportProduct(product.id, reportReason);
+      } else if (reportTarget.reviewId) {
+        await productService.reportReview(product.id, reportTarget.reviewId, reportReason);
+      }
+      toast.success("Report submitted.");
+      setReportTarget(null);
+      setReportReason("");
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Failed to submit report.");
+    } finally {
+      setReportSubmitting(false);
+    }
   };
 
   return (
@@ -196,9 +301,14 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               ) : null}
               <button
                 aria-label="Add to wishlist"
-                className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/80 text-gray-500 backdrop-blur-sm transition-colors hover:text-red-500"
+                onClick={() => void handleWishlistToggle()}
+                className={`absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/80 backdrop-blur-sm transition-colors hover:text-red-500 ${
+                  isInWishlist(product.id) ? "text-red-500" : "text-gray-500"
+                }`}
               >
-                <Icons.Heart className="h-5 w-5" />
+                <Icons.Heart
+                  className={`h-5 w-5 ${isInWishlist(product.id) ? "fill-current" : ""}`}
+                />
               </button>
             </div>
 
@@ -271,6 +381,15 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               >
                 <Icons.Message className="mr-2 h-4 w-4" /> Message Seller
               </Button>
+              {isAuthenticated && (
+                <button
+                  type="button"
+                  onClick={() => setReportTarget({ type: "product" })}
+                  className="text-sm font-semibold text-red-600 hover:underline"
+                >
+                  Report Product
+                </button>
+              )}
             </div>
 
             <div className="mb-6 flex items-center gap-2">
@@ -413,9 +532,16 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                         <h3 className="font-bold text-gray-900">Tags</h3>
                         <div className="mt-2 flex flex-wrap gap-2">
                           {productTags.map((tag) => (
-                            <span key={String(tag)} className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
+                            <button
+                              key={String(tag)}
+                              type="button"
+                              onClick={() =>
+                                navigate(`/products?tag=${encodeURIComponent(String(tag))}`)
+                              }
+                              className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600 hover:bg-violet-50 hover:text-violet-700"
+                            >
                               {String(tag)}
-                            </span>
+                            </button>
                           ))}
                         </div>
                       </div>
@@ -453,10 +579,26 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                       ) : (
                         productQuestions.map((item, index) => (
                           <div key={item.id || index} className="mt-3 rounded-2xl border border-gray-100 p-4">
-                            <p className="font-semibold text-gray-900">{item.question}</p>
-                            <p>{item.answer || "No answer yet."}</p>
+                            <p className="font-semibold text-gray-900">
+                              {item.question_text || item.question || item.questionText}
+                            </p>
+                            <p>{item.answer_text || item.answer || "No answer yet."}</p>
                           </div>
                         ))
+                      )}
+                      {isAuthenticated && (
+                        <form onSubmit={submitQuestion} className="mt-4 space-y-3">
+                          <textarea
+                            value={questionText}
+                            onChange={(event) => setQuestionText(event.target.value)}
+                            rows={3}
+                            placeholder="Ask the seller a question"
+                            className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-violet-400"
+                          />
+                          <Button type="submit" disabled={questionLoading}>
+                            {questionLoading ? "Submitting..." : "Ask Question"}
+                          </Button>
+                        </form>
                       )}
                     </div>
                     <div>
@@ -533,8 +675,22 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                               </span>
                               {review.verified_purchase && (
                                 <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700">
-                                  Verified purchase
+                                  Verified Purchase
                                 </span>
+                              )}
+                              {isAuthenticated && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setReportTarget({
+                                      type: "review",
+                                      reviewId: review.id,
+                                    })
+                                  }
+                                  className="font-semibold text-red-500 hover:underline"
+                                >
+                                  Report
+                                </button>
                               )}
                             </div>
                             {comment && (
@@ -578,6 +734,48 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           </div>
         </div>
       </div>
+      {reportTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl">
+            <h2 className="text-xl font-bold text-gray-900">
+              Report {reportTarget.type === "product" ? "Product" : "Review"}
+            </h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Choose the reason that best describes the issue.
+            </p>
+            <select
+              value={reportReason}
+              onChange={(event) => setReportReason(event.target.value)}
+              className="mt-4 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-red-300"
+            >
+              <option value="">Select a reason</option>
+              <option value="Spam or misleading">Spam or misleading</option>
+              <option value="Inappropriate content">Inappropriate content</option>
+              <option value="Fraud or scam">Fraud or scam</option>
+              <option value="Wrong product information">Wrong product information</option>
+              <option value="Other policy violation">Other policy violation</option>
+            </select>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setReportTarget(null);
+                  setReportReason("");
+                }}
+                className="rounded-xl px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void submitReport()}
+                disabled={!reportReason || reportSubmitting}
+                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {reportSubmitting ? "Submitting..." : "Submit Report"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

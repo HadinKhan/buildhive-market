@@ -207,6 +207,35 @@ class ProductService {
     return [];
   }
 
+  async getProductQuestions(productId: string): Promise<any[]> {
+    const response = await api.get<ApiResponse<any>>(`/products/${productId}/questions`);
+    const payload = response.data.data;
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.questions)) return payload.questions;
+    return [];
+  }
+
+  async getProductTimeline(productId: string): Promise<any[]> {
+    const response = await api.get<ApiResponse<any>>(`/products/${productId}/timeline`);
+    const payload = response.data.data;
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.timeline)) return payload.timeline;
+    return [];
+  }
+
+  async askProductQuestion(productId: string, questionText: string): Promise<any> {
+    const response = await api.post<ApiResponse<any>>(`/products/${productId}/questions`, { questionText });
+    return response.data.data;
+  }
+
+  async reportProduct(productId: string, reason: string): Promise<void> {
+    await api.post(`/products/${productId}/report`, { reason });
+  }
+
+  async reportReview(productId: string, reviewId: string, reason: string): Promise<void> {
+    await api.post(`/products/${productId}/reviews/${reviewId}/report`, { reason });
+  }
+
   /**
    * Create product review
    */

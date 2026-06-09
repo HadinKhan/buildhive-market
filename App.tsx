@@ -18,6 +18,7 @@ import { ProductsPage } from "./pages/ProductsPage";
 import { ProductDetailPage } from "./pages/ProductDetailPage";
 import { CartPage } from "./pages/CartPage";
 import { CheckoutPage } from "./pages/CheckoutPage";
+import OrderConfirmationPage from "./pages/OrderConfirmationPage";
 import { ContactPage } from "./pages/ContactPage";
 import { AboutPage } from "./pages/AboutPage";
 import { BlogPage } from "./pages/BlogPage";
@@ -50,6 +51,7 @@ const ProtectedRoute: React.FC<{
   redirectTo?: string;
 }> = ({ children, redirectTo = "/signin" }) => {
   const { isAuthenticated, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -90,7 +92,12 @@ const ProtectedRoute: React.FC<{
   return isAuthenticated ? (
     <>{children}</>
   ) : (
-    <Navigate to={redirectTo} replace />
+    <Navigate
+      to={`${redirectTo}?returnUrl=${encodeURIComponent(
+        `${location.pathname}${location.search}`,
+      )}`}
+      replace
+    />
   );
 };
 
@@ -361,9 +368,12 @@ const AppContent: React.FC = () => {
   // Cart Functions
   const addToCart = async (product: Product, quantity: number) => {
     if (!isAuthenticated) {
-      // Redirect to sign in
       toast.info("Please sign in to add items to cart");
-      navigate("/signin");
+      navigate(
+        `/signin?returnUrl=${encodeURIComponent(
+          `${location.pathname}${location.search}`,
+        )}`,
+      );
       return;
     }
 
@@ -492,11 +502,6 @@ const AppContent: React.FC = () => {
   const clearCart = async () => {
     if (!isAuthenticated) return;
 
-    // Confirmation dialog
-    if (!window.confirm("Are you sure you want to clear your entire cart?")) {
-      return;
-    }
-
     try {
       await cartService.clearCart();
       setCart([]);
@@ -605,6 +610,15 @@ const AppContent: React.FC = () => {
                 onNavigate={navigateTo}
                 onPlaceOrder={clearCart}
               />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/order-confirmation/:orderId"
+          element={
+            <ProtectedRoute>
+              <OrderConfirmationPage onNavigate={navigateTo} />
             </ProtectedRoute>
           }
         />

@@ -160,9 +160,10 @@ const normaliseServiceOffer = (item: Record<string, any>): ContractorServiceOffe
 
 const normaliseReviewEntry = (item: Record<string, any>): ContractorReviewEntry => ({
   id: safeString(item.id || item.review_id || item.slug || item.created_at),
-  reviewerName: safeString(item.reviewer_name || item.reviewerName || item.user_name || item.name || "Anonymous"),
+  reviewerName: safeString(item.reviewer_name || item.reviewerName || item.reviewer?.full_name || item.user_name || item.name || "Anonymous"),
   rating: toNumber(item.rating ?? item.stars ?? item.score, 0),
   comment: safeString(item.comment || item.body || item.message || item.review || ""),
+  response: safeString(item.response || item.contractor_response || item.reply || ""),
   createdAt: safeString(item.created_at || item.createdAt) || undefined,
 });
 
@@ -178,8 +179,7 @@ const tryRequest = async <T,>(path: string, params?: Record<string, any>): Promi
   try {
     const response = await publicClient.get<ApiResponse<T>>(path, { params });
     return unwrapResponse(response) as T;
-  } catch (error) {
-    console.warn(`ContractorService request failed for ${path}:`, error);
+  } catch {
     return null;
   }
 };
@@ -221,31 +221,35 @@ const contractorService = {
   },
 
   async getContractorPortfolio(contractorId: string): Promise<ContractorPortfolioEntry[]> {
-    const response = await tryRequest<any>("/portfolio", { contractorId });
+    const response = await tryRequest<any>(`/portfolio/${contractorId}`);
     return getCollection(response).map((item) => normalisePortfolioEntry(item));
   },
 
   async getContractorReviews(contractorId: string): Promise<ContractorReviewEntry[]> {
-    const response = await tryRequest<any>("/reviews", { contractorId });
+    const response = await tryRequest<any>(`/reviews/contractor/${contractorId}`);
     return getCollection(response).map((item) => normaliseReviewEntry(item));
   },
 
   async getContractorServices(contractorId: string): Promise<ContractorServiceOffer[]> {
-    const response = await tryRequest<any>("/services", { contractorId });
+    const response = await tryRequest<any>("/services/public", { contractorId });
     return getCollection(response).map((item) => normaliseServiceOffer(item));
   },
 
   async getContractorById(id: string): Promise<ContractorProfile> {
-    const [profile, portfolio, services, reviews] = await Promise.all([
-      tryRequest<any>(`/business/${id}`),
-      this.getContractorPortfolio(id),
-      this.getContractorServices(id),
-      this.getContractorReviews(id),
-    ]);
-
+    const profile = await tryRequest<any>(`/business/${id}`);
     const fallbackProfile = profile || (await tryRequest<any>(`/services/${id}/contractor-profile`)) || (await tryRequest<any>(`/users/${id}`)) || {};
     const base = normaliseContractorSummary(fallbackProfile || {});
     const profilePayload = unwrapResponse(fallbackProfile) || fallbackProfile || {};
+    const contractorUserId =
+      base.userId ||
+      safeString(profilePayload.user_id || profilePayload.userId || profilePayload.contractor_id || profilePayload.contractor?.id) ||
+      id;
+
+    const [portfolio, services, reviews] = await Promise.all([
+      this.getContractorPortfolio(contractorUserId),
+      this.getContractorServices(contractorUserId),
+      this.getContractorReviews(contractorUserId),
+    ]);
 
     const profilePortfolio = getCollection(
       profilePayload.portfolio ||

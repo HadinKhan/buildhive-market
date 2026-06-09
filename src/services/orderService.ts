@@ -1,8 +1,5 @@
-import api from './api';
+import api from "./api";
 
-// =============================================
-// API Response Types
-// =============================================
 interface ApiResponse<T> {
   success: boolean;
   data: T;
@@ -10,9 +7,6 @@ interface ApiResponse<T> {
   message?: string;
 }
 
-// =============================================
-// Order Types
-// =============================================
 export interface OrderItem {
   id: string;
   order_id: string;
@@ -50,8 +44,14 @@ export interface Order {
   user_id: string;
   order_number: string;
   business_id: string;
-  status: 'pending_payment' | 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
-  payment_status: 'pending' | 'paid' | 'failed' | 'refunded';
+  status:
+    | "pending_payment"
+    | "pending"
+    | "processing"
+    | "shipped"
+    | "delivered"
+    | "cancelled";
+  payment_status: "pending" | "paid" | "failed" | "refunded";
   payment_method?: string;
   subtotal: number;
   tax_amount: number;
@@ -120,7 +120,7 @@ export interface CreateOrderData {
     postal_code: string;
     country: string;
   };
-  paymentMethod: string; // camelCase for backend
+  paymentMethod: string;
   notes?: string;
 }
 
@@ -130,116 +130,60 @@ export interface GetOrdersParams {
   page?: number;
   limit?: number;
   sortBy?: string;
-  sortOrder?: 'asc' | 'desc';
+  sortOrder?: "asc" | "desc";
 }
 
-// =============================================
-// Order Service
-// =============================================
 class OrderService {
-  /**
-   * Get user's orders
-   */
   async getOrders(params?: GetOrdersParams): Promise<{ orders: Order[]; meta: any }> {
-    console.log('📦 [OrderService] Fetching orders with params:', params);
-    
-    const response = await api.get<ApiResponse<{ orders: Order[]; pagination: any }>>('/orders', {
-      params,
-    });
-    
-    const ordersData = response.data.data;
-    
-    console.log('✅ [OrderService] Orders fetched:', {
-      count: ordersData.orders?.length,
-      total: ordersData.pagination?.total,
-    });
-    
+    const response = await api.get<ApiResponse<{ orders: Order[]; pagination: any }>>(
+      "/orders",
+      { params },
+    );
+    const data = response.data.data || { orders: [], pagination: {} };
     return {
-      orders: ordersData.orders || [],
-      meta: ordersData.pagination || {},
+      orders: data.orders || [],
+      meta: data.pagination || {},
     };
   }
 
-  /**
-   * Get order by ID
-   */
   async getOrderById(id: string): Promise<Order> {
-    console.log('🔍 [OrderService] Fetching order by ID:', id);
-    
-    const response = await api.get<ApiResponse<Order>>(`/orders/${id}`);
-    
-    console.log('✅ [OrderService] Order fetched:', response.data.data.order_number);
-    
-    return response.data.data;
+    const response = await api.get<ApiResponse<any>>(`/orders/${id}`);
+    return (response.data.data?.order || response.data.data) as Order;
   }
 
-  /**
-   * Create a new order (checkout)
-   */
   async createOrder(orderData: CreateOrderData): Promise<Order> {
-    console.log('📦 [OrderService] Creating order...');
-    console.log('📝 [OrderService] Order data:', JSON.stringify(orderData, null, 2));
-
-    const response = await api.post<ApiResponse<any>>('/orders', orderData);
-
-    // Map potential response shapes where order is returned inside an orders array
-    const order = response.data?.orders?.[0] || response.data?.data?.orders?.[0] || response.data?.data || response.data?.orders?.[0] || response.data;
-    console.log('mapped order:', order);
-
-    // Ensure we return the order object (cast to Order for typing)
-    return order as Order;
+    const response = await api.post<ApiResponse<any>>("/orders", orderData);
+    return (
+      response.data?.data?.orders?.[0] ||
+      response.data?.orders?.[0] ||
+      response.data?.data ||
+      response.data
+    ) as Order;
   }
 
-  /**
-   * Cancel an order
-   */
   async cancelOrder(id: string, reason?: string): Promise<Order> {
-    console.log('❌ [OrderService] Cancelling order:', id);
-    
-    const response = await api.post<ApiResponse<Order>>(`/orders/${id}/cancel`, { reason });
-    
-    console.log('✅ [OrderService] Order cancelled');
-    
-    return response.data.data;
-  }
-
-  /**
-   * Get order tracking info
-   */
-  async getOrderTracking(id: string): Promise<OrderTracking> {
-    console.log('🚚 [OrderService] Fetching tracking for order:', id);
-    
-    const response = await api.get<ApiResponse<OrderTracking>>(`/orders/${id}/tracking`);
-    
-    console.log('✅ [OrderService] Tracking info fetched');
-    
-    return response.data.data;
-  }
-
-  /**
-   * Get order invoice
-   */
-  async getOrderInvoice(id: string): Promise<Blob> {
-    console.log('🧾 [OrderService] Downloading invoice for order:', id);
-    
-    const response = await api.get(`/orders/${id}/invoice`, {
-      responseType: 'blob',
+    const response = await api.post<ApiResponse<Order>>(`/orders/${id}/cancel`, {
+      reason,
     });
-    
-    console.log('✅ [OrderService] Invoice downloaded');
-    
+    return response.data.data;
+  }
+
+  async getOrderTracking(id: string): Promise<OrderTracking> {
+    const response = await api.get<ApiResponse<OrderTracking>>(
+      `/orders/${id}/tracking`,
+    );
+    return response.data.data;
+  }
+
+  async getOrderReceipt(id: string): Promise<Blob> {
+    const response = await api.get(`/orders/${id}/receipt`, {
+      responseType: "blob",
+    });
     return response.data;
   }
 
-  /**
-   * Rate an order/product
-   */
-  async rateOrder(orderId: string, rating: number, review?: string): Promise<void> {
-    console.log('⭐ [OrderService] Rating order:', orderId, rating);
-    
-    await api.post(`/orders/${orderId}/rate`, { rating, review });
-    
-    console.log('✅ [OrderService] Order rated');
+  async getOrderInvoice(id: string): Promise<Blob> {
+    return this.getOrderReceipt(id);
   }
 }
 

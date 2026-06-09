@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { StripeProviderWrapper } from "../src/components/StripeProviderWrapper";
 import { StripeCardForm } from "../src/components/StripeCardForm";
 import { useStripePayment } from "../src/hooks/useStripePayment";
@@ -92,7 +92,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         }
       })
       .catch((error) => {
-        console.error("Failed to load service checkout details:", error);
         if (!cancelled) {
           setServiceCheckout(null);
           toast.error("Unable to load the selected service checkout.");
@@ -149,7 +148,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
           }));
         }
       } catch (error) {
-        console.error("Failed to load saved addresses:", error);
         if (!cancelled) {
           setSavedAddresses([]);
         }
@@ -262,12 +260,12 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     e.preventDefault();
 
     if (!validateForm()) {
-      alert("Please fill in all required fields");
+      toast.error("Please fill in all required fields");
       return;
     }
 
     if (!serviceCheckout && cartItems.length === 0) {
-      alert("Your cart is empty");
+      toast.error("Your cart is empty");
       return;
     }
 
@@ -280,7 +278,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
           (item: CartItem) => !item.product || !item.product.price,
         );
         if (invalidItems.length > 0) {
-          console.error("❌ [Checkout] Invalid cart items:", invalidItems);
           toast.error(
             "Cart data is incomplete. Please refresh the page and try again.",
           );
@@ -327,7 +324,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         setCreatedOrderId(String(serviceOrder.id || serviceCheckout.id));
         setOrderNumber(String(serviceOrderNumber));
         toast.success("Service booked successfully!");
-        onNavigate("account?tab=orders");
+        onNavigate(`order-confirmation/${serviceOrder.id || serviceCheckout.id}`);
         return;
       }
 
@@ -350,7 +347,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         try {
           orderResponse = await orderService.createOrder(orderData);
         } catch (orderError) {
-          console.error("❌ [OrderService] Order creation error:", orderError);
           throw orderError;
         }
 
@@ -379,7 +375,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         ) {
           setShowStripeForm(true);
         } else {
-          console.error("[Checkout] Stripe payment intent creation failed.");
           toast.error("Failed to start card payment. Please try again.");
         }
         setIsProcessing(false);
@@ -393,37 +388,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         "See your account for order details";
       setOrderNumber(String(fallbackOrderNumber));
       toast.success("Order placed successfully! Pay on delivery.");
-      onNavigate("account?tab=orders");
+      onNavigate(`order-confirmation/${orderId}`);
     } catch (error: any) {
-      console.error("Failed to place order:", error);
-      console.error(
-        "❌ [Checkout] Backend error response:",
-        error.response?.data,
-      );
-
-      // Log detailed validation errors
-      if (error.response?.data?.errors) {
-        console.error(
-          "🔴 [Checkout] Validation errors:",
-          error.response.data.errors,
-        );
-        if (Array.isArray(error.response.data.errors)) {
-          error.response.data.errors.forEach((err: any, index: number) => {
-            console.error(`   Error ${index + 1}:`, err);
-            if (typeof err === "object") {
-              console.error(
-                `     - Field:`,
-                err.field || err.path || "unknown",
-              );
-              console.error(`     - Message:`, err.message || err.msg || err);
-            }
-          });
-        } else {
-          // errors is a string
-          console.error("   Error:", error.response.data.errors);
-        }
-      }
-
       toast.error(
         error.response?.data?.message ||
           "Failed to place order. Please try again.",
@@ -467,7 +433,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               setShowStripeForm(false);
               stripePayment.resetStripeState();
               toast.success("Payment successful! Order confirmed.");
-              onNavigate("account?tab=orders");
+              onNavigate(`order-confirmation/${createdOrderId}`);
             }}
           />
         </StripeProviderWrapper>
@@ -874,3 +840,4 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     </div>
   );
 };
+
