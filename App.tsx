@@ -176,7 +176,7 @@ const ProductDetailWrapper: React.FC<{
       return;
     }
 
-    navigate(`/messages?participantId=${encodeURIComponent(sellerId)}`);
+    navigate(`/account?tab=messages&participantId=${encodeURIComponent(sellerId)}`);
   };
 
   if (loading)

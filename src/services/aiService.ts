@@ -1,7 +1,13 @@
-const AI_BASE = "https://ai-backend-production-d13d.up.railway.app";
+const AI_BASE = "https://ai-backend-b3yd.onrender.com";
 
 const requestJson = async (url: string, init?: RequestInit) => {
-  const res = await fetch(url, init);
+  let res: Response;
+  try {
+    res = await fetch(url, init);
+  } catch {
+    throw new Error("AI assistant is unavailable right now. Please try again later.");
+  }
+
   const contentType = res.headers.get("content-type") || "";
   const payload = contentType.includes("application/json")
     ? await res.json().catch(() => null)
@@ -16,7 +22,7 @@ const requestJson = async (url: string, init?: RequestInit) => {
               "Request failed.",
           )
         : "Request failed.";
-    throw new Error(message);
+    throw new Error(message || "AI assistant is unavailable right now.");
   }
 
   return payload;

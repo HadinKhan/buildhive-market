@@ -148,7 +148,7 @@ export const Header: React.FC<HeaderProps> = ({
       setIsDarkMode(!isDarkMode);
       return;
     }
-    if (onNavigate) onNavigate(page);
+    if (onNavigate) onNavigate(page === "messages" ? "account?tab=messages" : page);
     setIsMobileMenuOpen(false);
     setIsUserMenuOpen(false);
   };

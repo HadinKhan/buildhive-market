@@ -276,7 +276,7 @@ export const ContractorProfilePage: React.FC = () => {
           response.data?.data?.id ||
           response.data?.conversationId ||
           response.data?.id;
-        navigate(`/messages${conversationId ? `?conversationId=${encodeURIComponent(conversationId)}` : ""}`);
+        navigate(`/account?tab=messages${conversationId ? `&conversationId=${encodeURIComponent(conversationId)}` : ""}`);
       })
       .catch(() => {
         toast.error("Unable to start the conversation right now.");

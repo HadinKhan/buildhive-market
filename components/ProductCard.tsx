@@ -45,15 +45,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const imgSrc = resolveMarketplaceImageSrc(product as any);
   const initials = getMarketplaceInitials(product.name);
 
-  if (import.meta.env.DEV) {
-    console.log(
-      "IMG SRC:",
-      product.images?.[0]?.image_url,
-      "full images:",
-      product.images,
-    );
-  }
-
   const handleExplore = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (onNavigate) {
@@ -63,7 +54,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
   const handleContactSeller = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    console.log("CHAT START:", (product as any).business);
 
     const participantId =
       (product as any).business?.user_id ||
@@ -71,14 +61,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       product.seller_id;
 
     if (!participantId) {
-      console.log(
-        "MISSING PARTICIPANT_ID for product.business",
-        (product as any).business,
-      );
       return;
     }
 
-    navigate(`/messages?participantId=${encodeURIComponent(participantId)}`);
+    navigate(`/account?tab=messages&participantId=${encodeURIComponent(participantId)}`);
   };
 
   const renderStar = (index: number) => {

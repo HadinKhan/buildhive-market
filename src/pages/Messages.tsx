@@ -4,176 +4,176 @@ import { Icons } from "../../components/Icons";
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
 
+interface MessagesPageProps {
+  embedded?: boolean;
+}
+
+interface Participant {
+  id: string;
+  fullName: string;
+  profileImage?: string;
+}
+
 interface Conversation {
   id: string;
-  participant_id: string;
-  participant_name: string;
-  last_message: string;
-  last_message_at: string;
-  unread_count: number;
+  otherParticipant: Participant;
+  lastMessage?: { text?: string; createdAt?: string };
+  unreadCount: number;
 }
 
 interface Message {
   id: string;
-  conversation_id: string;
-  sender_id: string;
-  sender_name: string;
-  message: string;
-  created_at: string;
+  senderId: string;
+  senderName?: string;
+  messageText: string;
+  createdAt: string;
+  read?: boolean;
 }
 
-const CONVERSATION_REFRESH_MS = 8000;
-const MESSAGE_REFRESH_MS = 3000;
+const EMOJIS = [
+  "😊",
+  "😂",
+  "👍",
+  "🙏",
+  "❤️",
+  "🔥",
+  "✅",
+  "👀",
+  "💯",
+  "🤝",
+  "😎",
+  "🙌",
+  "💪",
+  "📦",
+  "🚀",
+  "⭐",
+  "🏗️",
+  "🔧",
+  "💰",
+  "📋",
+];
 
-const normalizeConversations = (data: any): Conversation[] => {
-  const list = Array.isArray(data)
-    ? data
-    : data?.conversations || data?.data || [];
+const unwrap = (payload: any) => payload?.data?.data ?? payload?.data ?? payload ?? {};
 
-  return list.map((conversation: any) => ({
-    id: conversation.id,
-    participant_id:
-      conversation.participant_id ||
-      conversation.participantId ||
-      conversation.other_user_id ||
-      conversation.otherUserId ||
-      conversation.user_id ||
-      "",
-    participant_name:
-      conversation.participant_name ||
-      conversation.participantName ||
-      conversation.other_user_name ||
-      conversation.otherUserName ||
-      conversation.business_name ||
-      conversation.seller_name ||
-      conversation.sellerName ||
-      conversation.name ||
-      "Seller",
-    last_message:
-      conversation.last_message ||
-      conversation.lastMessage ||
-      conversation.last_message_text ||
-      conversation.preview ||
-      conversation.message ||
-      "",
-    last_message_at:
-      conversation.last_message_at ||
-      conversation.lastMessageAt ||
-      conversation.updated_at ||
-      conversation.updatedAt ||
-      conversation.created_at ||
-      conversation.createdAt ||
-      new Date().toISOString(),
-    unread_count: conversation.unread_count || conversation.unreadCount || 0,
-  }));
+const normalizeConversation = (conversation: any): Conversation => {
+  const other = conversation?.otherParticipant ?? conversation?.other_participant ?? {};
+  const fullName =
+    other?.fullName ??
+    other?.full_name ??
+    other?.name ??
+    conversation?.participant_name ??
+    "Contact";
+
+  return {
+    id: String(conversation?.id ?? conversation?.conversationId ?? conversation?.conversation_id ?? ""),
+    otherParticipant: {
+      id: String(other?.id ?? other?.user_id ?? conversation?.participantId ?? ""),
+      fullName: String(fullName),
+      profileImage: other?.profileImage ?? other?.profile_image ?? other?.avatar,
+    },
+    lastMessage: {
+      text:
+        conversation?.lastMessage?.text ??
+        conversation?.lastMessage?.messageText ??
+        conversation?.last_message?.message_text ??
+        conversation?.last_message ??
+        "",
+      createdAt:
+        conversation?.lastMessage?.createdAt ??
+        conversation?.last_message?.created_at ??
+        conversation?.lastMessageAt ??
+        conversation?.last_message_at,
+    },
+    unreadCount: Number(conversation?.unreadCount ?? conversation?.unread_count ?? 0),
+  };
 };
 
-const normalizeMessages = (data: any): Message[] => {
-  const list = Array.isArray(data) ? data : data?.messages || data?.data || [];
+const normalizeMessage = (message: any): Message => ({
+  id: String(message?.id ?? ""),
+  senderId: String(message?.senderId ?? message?.sender_id ?? ""),
+  senderName: message?.senderName ?? message?.sender_name,
+  messageText: String(message?.messageText ?? message?.message_text ?? message?.message ?? message?.content ?? ""),
+  createdAt: String(message?.createdAt ?? message?.created_at ?? message?.timestamp ?? ""),
+  read: Boolean(message?.read ?? message?.is_read ?? false),
+});
 
-  return list.map((message: any) => ({
-    id: message.id,
-    conversation_id:
-      message.conversation_id ||
-      message.conversationId ||
-      message.thread_id ||
-      message.threadId ||
-      "",
-    sender_id:
-      message.sender_id ||
-      message.senderId ||
-      message.user_id ||
-      message.userId ||
-      "",
-    sender_name:
-      message.sender_name ||
-      message.senderName ||
-      message.user_name ||
-      message.userName ||
-      message.name ||
-      message.author_name ||
-      message.authorName ||
-      "",
-    message:
-      message.message ||
-      message.messageText ||
-      message.message_text ||
-      message.text ||
-      message.body ||
-      message.content ||
-      message.content_text ||
-      message.contentText ||
-      "",
-    created_at:
-      message.created_at ||
-      message.createdAt ||
-      message.sent_at ||
-      message.sentAt ||
-      message.timestamp ||
-      new Date().toISOString(),
-  }));
+const initials = (name: string) => {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
 };
 
-export const MessagesPage: React.FC = () => {
+const relativeTime = (value?: string) => {
+  if (!value) return "";
+  const timestamp = new Date(value).getTime();
+  if (Number.isNaN(timestamp)) return "";
+  const diffSeconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+  if (diffSeconds < 60) return "Just now";
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  return `${Math.floor(diffHours / 24)}d ago`;
+};
+
+const timeLabel = (value?: string) => {
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+};
+
+export const MessagesPage: React.FC<MessagesPageProps> = ({ embedded = false }) => {
   const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [selectedConversationId, setSelectedConversationId] = useState<
-    string | null
-  >(null);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [searchConversationIds, setSearchConversationIds] = useState<string[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
-  const [messagesRefreshing, setMessagesRefreshing] = useState(false);
   const [sending, setSending] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const emojiPickerRef = useRef<HTMLDivElement | null>(null);
+  const activeConversationRef = useRef<string | null>(null);
   const createConversationLockRef = useRef(false);
-  const hasLoadedMessagesRef = useRef(false);
-  const requestedConversationId = useMemo(
-    () =>
-      new URLSearchParams(location.search).get("conv") ||
-      new URLSearchParams(location.search).get("conversationId"),
-    [location.search],
-  );
-  const requestedParticipantId = useMemo(
-    () =>
-      new URLSearchParams(location.search).get("participantId") ||
-      new URLSearchParams(location.search).get("sellerId"),
-    [location.search],
-  );
 
-  const loadConversations = async () => {
+  const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const requestedConversationId = query.get("conversationId") || query.get("conv");
+  const requestedParticipantId = query.get("participantId") || query.get("sellerId");
+
+  const selectedConversation = conversations.find((conversation) => conversation.id === selectedConversationId);
+  const filteredConversations = useMemo(() => {
+    if (!searchConversationIds) return conversations;
+    const ids = new Set(searchConversationIds);
+    return conversations.filter((conversation) => ids.has(conversation.id));
+  }, [conversations, searchConversationIds]);
+
+  const messagePath = (conversationId: string) =>
+    embedded ? `/account?tab=messages&conversationId=${conversationId}` : `/messages?conversationId=${conversationId}`;
+
+  const loadConversations = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const response = await api.get("/chat");
-      console.log("CONVS RAW:", response.data);
-      setConversations(normalizeConversations(response.data));
-    } catch (error) {
-      console.error("Failed to load conversations:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadMessages = async (conversationId: string, silent = false) => {
-    try {
-      if (silent && hasLoadedMessagesRef.current) {
-        setMessagesRefreshing(true);
-      } else {
-        setLoadingMessages(true);
+      const payload = unwrap(response);
+      const rows = Array.isArray(payload.conversations) ? payload.conversations : [];
+      const next = rows.map(normalizeConversation).filter((conversation) => conversation.id);
+      setConversations(next);
+      if (requestedConversationId) {
+        setSelectedConversationId(requestedConversationId);
+      } else if (!activeConversationRef.current && next.length > 0) {
+        setSelectedConversationId(next[0].id);
       }
-      const response = await api.get(
-        `/chat/conversations/${conversationId}/messages`,
-      );
-      console.log("MSGS RAW:", response.data);
-      setMessages(normalizeMessages(response.data));
-      hasLoadedMessagesRef.current = true;
-    } catch (error) {
-      console.error("Failed to load messages:", error);
+    } catch {
+      if (!silent) setConversations([]);
     } finally {
-      setLoadingMessages(false);
-      setMessagesRefreshing(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -182,130 +182,169 @@ export const MessagesPage: React.FC = () => {
     createConversationLockRef.current = true;
 
     try {
-      const existing = conversations.find(
-        (conversation) => conversation.participant_id === participantId,
-      );
-
-      if (existing) {
-        setSelectedConversationId(existing.id);
-        navigate(`/messages?participantId=${participantId}`, { replace: true });
-        return;
-      }
-
       const response = await api.post("/chat/conversations", { participantId });
-      const conversation =
-        response.data?.data || response.data?.conversation || response.data;
-      const conversationId =
-        conversation?.id ||
-        conversation?.conversation_id ||
-        conversation?.conversationId;
-
-      if (conversationId) {
-        setSelectedConversationId(conversationId);
-        navigate(`/messages?participantId=${participantId}`, { replace: true });
-      }
-
-      await loadConversations();
-    } catch (error) {
-      console.error("Failed to open conversation:", error);
+      const payload = unwrap(response);
+      const conversation = normalizeConversation(payload.conversation ?? payload);
+      setConversations((prev) => {
+        const exists = prev.some((item) => item.id === conversation.id);
+        return exists
+          ? prev.map((item) => (item.id === conversation.id ? conversation : item))
+          : [conversation, ...prev];
+      });
+      setSelectedConversationId(conversation.id);
+      navigate(messagePath(conversation.id), { replace: true });
+    } catch {
+      // The empty state remains visible if the backend cannot create the conversation.
     } finally {
       createConversationLockRef.current = false;
     }
   };
 
+  const loadMessages = async (conversationId: string, silent = false) => {
+    if (!silent) setLoadingMessages(true);
+    try {
+      const response = await api.get(`/chat/conversations/${conversationId}/messages`, {
+        params: { page: 1, limit: 100 },
+      });
+      const payload = unwrap(response);
+      const rows = Array.isArray(payload.messages) ? payload.messages : [];
+      const next = rows.map(normalizeMessage).filter((message) => message.id);
+      setMessages((prev) => {
+        if (!silent) return next;
+        const seen = new Set(prev.map((message) => message.id));
+        const additions = next.filter((message) => !seen.has(message.id));
+        return additions.length > 0 ? [...prev, ...additions] : prev;
+      });
+    } catch {
+      if (!silent) setMessages([]);
+    } finally {
+      if (!silent) setLoadingMessages(false);
+    }
+  };
+
+  const markAsRead = async (conversationId: string) => {
+    try {
+      await api.put(`/chat/conversations/${conversationId}/read`);
+      setConversations((prev) =>
+        prev.map((conversation) =>
+          conversation.id === conversationId ? { ...conversation, unreadCount: 0 } : conversation,
+        ),
+      );
+    } catch {
+      // Read marking is non-blocking for the buyer thread.
+    }
+  };
+
   useEffect(() => {
-    setLoading(true);
-    void loadConversations();
-
-    const intervalId = window.setInterval(() => {
-      void loadConversations();
-    }, CONVERSATION_REFRESH_MS);
-
-    return () => window.clearInterval(intervalId);
+    void loadConversations(false);
   }, []);
 
   useEffect(() => {
     if (requestedParticipantId) {
-      const match = conversations.find(
-        (conversation) =>
-          conversation.participant_id === requestedParticipantId,
-      );
-
-      if (match) {
-        if (selectedConversationId !== match.id) {
-          setSelectedConversationId(match.id);
-        }
-        return;
-      }
-
       void openConversationForParticipant(requestedParticipantId);
-      return;
     }
-
-    if (requestedConversationId) {
-      if (selectedConversationId !== requestedConversationId) {
-        setSelectedConversationId(requestedConversationId);
-      }
-      return;
-    }
-
-    if (!selectedConversationId && conversations.length > 0) {
-      setSelectedConversationId(conversations[0].id);
-    }
-  }, [
-    conversations,
-    requestedConversationId,
-    requestedParticipantId,
-    selectedConversationId,
-  ]);
+  }, [requestedParticipantId]);
 
   useEffect(() => {
+    activeConversationRef.current = selectedConversationId;
     if (!selectedConversationId) return;
-
     void loadMessages(selectedConversationId, false);
+    void markAsRead(selectedConversationId);
 
     const intervalId = window.setInterval(() => {
       void loadMessages(selectedConversationId, true);
-    }, MESSAGE_REFRESH_MS);
+    }, 10000);
 
     return () => window.clearInterval(intervalId);
   }, [selectedConversationId]);
 
   useEffect(() => {
-    if (!loadingMessages) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [messages, loadingMessages, selectedConversationId]);
+    const intervalId = window.setInterval(() => {
+      void loadConversations(true);
+    }, 30000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
-  // Send message
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMessage.trim() || !selectedConversationId) return;
+  useEffect(() => {
+    const timer = window.setTimeout(async () => {
+      const value = searchTerm.trim();
+      if (!value) {
+        setSearchConversationIds(null);
+        return;
+      }
+
+      try {
+        const response = await api.get("/chat/search", { params: { q: value } });
+        const payload = unwrap(response);
+        const ids = Array.isArray(payload.conversationIds) ? payload.conversationIds : [];
+        setSearchConversationIds(ids.map(String));
+      } catch {
+        setSearchConversationIds([]);
+      }
+    }, 400);
+
+    return () => window.clearTimeout(timer);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, selectedConversationId]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        emojiPickerRef.current &&
+        !emojiPickerRef.current.contains(event.target as Node)
+      ) {
+        setShowEmojiPicker(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() || !selectedConversationId || sending) return;
+    const text = newMessage.trim();
+    setNewMessage("");
+    setSending(true);
+    setShowEmojiPicker(false);
 
     try {
-      setSending(true);
-      await api.post(`/chat/conversations/${selectedConversationId}/messages`, {
-        message: newMessage,
-        messageText: newMessage,
+      const response = await api.post(`/chat/conversations/${selectedConversationId}/messages`, {
+        messageText: text,
       });
-      setNewMessage("");
-      await loadMessages(selectedConversationId, true);
-      void loadConversations();
-    } catch (error) {
-      console.error("Failed to send message:", error);
+      const payload = unwrap(response);
+      const sent = normalizeMessage(payload.message ?? payload);
+      setMessages((prev) => [...prev, sent]);
+      setConversations((prev) =>
+        prev.map((conversation) =>
+          conversation.id === selectedConversationId
+            ? { ...conversation, lastMessage: { text, createdAt: sent.createdAt } }
+            : conversation,
+        ),
+      );
+    } catch {
+      setNewMessage(text);
     } finally {
       setSending(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#0b0f12] pt-20 pb-20">
-      <div className="container mx-auto px-4 h-[calc(100vh-120px)]">
+    <div className={embedded ? "h-[720px]" : "min-h-screen bg-[#0b0f12] pt-20 pb-20"}>
+      <div className={embedded ? "h-full" : "container mx-auto px-4 h-[calc(100vh-120px)]"}>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-full">
-          {/* Left Panel - Conversations */}
           <div className="md:col-span-1 border border-zinc-800 rounded-2xl bg-[#11151d] flex flex-col">
             <div className="p-4 border-b border-zinc-800">
               <h2 className="text-lg font-bold text-white">Messages</h2>
+              <input
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Search message history..."
+                className="mt-3 w-full rounded-full border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm text-white placeholder:text-gray-500 focus:border-violet-500 focus:outline-none"
+              />
             </div>
 
             <div className="flex-1 overflow-y-auto">
@@ -313,46 +352,54 @@ export const MessagesPage: React.FC = () => {
                 <div className="flex items-center justify-center h-full text-gray-400">
                   Loading conversations...
                 </div>
-              ) : conversations.length === 0 ? (
+              ) : filteredConversations.length === 0 ? (
                 <div className="flex items-center justify-center h-full text-gray-400 p-4 text-center">
-                  No conversations yet. Message a seller from any product page.
+                  {searchTerm ? "No matching conversations." : "No conversations yet. Message a seller from any product page."}
                 </div>
               ) : (
-                conversations.map((conv) => (
+                filteredConversations.map((conversation) => (
                   <button
-                    key={conv.id}
+                    key={conversation.id}
                     onClick={() => {
-                      setSelectedConversationId(conv.id);
-                      navigate(
-                        `/messages?participantId=${conv.participant_id}`,
-                        {
-                          replace: true,
-                        },
-                      );
+                      setSelectedConversationId(conversation.id);
+                      navigate(messagePath(conversation.id), { replace: true });
                     }}
                     className={`w-full px-4 py-3 border-b border-zinc-800 text-left transition-colors ${
-                      selectedConversationId === conv.id
+                      selectedConversationId === conversation.id
                         ? "bg-violet-500/20 border-l-2 border-l-violet-500"
                         : "hover:bg-zinc-900/50"
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-white truncate">
-                          {conv.participant_name}
-                        </div>
-                        <div className="text-sm text-gray-400 truncate mt-1">
-                          {conv.last_message}
-                        </div>
-                      </div>
-                      {conv.unread_count > 0 && (
-                        <div className="flex-shrink-0 h-5 w-5 rounded-full bg-violet-500 flex items-center justify-center text-xs text-white font-bold">
-                          {conv.unread_count}
+                    <div className="flex items-start gap-3">
+                      {conversation.otherParticipant.profileImage ? (
+                        <img
+                          src={conversation.otherParticipant.profileImage}
+                          alt={conversation.otherParticipant.fullName}
+                          className="h-10 w-10 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-600 text-sm font-bold text-white">
+                          {initials(conversation.otherParticipant.fullName)}
                         </div>
                       )}
-                    </div>
-                    <div className="text-xs text-gray-500 mt-2">
-                      {new Date(conv.last_message_at).toLocaleDateString()}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="font-semibold text-white truncate">
+                            {conversation.otherParticipant.fullName}
+                          </div>
+                          <span className="text-xs text-gray-500">
+                            {relativeTime(conversation.lastMessage?.createdAt)}
+                          </span>
+                        </div>
+                        <div className="text-sm text-gray-400 truncate mt-1">
+                          {conversation.lastMessage?.text || "No messages yet"}
+                        </div>
+                      </div>
+                      {conversation.unreadCount > 0 && (
+                        <div className="flex-shrink-0 h-5 min-w-5 rounded-full bg-violet-500 px-1 flex items-center justify-center text-xs text-white font-bold">
+                          {conversation.unreadCount > 99 ? "99+" : conversation.unreadCount}
+                        </div>
+                      )}
                     </div>
                   </button>
                 ))
@@ -360,25 +407,16 @@ export const MessagesPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Right Panel - Messages */}
           <div className="md:col-span-2 border border-zinc-800 rounded-2xl bg-[#11151d] flex flex-col">
-            {selectedConversationId && conversations.length > 0 ? (
+            {selectedConversation ? (
               <>
-                {/* Header */}
                 <div className="p-4 border-b border-zinc-800">
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-lg font-bold text-white">
-                      {conversations.find(
-                        (c) => c.id === selectedConversationId,
-                      )?.participant_name || "Seller"}
-                    </h3>
-                    <div className="text-xs text-gray-500">
-                      {messagesRefreshing ? "Updating..." : "Live"}
-                    </div>
-                  </div>
+                  <h3 className="text-lg font-bold text-white">
+                    {selectedConversation.otherParticipant.fullName}
+                  </h3>
+                  <p className="text-xs text-gray-500">Private conversation</p>
                 </div>
 
-                {/* Messages */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
                   {loadingMessages ? (
                     <div className="flex items-center justify-center h-full text-gray-400">
@@ -386,37 +424,31 @@ export const MessagesPage: React.FC = () => {
                     </div>
                   ) : messages.length === 0 ? (
                     <div className="flex items-center justify-center h-full text-gray-400">
-                      No messages yet. Start the conversation!
+                      No messages yet — say hello! 👋
                     </div>
                   ) : (
-                    messages.map((msg) => {
-                      const isSentByMe = msg.sender_id === user?.id;
+                    messages.map((message) => {
+                      const isSentByMe = message.senderId === user?.id;
                       return (
-                        <div
-                          key={msg.id}
-                          className={`flex ${isSentByMe ? "justify-end" : "justify-start"}`}
-                        >
-                          <div
-                            className={`max-w-[75%] rounded-2xl px-4 py-3 shadow-sm ${
-                              isSentByMe
-                                ? "bg-blue-500 text-white"
-                                : "bg-zinc-800 text-gray-100"
-                            }`}
-                          >
-                            {!isSentByMe && msg.sender_name ? (
+                        <div key={message.id} className={`flex ${isSentByMe ? "justify-end" : "justify-start"}`}>
+                          <div className={`max-w-[75%] ${isSentByMe ? "text-right" : "text-left"}`}>
+                            {!isSentByMe && (
                               <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
-                                {msg.sender_name}
+                                {selectedConversation.otherParticipant.fullName}
                               </div>
-                            ) : null}
-                            <p className="break-words whitespace-pre-wrap leading-relaxed">
-                              {msg.message || ""}
-                            </p>
+                            )}
                             <div
-                              className={`mt-1 text-xs ${
-                                isSentByMe ? "text-blue-100" : "text-gray-400"
+                              className={`rounded-2xl px-4 py-3 shadow-sm ${
+                                isSentByMe ? "bg-blue-500 text-white" : "bg-zinc-800 text-gray-100"
                               }`}
                             >
-                              {new Date(msg.created_at).toLocaleTimeString()}
+                              <p className="break-words whitespace-pre-wrap leading-relaxed">
+                                {message.messageText}
+                              </p>
+                            </div>
+                            <div className={`mt-1 text-xs ${isSentByMe ? "text-blue-300" : "text-gray-400"}`}>
+                              {timeLabel(message.createdAt)}
+                              {isSentByMe && <span className="ml-1">{message.read ? "✓✓" : "✓"}</span>}
                             </div>
                           </div>
                         </div>
@@ -426,29 +458,58 @@ export const MessagesPage: React.FC = () => {
                   <div ref={messagesEndRef} />
                 </div>
 
-                {/* Input */}
-                <form
-                  onSubmit={handleSendMessage}
-                  className="p-4 border-t border-zinc-800 flex gap-2"
-                >
-                  <input
-                    type="text"
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    placeholder="Type a message..."
-                    className="flex-1 px-4 py-2 bg-zinc-900 border border-zinc-700 rounded-full text-white placeholder-gray-500 focus:outline-none focus:border-violet-500"
-                  />
-                  <button
-                    type="submit"
-                    disabled={sending || !newMessage.trim()}
-                    className="px-4 py-2 bg-violet-500 hover:bg-violet-600 disabled:bg-gray-600 text-white rounded-full transition-colors"
-                  >
-                    {sending ? "..." : <Icons.ArrowRight className="h-5 w-5" />}
-                  </button>
-                </form>
+                <div className="relative border-t border-zinc-800 p-4">
+                  {showEmojiPicker && (
+                    <div ref={emojiPickerRef} className="absolute bottom-20 left-4 z-20 grid w-64 grid-cols-5 gap-1 rounded-xl border border-zinc-700 bg-zinc-900 p-2 shadow-lg">
+                      {EMOJIS.map((emoji) => (
+                        <button
+                          type="button"
+                          key={emoji}
+                          onClick={() => setNewMessage((current) => `${current}${emoji}`)}
+                          className="rounded-lg p-2 text-lg hover:bg-zinc-800"
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowEmojiPicker((current) => !current)}
+                      className="rounded-full border border-zinc-700 px-3 text-white hover:bg-zinc-800"
+                      aria-label="Open emoji picker"
+                    >
+                      😊
+                    </button>
+                    <textarea
+                      value={newMessage}
+                      onChange={(event) => setNewMessage(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && !event.shiftKey) {
+                          event.preventDefault();
+                          void handleSendMessage();
+                        }
+                      }}
+                      placeholder="Type a message..."
+                      rows={1}
+                      className="max-h-28 min-h-10 flex-1 resize-none rounded-2xl border border-zinc-700 bg-zinc-900 px-4 py-2 text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      disabled={sending || !newMessage.trim()}
+                      onClick={() => void handleSendMessage()}
+                      className="rounded-full bg-violet-500 px-4 py-2 text-white transition-colors hover:bg-violet-600 disabled:bg-gray-600"
+                      aria-label="Send message"
+                    >
+                      {sending ? "..." : <Icons.ArrowRight className="h-5 w-5" />}
+                    </button>
+                  </div>
+                </div>
               </>
             ) : (
-              <div className="flex items-center justify-center h-full text-gray-400">
+              <div className="flex h-full flex-col items-center justify-center gap-2 text-gray-400">
+                <Icons.Message className="h-10 w-10 opacity-40" />
                 Select a conversation to start messaging
               </div>
             )}

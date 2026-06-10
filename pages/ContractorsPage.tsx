@@ -162,7 +162,7 @@ export const ContractorsPage: React.FC = () => {
       return;
     }
 
-    navigate(`/messages?participantId=${encodeURIComponent(participantId)}`);
+    navigate(`/account?tab=messages&participantId=${encodeURIComponent(participantId)}`);
   };
 
   const updateFilter = <K extends keyof typeof filters>(key: K, value: (typeof filters)[K]) => {

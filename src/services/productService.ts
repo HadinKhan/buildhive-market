@@ -116,16 +116,9 @@ class ProductService {
         meta: productsData.pagination || {},
       };
     } catch (error) {
-      console.error('Products fetch failed:', error);
-      return {
-        products: [],
-        meta: {
-          total: 0,
-          page: 1,
-          limit: params?.limit ?? 0,
-          totalPages: 0,
-        },
-      };
+      throw error instanceof Error
+        ? error
+        : new Error('Products are unavailable right now.');
     }
   }
 
@@ -137,8 +130,9 @@ class ProductService {
       const response = await api.get<ApiResponse<Product>>(`/products/${id}`);
       return response.data.data;
     } catch (error) {
-      console.error('Product fetch failed:', error);
-      throw error;
+      throw error instanceof Error
+        ? error
+        : new Error('Product is unavailable right now.');
     }
   }
 

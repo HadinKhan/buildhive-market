@@ -201,7 +201,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       return;
     }
 
-    navigate(`/messages?participantId=${encodeURIComponent(participantId)}`);
+    navigate(`/account?tab=messages&participantId=${encodeURIComponent(participantId)}`);
   };
 
   const requireAuth = () => {

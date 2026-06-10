@@ -13,6 +13,7 @@ import {
   UpdateProfileData,
   userService,
 } from "../src/services/userService";
+import { MessagesPage } from "../src/pages/Messages";
 
 interface AccountPageProps {
   user: User;
@@ -28,6 +29,7 @@ type TabId =
   | "finance"
   | "projects"
   | "disputes"
+  | "messages"
   | "support"
   | "profile"
   | "addresses";
@@ -52,6 +54,7 @@ const tabs: Array<{ id: TabId; label: string; icon: React.ElementType }> = [
   { id: "finance", label: "Financial Overview", icon: Icons.Wallet },
   { id: "projects", label: "My Projects", icon: Icons.Briefcase },
   { id: "disputes", label: "My Disputes", icon: Icons.AlertCircle },
+  { id: "messages", label: "Messages", icon: Icons.Message },
   { id: "support", label: "Support", icon: Icons.HelpCircle },
   { id: "profile", label: "Profile & Settings", icon: Icons.Settings },
   { id: "addresses", label: "My Addresses", icon: Icons.MapPin },
@@ -814,6 +817,12 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
                       </article>
                     ))}
                   </ListPanel>
+                </section>
+              )}
+
+              {activeTab === "messages" && (
+                <section className="overflow-hidden rounded-xl border border-gray-100 bg-white p-2 shadow-sm">
+                  <MessagesPage embedded />
                 </section>
               )}
 

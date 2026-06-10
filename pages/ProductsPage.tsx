@@ -2198,7 +2198,9 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
           return;
         }
       } catch (error) {
-        // fallback to local filter
+        setAiResults([]);
+        setUseAiSearch(false);
+        setAiSearchLabel("");
       }
     }
 
@@ -2438,7 +2440,7 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
     }
 
     setSelectedSeller(null);
-    navigate(`/messages?participantId=${encodeURIComponent(participantId)}`);
+    navigate(`/account?tab=messages&participantId=${encodeURIComponent(participantId)}`);
   };
 
   const renderProductCard = (product: Product) => {
