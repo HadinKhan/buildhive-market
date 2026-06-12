@@ -499,14 +499,19 @@ const AppContent: React.FC = () => {
     }
   };
 
-  const clearCart = async () => {
+  const clearCart = async (silent = false) => {
     if (!isAuthenticated) return;
 
+    const previousCart = cart;
+    setCart([]);
     try {
       await cartService.clearCart();
-      setCart([]);
-      toast.success("Cart cleared successfully");
-    } catch {}
+      if (!silent) {
+        toast.success("Cart cleared successfully");
+      }
+    } catch {
+      setCart(previousCart);
+    }
   };
 
   return (
@@ -608,7 +613,7 @@ const AppContent: React.FC = () => {
               <CheckoutPage
                 cartItems={cart}
                 onNavigate={navigateTo}
-                onPlaceOrder={clearCart}
+                onPlaceOrder={() => clearCart(true)}
               />
             </ProtectedRoute>
           }

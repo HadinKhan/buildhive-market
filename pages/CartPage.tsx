@@ -381,7 +381,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                         Items from {group.sellerName}
                       </h3>
                       <div className="seller-group-subtotal">
-                        Subtotal: Rs. {group.subtotal.toLocaleString()}
+                        Subtotal: PKR {group.subtotal.toLocaleString()}
                       </div>
                     </div>
 
@@ -453,7 +453,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                             </span>
                           </div>
                           <div className="cart-item-price">
-                            Rs. {item.price.toLocaleString()}
+                            PKR {item.price.toLocaleString()}
                             <span className="cart-item-unit">
                               {" "}
                               / {item.unit}
@@ -507,7 +507,7 @@ export const CartPage: React.FC<CartPageProps> = ({
 
                         <div className="cart-item-actions">
                           <div className="cart-item-total">
-                            Rs. {(item.price * item.quantity).toLocaleString()}
+                            PKR {(item.price * item.quantity).toLocaleString()}
                           </div>
                           <div className="cart-action-row">
                             <button
@@ -594,7 +594,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                           </span>
                         </div>
                         <div className="cart-item-price">
-                          Rs. {item.price.toLocaleString()}
+                          PKR {item.price.toLocaleString()}
                         </div>
                       </div>
                       <div className="cart-item-actions">
@@ -685,7 +685,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                             {product.name}
                           </div>
                           <div style={{ color: "#c4b5fd", fontWeight: 900 }}>
-                            Rs. {product.price.toLocaleString()}
+                            PKR {product.price.toLocaleString()}
                           </div>
                         </div>
                       </div>
@@ -700,7 +700,7 @@ export const CartPage: React.FC<CartPageProps> = ({
 
               <div className="summary-row">
                 <span>Subtotal ({orderSummary.itemCount} items)</span>
-                <span>Rs. {orderSummary.subtotal.toLocaleString()}</span>
+                <span>PKR {orderSummary.subtotal.toLocaleString()}</span>
               </div>
               <div className="summary-row">
                 <span>Shipping</span>
@@ -708,7 +708,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                   {orderSummary.shipping === 0 ? (
                     <span style={{ color: "#34d399" }}>Free</span>
                   ) : (
-                    `Rs. ${orderSummary.shipping.toLocaleString()}`
+                    `PKR ${orderSummary.shipping.toLocaleString()}`
                   )}
                 </span>
               </div>
@@ -720,7 +720,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                 <div className="summary-row discount">
                   <span>Discount</span>
                   <span>
-                    - Rs. {Math.round(orderSummary.discount).toLocaleString()}
+                    - PKR {Math.round(orderSummary.discount).toLocaleString()}
                   </span>
                 </div>
               )}
@@ -844,7 +844,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                 <span
                   style={{ marginLeft: "auto", fontSize: 13, opacity: 0.9 }}
                 >
-                  Rs. {Math.round(orderSummary.total).toLocaleString()}
+                  PKR {Math.round(orderSummary.total).toLocaleString()}
                 </span>
               </button>
 

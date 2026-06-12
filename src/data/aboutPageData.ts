@@ -97,7 +97,7 @@ export const aboutPageData = {
       step: "Q2 2026",
       date: "Beta Launch",
       title: "Beta Launch",
-      desc: "Platform launched for testing with role-specific dashboards for Buyers, Sellers, Service Providers, and Admins.",
+      desc: "Platform launched for testing with role-specific dashboards for Buyers, Sellers, Contractors, and Admins.",
       active: true,
     },
   ],
@@ -124,7 +124,7 @@ export const aboutPageData = {
     {
       initials: "FA",
       name: "Faisal Ali",
-      role: "Supplier, Islamabad",
+      role: "Seller, Islamabad",
       quote:
         '"As a supplier, BuildHive helped us reach customers nationwide. The dashboard is intuitive and the support team is exceptional."',
       tone: "purple",

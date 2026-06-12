@@ -2033,6 +2033,10 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
   const [productsError, setProductsError] = useState<string | null>(null);
+  const [productPagination, setProductPagination] = useState({
+    page: 1,
+    totalPages: 1,
+  });
   const {
     filters,
     searchQuery,
@@ -2083,8 +2087,8 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
   useEffect(() => {
     productService
       .getProducts({
-        status: "approved",
-        limit: 20,
+        page: filters.page,
+        limit: filters.itemsPerPage,
         ...(activeTag ? { tag: activeTag } : {}),
       })
       .then((response) => {
@@ -2093,6 +2097,10 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
           []) as ApiProduct[];
         const nextProducts = prods.map(toProductView);
         setProducts(nextProducts);
+        setProductPagination({
+          page: Number(response.meta?.page ?? filters.page),
+          totalPages: Math.max(Number(response.meta?.totalPages ?? 1), 1),
+        });
         setProductsError(null);
         setIsLoadingProducts(false);
       })
@@ -2104,7 +2112,7 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
       .finally(() => {
         setIsLoadingProducts(false);
       });
-  }, [activeTag]);
+  }, [activeTag, filters.itemsPerPage, filters.page]);
   const categoryProducts = useMemo(() => {
     let filtered =
       activeCategory === "all"
@@ -2124,15 +2132,12 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
   }, [activeCategory, activeTag, filteredProducts, showWishlistOnly, isInWishlist]);
 
   const displayedProducts = useMemo(() => {
-    const startIdx = (filters.page - 1) * filters.itemsPerPage;
-    const endIdx = startIdx + filters.itemsPerPage;
-    const sliced = categoryProducts.slice(startIdx, endIdx);
-    return sliced;
-  }, [categoryProducts, filters.page, filters.itemsPerPage]);
+    return categoryProducts;
+  }, [categoryProducts]);
 
   const categoryTotalPages = Math.max(
     1,
-    Math.ceil(categoryProducts.length / filters.itemsPerPage),
+    productPagination.totalPages,
   );
 
   const renderedProducts =
@@ -2711,7 +2716,7 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
             <div
               style={{ color: "#fff", fontWeight: 900, fontSize: "1.18rem" }}
             >
-              Rs. {productPrice.toLocaleString()}
+              PKR {productPrice.toLocaleString()}
               <span
                 style={{ color: "#7887a2", fontSize: "12px", fontWeight: 600 }}
               >
@@ -3609,7 +3614,7 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
                                 : ""
                             }
                           >
-                            Rs. {product.price.toLocaleString()} {product.unit}
+                            PKR {product.price.toLocaleString()} {product.unit}
                           </span>
                         </td>
                       ))}
@@ -3735,7 +3740,7 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
                 <div className="product-details-info">
                   <h3>{selectedProduct.name}</h3>
                   <div className="product-details-price">
-                    Rs. {selectedProduct.price.toLocaleString()}
+                    PKR {selectedProduct.price.toLocaleString()}
                   </div>
                   <div className="product-details-unit">
                     {selectedProduct.unit}

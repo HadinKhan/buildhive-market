@@ -92,7 +92,7 @@ const posts: Record<string, BlogPostDetail> = {
           ["Heat of Hydration", "High", "Low", "Low"],
           ["Sulphate Resistance", "Poor", "Good", "Excellent"],
           ["Best For", "High-rise, RCC", "Dams, Mass Concrete", "Coastal, Sewage"],
-          ["Price (per bag)", "Rs. 1,350", "Rs. 1,280", "Rs. 1,450"],
+          ["Price (per bag)", "PKR 1,350", "PKR 1,280", "PKR 1,450"],
         ],
       },
       { type: "heading", text: "Regional Climate Considerations" },

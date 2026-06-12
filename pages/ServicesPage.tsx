@@ -1529,7 +1529,7 @@ const mapContractorProfile = (
       reviewSummary?.averageRating || contractor.rating || service.rating || 0,
     ),
     responseTime:
-      contractor.responseTime || contractor.response_time || "Contact provider",
+      contractor.responseTime || contractor.response_time || "Contact contractor",
     location: contractor.location || contractor.city || service.location,
     established: String(
       contractor.established ||
@@ -1951,11 +1951,11 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
       avatar: service.provider.slice(0, 1).toUpperCase(),
       verified: service.verified,
       rating: service.rating,
-      responseTime: "Contact provider",
+      responseTime: "Contact contractor",
       location: service.location,
       established: "",
       description:
-        "Provider profile details will appear when the backend provides service-provider data.",
+        "Contractor profile details will appear when the backend provides contractor data.",
       phone: "",
       email: "",
       certifications: service.certifications || [],
@@ -2739,7 +2739,7 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
                 <div className="detail-info">
                   <h3>{selectedService.name}</h3>
                   <div className="detail-price">
-                    Rs. {selectedService.price.toLocaleString()}
+                    PKR {selectedService.price.toLocaleString()}
                   </div>
                   <span className="service-price-type">
                     {formatPriceType(selectedService.priceType)}
@@ -2807,7 +2807,7 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
 
                   <div className="provider-card">
                     <p style={{ color: "#cbd5e1", margin: 0, fontSize: 13 }}>
-                      <strong style={{ color: "#fff" }}>Provider:</strong>{" "}
+                      <strong style={{ color: "#fff" }}>Contractor:</strong>{" "}
                       {selectedService.provider}
                       {selectedService.verified && (
                         <span
@@ -2837,7 +2837,7 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
                         void loadProviderProfile(selectedService);
                       }}
                     >
-                      View Provider Profile
+                      View Contractor Profile
                     </button>
                     <button
                       className="btn-secondary"
@@ -3051,7 +3051,7 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
               <div className="seller-stats-grid">
                 <div className="seller-stat-card">
                   <div className="seller-stat-value">
-                    Rs. {checkoutService.price.toLocaleString()}
+                    PKR {checkoutService.price.toLocaleString()}
                   </div>
                   <div className="seller-stat-label">Estimated price</div>
                 </div>
@@ -3059,7 +3059,7 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
                   <div className="seller-stat-value">
                     {checkoutService.provider}
                   </div>
-                  <div className="seller-stat-label">Provider</div>
+                  <div className="seller-stat-label">Contractor</div>
                 </div>
               </div>
 
@@ -3367,7 +3367,7 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
                     <td>Price</td>
                     {comparedServices.map((service) => (
                       <td key={`${service.id}-price`}>
-                        Rs. {service.price.toLocaleString()} (
+                        PKR {service.price.toLocaleString()} (
                         {formatPriceType(service.priceType)})
                       </td>
                     ))}
@@ -3397,7 +3397,7 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
                     ))}
                   </tr>
                   <tr>
-                    <td>Provider</td>
+                    <td>Contractor</td>
                     {comparedServices.map((service) => (
                       <td key={`${service.id}-provider`}>{service.provider}</td>
                     ))}

@@ -62,7 +62,7 @@ export const privacyPageData = {
         "We do not sell your personal information to third parties. We may share your information in the following circumstances:",
       ],
       listItems: [
-        "Service Providers: We share information with trusted third-party service providers who assist us in operating our website, processing payments, and delivering products.",
+        "Service Contractors: We share information with trusted third-party service contractors who assist us in operating our website, processing payments, and delivering products.",
         "Legal Requirements: We may disclose information when required by law or to protect our rights, property, or safety.",
         "Business Transfers: In the event of a merger, acquisition, or sale of assets, your information may be transferred to the acquiring entity.",
         "With Your Consent: We may share information with third parties when you give us explicit permission to do so.",

@@ -1199,11 +1199,11 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         ] = await Promise.all([
           api.get<ApiResponse<{ products: FeaturedProductApi[] }>>(
             "/products",
-            { params: { status: "approved", is_featured: true, limit: 8 } },
+            { params: { status: "approved", featured: true, limit: 8 } },
           ),
           api.get<ApiResponse<{ products: FeaturedProductApi[] }>>(
             "/products",
-            { params: { status: "approved", limit: 12 } },
+            { params: { status: "approved", trending: true, limit: 8 } },
           ),
           api.get<ApiResponse<CategoryApi[]>>("/categories", {
             params: { limit: 10 },
@@ -1219,9 +1219,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         if (cancelled) return;
 
         const featured = normalizeProducts(featuredResponse.data);
-        const trending = normalizeProducts(trendingResponse.data).filter(
-          (product) => !product.is_featured,
-        );
+        const trending = normalizeProducts(trendingResponse.data);
         const categoriesData = normalizeCategories(categoriesResponse.data);
         const contractorsData = contractorsResponse.contractors || [];
         const servicesData = normalizeServices(servicesResponse.data);
@@ -1497,9 +1495,14 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               </p>
             </div>
             <div className="listings-grid">
-              {featuredLoading || featuredListings.length === 0
-                ? renderFeaturedSkeletons(8)
-                : featuredListings.map((listing, index) => (
+              {featuredLoading ? (
+                renderFeaturedSkeletons(8)
+              ) : featuredListings.length === 0 ? (
+                <div className="col-span-full rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center text-gray-500">
+                  No featured products yet.
+                </div>
+              ) : (
+                featuredListings.map((listing, index) => (
                     <div
                       key={listing.id}
                       className="listing-card reveal"
@@ -1610,7 +1613,8 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                         </div>
                       </div>
                     </div>
-                  ))}
+                  ))
+              )}
             </div>
           </div>
         </section>
@@ -1697,15 +1701,20 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
           <div className="section-inner">
             <div className="section-header reveal">
               <span className="section-label">Trending</span>
-              <h2 className="section-title">All Products</h2>
+              <h2 className="section-title">Trending Products</h2>
               <p className="section-subtitle">
-                Approved products that are not marked featured.
+                Recent approved products with marketplace activity.
               </p>
             </div>
             <div className="listings-grid">
-              {allProductsLoading || allListings.length === 0
-                ? renderFeaturedSkeletons(12)
-                : allListings.map((listing, index) => (
+              {allProductsLoading ? (
+                renderFeaturedSkeletons(8)
+              ) : allListings.length === 0 ? (
+                <div className="col-span-full rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center text-gray-500">
+                  No trending products yet.
+                </div>
+              ) : (
+                allListings.map((listing, index) => (
                     <div
                       key={listing.id}
                       className="listing-card reveal"
@@ -1764,7 +1773,8 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                         </div>
                       </div>
                     </div>
-                  ))}
+                  ))
+              )}
             </div>
             <div
               style={{ textAlign: "center", marginTop: 40 }}
@@ -1842,7 +1852,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
           <div className="section-inner">
             <div className="section-header reveal">
               <span className="section-label">Professionals</span>
-              <h2 className="section-title">Top Service Providers</h2>
+              <h2 className="section-title">Top Contractors</h2>
               <p className="section-subtitle">
                 Connect with verified contractors, architects, and engineers.
               </p>

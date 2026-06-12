@@ -359,9 +359,51 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
     event.preventDefault();
     setBusy("dispute");
     try {
+      let filedAgainst: string | undefined;
+      if (disputeForm.relatedType === "order") {
+        const selectedOrder =
+          orders.find((order) => order.id === disputeForm.relatedId) || {};
+        filedAgainst =
+          selectedOrder.filed_against ||
+          selectedOrder.filedAgainst ||
+          selectedOrder.seller_id ||
+          selectedOrder.sellerId ||
+          selectedOrder.businesses?.user_id ||
+          selectedOrder.business?.user_id;
+
+        if (!filedAgainst && disputeForm.relatedId) {
+          const orderDetail = unwrap(await api.get(`/orders/${disputeForm.relatedId}`));
+          filedAgainst =
+            orderDetail?.businesses?.user_id ||
+            orderDetail?.business?.user_id ||
+            orderDetail?.seller_id ||
+            orderDetail?.sellerId;
+        }
+      }
+      if (disputeForm.relatedType === "project") {
+        const selectedProject =
+          projects.find((project) => project.id === disputeForm.relatedId) || {};
+        filedAgainst =
+          selectedProject.filed_against ||
+          selectedProject.filedAgainst ||
+          selectedProject.contractor_id ||
+          selectedProject.contractorId ||
+          selectedProject.contractor?.id ||
+          selectedProject.acceptedProposal?.contractor_id ||
+          selectedProject.accepted_proposal?.contractor_id;
+      }
+
+      if (!filedAgainst) {
+        toast.error("Unable to identify the other party for this dispute.");
+        setBusy("");
+        return;
+      }
+
       await api.post("/disputes", {
         orderId: disputeForm.relatedType === "order" ? disputeForm.relatedId : undefined,
         projectId: disputeForm.relatedType === "project" ? disputeForm.relatedId : undefined,
+        filedAgainst,
+        filed_against: filedAgainst,
         reason: disputeForm.reason,
         description: disputeForm.description,
       });
@@ -392,14 +434,34 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
     }
   };
 
+  const openTicket = async (ticket: any) => {
+    setModal({ type: "ticket", ticket });
+    try {
+      const detail = unwrap(await api.get(`/tickets/${ticket.id}`));
+      setModal({ type: "ticket", ticket: { ...ticket, ...detail } });
+    } catch {
+      setModal({ type: "ticket", ticket });
+    }
+  };
+
   const sendTicketMessage = async () => {
     if (modal?.type !== "ticket" || !ticketMessage.trim()) return;
     setBusy("ticket-message");
     try {
-      await api.post(`/tickets/${modal.ticket.id}/messages`, { message: ticketMessage.trim(), attachments: [] });
+      const response = await api.post(`/tickets/${modal.ticket.id}/messages`, { message: ticketMessage.trim(), attachments: [] });
+      const createdMessage = unwrap(response);
+      const updatedTicket = {
+        ...modal.ticket,
+        messages: [...asArray(modal.ticket.messages), createdMessage],
+      };
+      setModal({ type: "ticket", ticket: updatedTicket });
+      setTickets((current) =>
+        current.map((ticket) =>
+          ticket.id === updatedTicket.id ? { ...ticket, ...updatedTicket } : ticket,
+        ),
+      );
       toast.success("Reply sent.");
       setTicketMessage("");
-      await loadAll();
     } catch (err: any) {
       toast.error(err?.response?.data?.message || "Unable to send reply.");
     } finally {
@@ -622,8 +684,22 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
           <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
             <aside className="hidden rounded-xl border border-gray-100 bg-white p-4 shadow-sm lg:block">
               <div className="mb-4 flex items-center gap-3 border-b border-gray-100 pb-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <Icons.User className="h-6 w-6" />
+                <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-primary">
+                  {profileForm.profile_image ? (
+                    <img
+                      src={profileForm.profile_image}
+                      alt={profileForm.full_name || user.full_name || "Buyer"}
+                      className="h-full w-full object-cover"
+                      onError={() =>
+                        setProfileForm((current) => ({
+                          ...current,
+                          profile_image: "",
+                        }))
+                      }
+                    />
+                  ) : (
+                    <Icons.User className="h-6 w-6" />
+                  )}
                 </div>
                 <div className="min-w-0">
                   <p className="truncate font-bold text-gray-900">{profileForm.full_name || user.full_name || "Buyer"}</p>
@@ -840,7 +916,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
                         </div>
                         <div className="flex items-center gap-3">
                           <StatusBadge status={ticket.status || "open"} />
-                          <Button className={accountOutlineButton} variant="outline" size="sm" onClick={() => setModal({ type: "ticket", ticket })}>View</Button>
+                          <Button className={accountOutlineButton} variant="outline" size="sm" onClick={() => void openTicket(ticket)}>View</Button>
                         </div>
                       </article>
                     ))}
@@ -977,6 +1053,24 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
                 ["Priority", modal.ticket.priority],
                 ["Description", modal.ticket.description || modal.ticket.message],
               ]} />
+              <div className="space-y-3 rounded-xl border border-gray-100 bg-gray-50 p-4">
+                <h3 className="text-sm font-bold text-gray-900">Conversation</h3>
+                {asArray(modal.ticket.messages).length === 0 ? (
+                  <p className="text-sm text-gray-500">No replies yet.</p>
+                ) : (
+                  asArray(modal.ticket.messages).map((message: any) => (
+                    <div key={message.id || `${message.created_at}-${message.message}`} className="rounded-lg bg-white p-3 shadow-sm">
+                      <div className="mb-1 flex items-center justify-between gap-3 text-xs text-gray-500">
+                        <span className="font-semibold text-gray-700">
+                          {message.sender?.full_name || message.sender?.email || (message.is_staff_reply ? "Support" : "You")}
+                        </span>
+                        <span>{dateLabel(message.created_at)}</span>
+                      </div>
+                      <p className="whitespace-pre-wrap text-sm text-gray-700">{message.message}</p>
+                    </div>
+                  ))
+                )}
+              </div>
               <textarea className="w-full rounded-lg border border-gray-200 px-3 py-2" rows={4} placeholder="Add a reply..." value={ticketMessage} onChange={(event) => setTicketMessage(event.target.value)} />
               <Button disabled={busy === "ticket-message" || !ticketMessage.trim()} onClick={() => void sendTicketMessage()}>Send Reply</Button>
             </div>

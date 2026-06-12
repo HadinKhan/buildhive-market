@@ -328,38 +328,27 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         return;
       }
 
-      // Step 2: Create one order per seller group.
-      const orderResponses: any[] = [];
+      // The backend creates one order per seller group and clears the cart once.
+      const orderData: CreateOrderData = {
+        items: cartItems.map((item) => ({
+          product_id: item.product_id,
+          quantity: item.quantity,
+          price: item.product!.price,
+        })),
+        shippingAddressId: address.id,
+        paymentMethod: paymentMethod,
+        notes: formData.notes,
+      };
 
-      for (const group of cartGroups) {
-        const orderData: CreateOrderData = {
-          items: group.items.map((item) => ({
-            product_id: item.product_id,
-            quantity: item.quantity,
-            price: item.product!.price,
-          })),
-          shippingAddressId: address.id,
-          paymentMethod: paymentMethod,
-          notes: formData.notes,
-        };
-
-        let orderResponse: any;
-        try {
-          orderResponse = await orderService.createOrder(orderData);
-        } catch (orderError) {
-          throw orderError;
-        }
-
-        orderResponses.push(orderResponse);
-      }
+      const orderResponse: any = await orderService.createOrder(orderData);
 
       const firstOrder =
-        orderResponses[0]?.orders?.[0] ||
-        orderResponses[0]?.data?.orders?.[0] ||
-        orderResponses[0];
+        orderResponse?.orders?.[0] ||
+        orderResponse?.data?.orders?.[0] ||
+        orderResponse;
       const orderId = firstOrder?.id;
       setCreatedOrderId(orderId);
-      setPlacedOrdersCount(orderResponses.length);
+      setPlacedOrdersCount(cartGroups.length);
 
       if (paymentMethod === "card") {
         stripePayment.resetStripeState();
@@ -388,6 +377,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         "See your account for order details";
       setOrderNumber(String(fallbackOrderNumber));
       toast.success("Order placed successfully! Pay on delivery.");
+      onPlaceOrder();
       onNavigate(`order-confirmation/${orderId}`);
     } catch (error: any) {
       toast.error(
@@ -433,6 +423,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               setShowStripeForm(false);
               stripePayment.resetStripeState();
               toast.success("Payment successful! Order confirmed.");
+              onPlaceOrder();
               onNavigate(`order-confirmation/${createdOrderId}`);
             }}
           />

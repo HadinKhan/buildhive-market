@@ -49,6 +49,8 @@ interface AuthProviderProps {
 }
 
 const AUTH_STORAGE_KEY = "buildhive.auth.session";
+const MARKETPLACE_ROLE_ERROR =
+  "BuildHive Market is for buyer accounts only. Sellers, contractors, and admins must sign in from the dashboard.";
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -126,6 +128,9 @@ const normalizeUser = (user: unknown): AuthUser | null => {
   };
 };
 
+const isBuyerUser = (user: AuthUser | null | undefined): boolean =>
+  String(user?.role ?? "").toLowerCase() === "buyer";
+
 const readStoredSession = (): AuthSession | null => {
   const rawSession = safeLocalStorage.getItem(AUTH_STORAGE_KEY);
   if (!rawSession) {
@@ -136,7 +141,7 @@ const readStoredSession = (): AuthSession | null => {
     const parsed = JSON.parse(rawSession) as Partial<AuthSession>;
     const user = normalizeUser(parsed.user);
 
-    if (!parsed.token || !user) {
+    if (!parsed.token || !user || !isBuyerUser(user)) {
       return null;
     }
 
@@ -226,6 +231,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         throw new Error("Invalid user profile returned from server");
       }
 
+      if (!isBuyerUser(normalizedUser)) {
+        clearSession();
+        setUser(null);
+        setToken(null);
+        throw new Error(MARKETPLACE_ROLE_ERROR);
+      }
+
       const existingSession = readStoredSession();
       const refreshToken =
         existingSession?.refreshToken || tokenStorage.getRefreshToken();
@@ -254,7 +266,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const refreshTokenFromStorage =
         storedSession?.refreshToken || tokenStorage.getRefreshToken();
 
-      if (!tokenFromStorage || !userFromStorage) {
+      if (!tokenFromStorage || !userFromStorage || !isBuyerUser(userFromStorage)) {
         clearSession();
         return;
       }
@@ -312,6 +324,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         throw new Error("Login did not return an access token");
       }
 
+      if (!isBuyerUser(normalizedUser)) {
+        clearSession();
+        setUser(null);
+        setToken(null);
+        throw new Error(MARKETPLACE_ROLE_ERROR);
+      }
+
       syncAuthState({
         token: authData.accessToken,
         refreshToken: authData.refreshToken ?? null,
@@ -323,7 +342,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const register = useCallback(
     async (data: RegisterData): Promise<void> => {
-      await authService.register(data);
+      await authService.register({ ...data, role: "buyer" });
     },
     [],
   );

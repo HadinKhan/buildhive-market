@@ -93,6 +93,9 @@ export interface GetProductsParams {
   sortOrder?: 'asc' | 'desc';
   status?: 'approved' | 'pending' | 'rejected' | 'inactive' | 'draft';
   isActive?: boolean;
+  featured?: boolean;
+  is_featured?: boolean;
+  trending?: boolean;
 }
 
 // =============================================
@@ -176,17 +179,32 @@ class ProductService {
   }
 
   /**
-   * Get featured/recommended products (most recent approved products)
+   * Get featured products selected by admins/sellers.
    */
   async getFeaturedProducts(limit: number = 8): Promise<Product[]> {
     const response = await this.getProducts({
       status: 'approved',
       isActive: true,
+      featured: true,
       limit,
       sortBy: 'created_at',
       sortOrder: 'desc',
     });
     
+    return response.products;
+  }
+
+  /**
+   * Get trending products based on real order activity with review/recency fallback.
+   */
+  async getTrendingProducts(limit: number = 12): Promise<Product[]> {
+    const response = await this.getProducts({
+      status: 'approved',
+      isActive: true,
+      trending: true,
+      limit,
+    });
+
     return response.products;
   }
 

@@ -1005,7 +1005,7 @@ const faqItems = [
   },
   {
     q: "What are the different user roles on BuildHive?",
-    a: "BuildHive offers four main roles: Buyers can browse, purchase, and review construction resources; Sellers can list products, manage inventory, and track sales performance; Service Providers (Freelancers) can offer specialized services, submit proposals, and manage client projects; and Admins oversee platform operations, moderate content, and resolve disputes. You select your role during registration and can access role-specific dashboards.",
+    a: "BuildHive offers four main roles: Buyers can browse, purchase, and review construction resources; Sellers can list products, manage inventory, and track sales performance; Contractors can offer specialized services, submit proposals, and manage buyer projects; and Admins oversee platform operations, moderate content, and resolve disputes. You select your role during registration and can access role-specific dashboards.",
   },
   {
     q: "How can I get support if I encounter issues?",
