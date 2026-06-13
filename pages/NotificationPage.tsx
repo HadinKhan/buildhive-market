@@ -8,7 +8,7 @@ interface NotificationPageProps {
 
 interface Notification {
   id: string;
-  type: "order" | "message" | "system" | "alert" | "payment" | "review";
+  type: string;
   title: string;
   description: string;
   timestamp: string;
@@ -27,6 +27,8 @@ const typeConfig: Record<Notification["type"], { icon: keyof typeof Icons; color
   payment: { icon: "Wallet", color: "#ffffff", bg: "linear-gradient(135deg, #14b8a6, #0f766e)", border: "rgba(20, 184, 166, 0.35)" },
   review: { icon: "Star", color: "#ffffff", bg: "linear-gradient(135deg, #f43f5e, #e11d48)", border: "rgba(251, 113, 133, 0.35)" },
 };
+
+const getTypeConfig = (type?: string | null) => typeConfig[type || "system"] || typeConfig.system;
 
 function timeAgo(dateString: string): string {
   const date = new Date(dateString);
@@ -678,8 +680,8 @@ export const NotificationPage: React.FC<NotificationPageProps> = ({ onNavigate }
             </div>
           ) : (
             filteredNotifications.map((notification, index) => {
-              const config = typeConfig[notification.type];
-              const IconComp = Icons[config.icon];
+              const config = getTypeConfig(notification.type);
+              const IconComp = Icons[config.icon] || Icons.Bell;
               const isSelected = selectedIds.has(notification.id);
 
               return (

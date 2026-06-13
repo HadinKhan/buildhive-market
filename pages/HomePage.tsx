@@ -1731,7 +1731,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                       key={listing.id}
                       className="listing-card reveal"
                       style={{ transitionDelay: `${index * 80}ms` }}
-                      onClick={() => onNavigate("products")}
+                      onClick={() => onNavigate("product-detail", listing.id)}
                     >
                       <div className="listing-image-wrap">
                         <img

@@ -89,6 +89,11 @@ const dateLabel = (value?: string) => {
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString();
 };
+const toDateOnlyTime = (value?: string) => {
+  if (!value) return null;
+  const parsed = new Date(`${value}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+};
 const statusClass = (status: string) => {
   const value = status.toLowerCase();
   if (/delivered|completed|approved|accepted|resolved|paid/.test(value)) return "bg-emerald-50 text-emerald-700 border-emerald-100";
@@ -271,7 +276,37 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
 
   const openOrder = async (order: any) => {
     setModal({ type: "order", order });
+    try {
+      const detail = unwrap(await api.get(`/orders/${order.id}`));
+      setModal({ type: "order", order: { ...order, ...detail } });
+    } catch {
+      setModal({ type: "order", order });
+    }
     await loadTracking(order);
+  };
+
+  const downloadReceipt = async (order: any) => {
+    setBusy(`receipt-${order.id}`);
+    try {
+      const response = await api.get(`/orders/${order.id}/receipt`, {
+        responseType: "blob",
+      });
+      const blob = new Blob([response.data], {
+        type: response.headers?.["content-type"] || "application/json",
+      });
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = `receipt-${orderNumber(order)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Unable to download receipt.");
+    } finally {
+      setBusy("");
+    }
   };
 
   const canCancel = (order: any) => !/delivered|completed|cancelled|refunded|shipped/i.test(text(order.status));
@@ -365,8 +400,36 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
 
   const createProject = async (event: React.FormEvent) => {
     event.preventDefault();
-    setBusy("project");
     const editingProject = modal?.type === "project-form" ? modal.project : null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const startTime = toDateOnlyTime(projectForm.startDate);
+    const deadlineTime = toDateOnlyTime(projectForm.deadline);
+
+    if (startTime !== null && startTime < today.getTime()) {
+      toast.error("Project start date cannot be in the past.");
+      return;
+    }
+
+    if (startTime !== null && deadlineTime !== null && deadlineTime < startTime) {
+      toast.error("Project due date cannot be before the start date.");
+      return;
+    }
+
+    for (const milestone of projectForm.milestones) {
+      if (!milestone.dueDate || !projectForm.startDate || !projectForm.deadline) continue;
+      const milestoneTime = toDateOnlyTime(milestone.dueDate);
+      if (milestoneTime !== null && startTime !== null && milestoneTime < startTime) {
+        toast.error("Milestone date cannot be before the project start date.");
+        return;
+      }
+      if (milestoneTime !== null && deadlineTime !== null && milestoneTime > deadlineTime) {
+        toast.error("Milestone date cannot be after the project due date.");
+        return;
+      }
+    }
+
+    setBusy("project");
     const payload = {
       title: projectForm.title,
       description: projectForm.description,
@@ -464,14 +527,20 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
         return;
       }
 
-      await api.post("/disputes", {
-        orderId: disputeForm.relatedType === "order" ? disputeForm.relatedId : undefined,
-        projectId: disputeForm.relatedType === "project" ? disputeForm.relatedId : undefined,
+      const disputePayload: Record<string, any> = {
         filedAgainst,
         filed_against: filedAgainst,
         reason: disputeForm.reason,
         description: disputeForm.description,
-      });
+      };
+      if (disputeForm.relatedType === "order") {
+        disputePayload.orderId = disputeForm.relatedId;
+        disputePayload.order_id = disputeForm.relatedId;
+      } else {
+        disputePayload.projectId = disputeForm.relatedId;
+        disputePayload.project_id = disputeForm.relatedId;
+      }
+      await api.post("/disputes", disputePayload);
       toast.success("Dispute filed.");
       setModal(null);
       setDisputeForm({ relatedType: "order", relatedId: "", reason: "", description: "" });
@@ -658,7 +727,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
             <p className="mt-1 text-sm text-gray-500">{dateLabel(order.created_at || order.createdAt)} · {sellerName(order)}</p>
             <p className="mt-2 text-sm text-gray-600">
               {orderItems(order).length
-                ? orderItems(order).map((item: any) => `${item.product?.name || item.product_name || item.name || "Item"} x${item.quantity}`).join(", ")
+                ? orderItems(order).map((item: any) => `${item.product?.name || item.products?.name || item.product_name || item.name || "Item"} x${item.quantity}`).join(", ")
                 : "Order items unavailable"}
             </p>
             {(payment?.refund_status || order.refund_status) && (
@@ -889,9 +958,14 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
                           <p className="font-semibold text-gray-900">#{orderNumber(order)}</p>
                           <p className="text-sm text-gray-500">{money(order.total_amount || order.totalAmount)}</p>
                         </div>
-                        <a className="text-sm font-semibold text-primary hover:underline" href={`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/orders/${order.id}/receipt`} target="_blank" rel="noreferrer">
-                          Download Receipt
-                        </a>
+                        <button
+                          type="button"
+                          className="text-sm font-semibold text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={busy === `receipt-${order.id}`}
+                          onClick={() => void downloadReceipt(order)}
+                        >
+                          {busy === `receipt-${order.id}` ? "Downloading..." : "Download Receipt"}
+                        </button>
                       </div>
                     ))}
                     {orders.length === 0 && <EmptyLine text="No receipts available." />}
@@ -1253,8 +1327,8 @@ const OrderDetail = ({ order, tracking }: { order: any; tracking?: any }) => (
     <QuickList title="Items">
       {asArray(order.items || order.order_items, []).map((item: any) => (
         <div key={item.id || item.product_id} className="flex justify-between rounded-lg border border-gray-100 p-3">
-          <span>{item.product?.name || item.product_name || item.name || "Item"} x{item.quantity}</span>
-          <span className="font-semibold">{money(item.subtotal || item.total_price || item.price)}</span>
+          <span>{item.product?.name || item.products?.name || item.product_name || item.name || "Item"} x{item.quantity}</span>
+          <span className="font-semibold">{money(item.subtotal || item.total_price || item.price || Number(item.unit_price || 0) * Number(item.quantity || 1))}</span>
         </div>
       ))}
       {asArray(order.items || order.order_items, []).length === 0 && <EmptyLine text="No item rows returned." />}
