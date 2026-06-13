@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Icons } from "../components/Icons";
 import { aiService } from "../src/services/aiService";
@@ -12,6 +12,8 @@ type EstimateFormState = {
   quality: string;
   bedrooms: string;
   washrooms: string;
+  projectDescription: string;
+  maxBudget: string;
 };
 
 type PhaseItem = {
@@ -140,22 +142,21 @@ const readString = (source: any, paths: string[]) => {
 const formatPKR = (value: number | null) => {
   if (value === null) return "—";
   if (value >= 10000000) {
-    return `PKR ${(value / 10000000).toFixed(2)} Crore`;
+    return `Rs. ${(value / 10000000).toFixed(2)} Crore`;
   }
   if (value >= 100000) {
-    return `PKR ${(value / 100000).toFixed(1)} Lakh`;
+    return `Rs. ${(value / 100000).toFixed(1)} Lakh`;
   }
-  return `PKR ${moneyFormatter.format(Math.round(value))}`;
+  return `Rs. ${moneyFormatter.format(Math.round(value))}`;
 };
 
 const formatCompactPKR = (value: number | null) => {
   if (value === null) return "—";
-  if (value >= 10000000) return `PKR ${(value / 10000000).toFixed(2)} Cr`;
-  if (value >= 100000) return `PKR ${(value / 100000).toFixed(1)} Lakh`;
-  if (value >= 1000) return `PKR ${(value / 1000).toFixed(1)}k`;
-  return `PKR ${moneyFormatter.format(Math.round(value))}`;
+  if (value >= 10000000) return `Rs. ${(value / 10000000).toFixed(2)} Cr`;
+  if (value >= 100000) return `Rs. ${(value / 100000).toFixed(1)} Lakh`;
+  if (value >= 1000) return `Rs. ${(value / 1000).toFixed(1)}k`;
+  return `Rs. ${moneyFormatter.format(Math.round(value))}`;
 };
-
 const widthClassForPercent = (percent: number) => {
   if (percent >= 95) return "w-full";
   if (percent >= 85) return "w-11/12";
@@ -201,13 +202,40 @@ const normalizePhases = (payload: any): PhaseItem[] => {
 };
 
 const normalizeBreakdown = (payload: any): BreakdownRow[] => {
+  const objectBreakdown =
+    payload?.category_breakdown ||
+    payload?.data?.category_breakdown ||
+    payload?.data?.data?.category_breakdown;
+  if (objectBreakdown && !Array.isArray(objectBreakdown) && typeof objectBreakdown === "object") {
+    const total = Object.values(objectBreakdown).reduce(
+      (sum, value) => sum + (Number(value) || 0),
+      0,
+    );
+    return Object.entries(objectBreakdown).map(([label, amount]) => ({
+      label,
+      amount: Number(amount) || null,
+      percentage: total > 0 ? Math.round(((Number(amount) || 0) / total) * 100) : 0,
+    }));
+  }
+
   const candidates =
     (Array.isArray(payload?.category_breakdown) &&
       payload.category_breakdown) ||
     (Array.isArray(payload?.breakdown?.categories) &&
       payload.breakdown.categories) ||
+    (Array.isArray(payload?.data?.breakdown?.categories) &&
+      payload.data.breakdown.categories) ||
+    (Array.isArray(payload?.data?.data?.breakdown?.categories) &&
+      payload.data.data.breakdown.categories) ||
     (Array.isArray(payload?.cost_breakdown) && payload.cost_breakdown) ||
+    (Array.isArray(payload?.data?.cost_breakdown) &&
+      payload.data.cost_breakdown) ||
+    (Array.isArray(payload?.data?.data?.cost_breakdown) &&
+      payload.data.data.cost_breakdown) ||
     (Array.isArray(payload?.breakdown) && payload.breakdown) ||
+    (Array.isArray(payload?.data?.breakdown) && payload.data.breakdown) ||
+    (Array.isArray(payload?.data?.data?.breakdown) &&
+      payload.data.data.breakdown) ||
     [];
 
   return candidates.map((entry: any) => ({
@@ -218,23 +246,64 @@ const normalizeBreakdown = (payload: any): BreakdownRow[] => {
 };
 
 const normalizeItemizedBreakdown = (payload: any): ItemizedRow[] => {
+  const objectItems =
+    payload?.itemized_breakdown ||
+    payload?.data?.itemized_breakdown ||
+    payload?.data?.data?.itemized_breakdown;
+  if (objectItems && !Array.isArray(objectItems) && typeof objectItems === "object") {
+    return Object.entries(objectItems).map(([name, entry]: [string, any]) => ({
+      item: entry?.item ?? entry?.name ?? name,
+      qty: String(entry?.qty ?? entry?.quantity ?? entry?.quantity_numeric ?? "—"),
+      unit: String(entry?.unit ?? entry?.uom ?? entry?.measure ?? "—"),
+      rate: readNumber(entry, ["rate", "unit_rate", "unit_cost", "price"]),
+      total: readNumber(entry, ["total", "amount", "cost", "value"]),
+    }));
+  }
+
   const candidates =
     (Array.isArray(payload?.itemized_breakdown) &&
       payload.itemized_breakdown) ||
+    (Array.isArray(payload?.data?.itemized_breakdown) &&
+      payload.data.itemized_breakdown) ||
+    (Array.isArray(payload?.data?.data?.itemized_breakdown) &&
+      payload.data.data.itemized_breakdown) ||
     (Array.isArray(payload?.breakdown?.items) && payload.breakdown.items) ||
+    (Array.isArray(payload?.data?.breakdown?.items) &&
+      payload.data.breakdown.items) ||
+    (Array.isArray(payload?.data?.data?.breakdown?.items) &&
+      payload.data.data.breakdown.items) ||
     (Array.isArray(payload?.items) && payload.items) ||
+    (Array.isArray(payload?.data?.items) && payload.data.items) ||
+    (Array.isArray(payload?.data?.data?.items) &&
+      payload.data.data.items) ||
     [];
 
   return candidates.map((entry: any) => ({
     item: entry.item ?? entry.name ?? entry.description ?? "Item",
-    qty: String(entry.qty ?? entry.quantity ?? entry.count ?? "—"),
-    unit: String(entry.unit ?? entry.uom ?? entry.measure ?? "—"),
+    qty: String(entry.qty ?? entry.quantity ?? entry.count ?? "â€”"),
+    unit: String(entry.unit ?? entry.uom ?? entry.measure ?? "â€”"),
     rate: readNumber(entry, ["rate", "unit_rate", "price"]),
     total: readNumber(entry, ["total", "amount", "cost", "value"]),
   }));
 };
 
 const normalizeComparison = (payload: any): ComparisonRow[] => {
+  const comparisonObject =
+    payload?.quality_comparison ||
+    payload?.data?.quality_comparison ||
+    payload?.data?.data?.quality_comparison;
+  if (comparisonObject && !Array.isArray(comparisonObject) && typeof comparisonObject === "object") {
+    return Object.entries(comparisonObject).map(([quality, entry]: [string, any]) => ({
+      quality,
+      totalCost: readNumber(entry, ["total_cost", "totalCost", "cost", "amount"]),
+      costPerSqft: readNumber(entry, ["cost_per_sqft", "costPerSqft", "per_sqft"]),
+      difference:
+        entry?.percentage_diff_vs_economy !== undefined
+          ? `${Number(entry.percentage_diff_vs_economy).toFixed(1)}%`
+          : readString(entry, ["difference", "delta", "note"]),
+    }));
+  }
+
   const rowsFromArray =
     (Array.isArray(payload?.qualities) && payload.qualities) ||
     (Array.isArray(payload?.results) && payload.results) ||
@@ -297,6 +366,8 @@ export const CostEstimatorPage: React.FC = () => {
     quality: "Standard",
     bedrooms: "3",
     washrooms: "2",
+    projectDescription: "5 marla house in Lahore",
+    maxBudget: "",
   });
   const [estimate, setEstimate] = useState<any>(null);
   const [comparison, setComparison] = useState<ComparisonRow[]>([]);
@@ -351,21 +422,48 @@ export const CostEstimatorPage: React.FC = () => {
           "totalCost",
           "estimated_cost",
           "project_cost",
+          "breakdown.summary.grand_total",
+          "breakdown.summary.subtotal",
+          "summary.total_pkr",
           "data.total_cost",
+          "data.breakdown.summary.grand_total",
+          "data.breakdown.summary.subtotal",
+          "data.summary.total_pkr",
+          "data.data.total_cost",
+          "data.data.estimated_cost",
+          "data.data.breakdown.summary.grand_total",
+          "data.data.breakdown.summary.subtotal",
+          "data.data.summary.total_pkr",
         ]) ?? null,
       costPerSqft:
         readNumber(estimate, [
           "cost_per_sqft",
           "costPerSqft",
           "per_sqft",
+          "summary.cost_per_sqft",
           "data.cost_per_sqft",
+          "data.summary.cost_per_sqft",
+          "data.data.cost_per_sqft",
+          "data.data.costPerSqft",
+          "data.data.summary.cost_per_sqft",
         ]) ?? null,
       totalArea:
         readNumber(estimate, [
           "total_area",
           "totalArea",
           "sqft",
+          "project.total_sqft",
+          "project.sqft",
+          "breakdown.summary.total_sqft",
           "data.total_area",
+          "data.project.total_sqft",
+          "data.project.sqft",
+          "data.breakdown.summary.total_sqft",
+          "data.data.total_area",
+          "data.data.sqft",
+          "data.data.project.total_sqft",
+          "data.data.project.sqft",
+          "data.data.breakdown.summary.total_sqft",
         ]) ?? (totalSqft > 0 ? totalSqft : null),
       timeline:
         readString(estimate, [
@@ -373,6 +471,7 @@ export const CostEstimatorPage: React.FC = () => {
           "estimated_timeline",
           "project_timeline",
           "data.timeline",
+          "data.data.timeline",
         ]) ?? "~8-12 months",
     };
   }, [estimate, totalSqft]);
@@ -387,6 +486,9 @@ export const CostEstimatorPage: React.FC = () => {
       estimate?.cost_reduction_tips ||
       estimate?.tips ||
       estimate?.data?.cost_reduction_tips ||
+      estimate?.data?.data?.cost_reduction_tips ||
+      estimate?.data?.tips ||
+      estimate?.data?.data?.tips ||
       [];
     return Array.isArray(raw) ? raw : [];
   }, [estimate]);
@@ -431,8 +533,13 @@ export const CostEstimatorPage: React.FC = () => {
         quality: form.quality,
         city: form.city,
         bhk: Number(form.bedrooms),
+        bedrooms: Number(form.bedrooms),
+        washrooms: Number(form.washrooms),
+        kitchens: 1,
         projectType: form.projectType,
-        area: form.marla ? `${form.marla} Marla` : `${sqftValue} sqft`,
+        area:
+          form.projectDescription.trim() ||
+          (form.marla ? `${form.marla} Marla` : `${sqftValue} sqft`),
       };
 
       const [estimateResult, comparisonResult] = await Promise.all([
@@ -492,18 +599,41 @@ export const CostEstimatorPage: React.FC = () => {
   };
 
   const selectedQuality = form.quality.toLowerCase();
+  const panelClass =
+    "rounded-[30px] border p-6 shadow-[0_18px_50px_rgba(0,0,0,0.18)] backdrop-blur-xl sm:p-8";
+  const inputClass =
+    "w-full rounded-2xl border px-4 py-3 text-sm outline-none transition placeholder:text-[var(--bh-muted)] focus:border-[#6C3BD5]";
+  const inputStyle = {
+    background: "var(--bh-card)",
+    borderColor: "var(--bh-border)",
+    color: "var(--bh-text)",
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-amber-50/30 text-slate-900">
+    <div
+      className="min-h-screen page-fade"
+      style={{
+        background:
+          "radial-gradient(circle at 12% 8%, rgba(108,59,213,0.22), transparent 32%), radial-gradient(circle at 88% 18%, rgba(16,185,129,0.14), transparent 30%), var(--bh-bg)",
+        color: "var(--bh-text)",
+      }}
+    >
       <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-        <section className="relative overflow-hidden rounded-[32px] border border-slate-200 bg-slate-950 px-6 py-14 text-white shadow-[0_24px_70px_rgba(15,23,42,0.28)] sm:px-10">
+        <section
+          className="relative overflow-hidden rounded-[32px] border px-6 py-14 text-white shadow-[0_24px_70px_rgba(0,0,0,0.28)] sm:px-10"
+          style={{
+            background: "linear-gradient(135deg, #1A1A24, #2D1B69)",
+            borderColor: "rgba(139,92,246,0.35)",
+          }}
+        >
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(250,204,21,0.20),_transparent_36%),radial-gradient(circle_at_bottom_left,_rgba(251,191,36,0.14),_transparent_30%)]" />
           <div className="relative max-w-3xl">
             <span className="inline-flex items-center rounded-full border border-yellow-300/40 bg-yellow-400/15 px-4 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-yellow-200">
               Powered by BuildHive AI
             </span>
             <h1 className="mt-5 text-4xl font-black tracking-tight sm:text-5xl">
-              AI Construction Cost Estimator
+              AI <span className="bh-gradient-text">Construction Cost</span>{" "}
+              Estimator
             </h1>
             <p className="mt-4 max-w-2xl text-base leading-7 text-slate-300 sm:text-lg">
               Get accurate PKR estimates for any construction project in
@@ -513,23 +643,45 @@ export const CostEstimatorPage: React.FC = () => {
         </section>
 
         <section className="mt-8 grid gap-8 xl:grid-cols-[1.15fr_0.85fr]">
-          <div className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-[0_18px_50px_rgba(15,23,42,0.08)] sm:p-8">
+          <div
+            className={panelClass}
+            style={{
+              background: "rgba(255,255,255,0.05)",
+              borderColor: "rgba(255,255,255,0.10)",
+            }}
+          >
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h2 className="text-2xl font-bold text-slate-900">
+                <h2 className="text-2xl font-bold tracking-tight text-[var(--bh-text)]">
                   Enter your project details
                 </h2>
-                <p className="mt-2 text-sm text-slate-500">
+                <p className="mt-2 text-sm text-[var(--bh-muted)]">
                   Use Marla or Sqft. One Marla is approximately 272 sqft in
                   Lahore.
                 </p>
               </div>
-              <div className="inline-flex items-center rounded-full bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800">
-                1 Marla ≈ 272 sqft in Lahore
+              <div className="inline-flex items-center rounded-full border border-amber-400/35 bg-amber-400/10 px-4 py-2 text-sm font-semibold text-amber-300">
+                1 Marla approx 272 sqft in Lahore
               </div>
             </div>
 
             <div className="mt-8 grid gap-5">
+              <Field label="Project Description">
+                <textarea
+                  rows={4}
+                  placeholder="e.g. 5 marla house in Lahore"
+                  value={form.projectDescription}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      projectDescription: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  style={inputStyle}
+                />
+              </Field>
+
               <div className="grid gap-5 md:grid-cols-2">
                 <Field label="City">
                   <select
@@ -541,7 +693,8 @@ export const CostEstimatorPage: React.FC = () => {
                         city: event.target.value,
                       }))
                     }
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-amber-400"
+                    className={inputClass}
+                    style={inputStyle}
                   >
                     {cityOptions.map((city) => (
                       <option key={city} value={city}>
@@ -561,7 +714,8 @@ export const CostEstimatorPage: React.FC = () => {
                         projectType: event.target.value,
                       }))
                     }
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-amber-400"
+                    className={inputClass}
+                    style={inputStyle}
                   >
                     {projectTypeOptions.map((option) => (
                       <option key={option} value={option}>
@@ -580,7 +734,8 @@ export const CostEstimatorPage: React.FC = () => {
                     placeholder="e.g. 5"
                     value={form.marla}
                     onChange={(event) => handleMarlaChange(event.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-amber-400"
+                    className={inputClass}
+                    style={inputStyle}
                   />
                 </Field>
 
@@ -591,7 +746,8 @@ export const CostEstimatorPage: React.FC = () => {
                     placeholder="e.g. 1360"
                     value={form.sqft}
                     onChange={(event) => handleSqftChange(event.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-amber-400"
+                    className={inputClass}
+                    style={inputStyle}
                   />
                 </Field>
               </div>
@@ -607,7 +763,8 @@ export const CostEstimatorPage: React.FC = () => {
                         floors: event.target.value,
                       }))
                     }
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-amber-400"
+                    className={inputClass}
+                    style={inputStyle}
                   >
                     {floorOptions.map((floor) => (
                       <option key={floor} value={floor}>
@@ -617,24 +774,40 @@ export const CostEstimatorPage: React.FC = () => {
                   </select>
                 </Field>
 
-                <Field label="Quality">
-                  <select
-                    value={form.quality}
-                    aria-label="Quality"
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        quality: event.target.value,
-                      }))
-                    }
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-amber-400"
-                  >
-                    {qualityOptions.map((quality) => (
-                      <option key={quality.value} value={quality.value}>
-                        {quality.value} - {quality.description}
-                      </option>
-                    ))}
-                  </select>
+                <Field label="Quality Grade">
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {qualityOptions.map((quality) => {
+                      const active = form.quality === quality.value;
+                      return (
+                        <button
+                          key={quality.value}
+                          type="button"
+                          onClick={() =>
+                            setForm((current) => ({
+                              ...current,
+                              quality: quality.value,
+                            }))
+                          }
+                          className={`rounded-2xl border px-4 py-3 text-left text-sm transition active:scale-[0.98] ${
+                            active
+                              ? "border-[#6C3BD5] bg-[#6C3BD5] text-white shadow-lg shadow-violet-900/25"
+                              : "border-[var(--bh-border)] bg-[var(--bh-card)] text-[var(--bh-text)] hover:border-[#8B5CF6]"
+                          }`}
+                        >
+                          <span className="block font-bold">
+                            {quality.value}
+                          </span>
+                          <span
+                            className={`mt-1 block text-xs ${
+                              active ? "text-violet-100" : "text-[var(--bh-muted)]"
+                            }`}
+                          >
+                            {quality.description}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </Field>
               </div>
 
@@ -649,7 +822,8 @@ export const CostEstimatorPage: React.FC = () => {
                         bedrooms: event.target.value,
                       }))
                     }
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-amber-400"
+                    className={inputClass}
+                    style={inputStyle}
                   >
                     {bedroomOptions.map((bedrooms) => (
                       <option key={bedrooms} value={bedrooms}>
@@ -669,7 +843,8 @@ export const CostEstimatorPage: React.FC = () => {
                         washrooms: event.target.value,
                       }))
                     }
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-amber-400"
+                    className={inputClass}
+                    style={inputStyle}
                   >
                     {washroomOptions.map((washrooms) => (
                       <option key={washrooms} value={washrooms}>
@@ -680,16 +855,37 @@ export const CostEstimatorPage: React.FC = () => {
                 </Field>
               </div>
 
+              <Field label="Max Budget (optional)">
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-[var(--bh-muted)]">
+                    PKR
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="e.g. 5,000,000"
+                    value={form.maxBudget}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        maxBudget: event.target.value,
+                      }))
+                    }
+                    className={`${inputClass} pl-14`}
+                    style={inputStyle}
+                  />
+                </div>
+              </Field>
+
               <button
                 type="button"
                 onClick={() => void handleCalculate()}
                 disabled={loading}
-                className="inline-flex w-full items-center justify-center gap-3 rounded-2xl bg-yellow-500 px-6 py-4 text-base font-bold text-slate-950 shadow-[0_18px_35px_rgba(250,204,21,0.28)] transition hover:bg-yellow-400 disabled:cursor-not-allowed disabled:opacity-70"
+                className="inline-flex w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-[#6C3BD5] to-[#10B981] px-6 py-4 text-base font-bold text-white shadow-[0_18px_35px_rgba(108,59,213,0.28)] transition hover:shadow-[0_20px_45px_rgba(108,59,213,0.36)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {loading ? (
                   <>
-                    <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-950/20 border-t-slate-950" />
-                    AI is calculating your estimate...
+                    <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+                    AI is analyzing your project...
                   </>
                 ) : (
                   <>
@@ -714,8 +910,8 @@ export const CostEstimatorPage: React.FC = () => {
           </div>
 
           <div className="grid gap-6">
-            <div className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
-              <h3 className="text-xl font-bold text-slate-900">How it works</h3>
+            <div className="rounded-[30px] border border-[var(--bh-border)] bg-[var(--bh-card)] p-6 shadow-[0_18px_50px_rgba(0,0,0,0.14)]">
+              <h3 className="text-xl font-bold text-[var(--bh-text)]">How it works</h3>
               <div className="mt-5 grid gap-4">
                 {[
                   "Enter your project details",
@@ -724,12 +920,12 @@ export const CostEstimatorPage: React.FC = () => {
                 ].map((step, index) => (
                   <div
                     key={step}
-                    className="flex items-start gap-4 rounded-2xl bg-slate-50 p-4"
+                    className="flex items-start gap-4 rounded-2xl border border-[var(--bh-border)] bg-[var(--bh-surface)] p-4"
                   >
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-950 text-sm font-bold text-white">
                       {index + 1}
                     </div>
-                    <p className="pt-1 text-sm leading-6 text-slate-600">
+                    <p className="pt-1 text-sm leading-6 text-[var(--bh-muted)]">
                       {step}
                     </p>
                   </div>
@@ -737,11 +933,11 @@ export const CostEstimatorPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
-              <h3 className="text-xl font-bold text-slate-900">
+            <div className="rounded-[30px] border border-[var(--bh-border)] bg-[var(--bh-card)] p-6 shadow-[0_18px_50px_rgba(0,0,0,0.14)]">
+              <h3 className="text-xl font-bold text-[var(--bh-text)]">
                 Current selection
               </h3>
-              <div className="mt-5 grid gap-4 text-sm text-slate-600">
+              <div className="mt-5 grid gap-4 text-sm text-[var(--bh-muted)]">
                 <InfoRow
                   label="Area"
                   value={`${moneyFormatter.format(totalSqft)} sqft`}
@@ -780,24 +976,24 @@ export const CostEstimatorPage: React.FC = () => {
             </div>
 
             <div className="grid gap-8 xl:grid-cols-[1fr_1fr]">
-              <div className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
+              <div className="rounded-[30px] border border-[var(--bh-border)] bg-[var(--bh-card)] p-6 shadow-[0_18px_50px_rgba(0,0,0,0.14)]">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <h3 className="text-xl font-bold text-slate-900">
+                    <h3 className="text-xl font-bold text-[var(--bh-text)]">
                       Quality Comparison
                     </h3>
-                    <p className="mt-1 text-sm text-slate-500">
+                    <p className="mt-1 text-sm text-[var(--bh-muted)]">
                       Economy | Standard | Premium
                     </p>
                   </div>
-                  <span className="rounded-full bg-yellow-50 px-3 py-1 text-xs font-semibold text-yellow-800">
+                  <span className="rounded-full bg-[#6C3BD5]/15 px-3 py-1 text-xs font-semibold text-[#8B5CF6]">
                     {form.quality} selected
                   </span>
                 </div>
 
-                <div className="mt-6 overflow-hidden rounded-3xl border border-slate-200">
-                  <table className="min-w-full divide-y divide-slate-200 text-sm">
-                    <thead className="bg-slate-50 text-slate-600">
+                <div className="mt-6 overflow-x-auto rounded-3xl border border-[var(--bh-border)]">
+                  <table className="min-w-[680px] divide-y divide-[var(--bh-border)] text-sm">
+                    <thead className="bg-[var(--bh-surface)] text-[var(--bh-muted)]">
                       <tr>
                         <th className="px-4 py-3 text-left font-semibold">
                           Metric
@@ -805,14 +1001,14 @@ export const CostEstimatorPage: React.FC = () => {
                         {comparisonRows.map((row) => (
                           <th
                             key={row.quality}
-                            className={`px-4 py-3 text-left font-semibold ${row.quality.toLowerCase() === selectedQuality ? "bg-yellow-50 text-yellow-900" : ""}`}
+                            className={`min-w-[150px] px-4 py-3 text-left font-semibold ${row.quality.toLowerCase() === selectedQuality ? "bg-[#6C3BD5]/10 text-[var(--bh-text)]" : ""}`}
                           >
                             {row.quality}
                           </th>
                         ))}
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200">
+                    <tbody className="divide-y divide-[var(--bh-border)]">
                       <ComparisonRowTable
                         label="Total Cost"
                         rows={comparisonRows}
@@ -831,20 +1027,20 @@ export const CostEstimatorPage: React.FC = () => {
                         label="% difference"
                         rows={comparisonRows}
                         selectedQuality={selectedQuality}
-                        valueAccessor={(row) => row.difference ?? "—"}
+                        valueAccessor={(row) => row.difference ?? "-"}
                       />
                     </tbody>
                   </table>
                 </div>
               </div>
 
-              <div className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
+              <div className="rounded-[30px] border border-[var(--bh-border)] bg-[var(--bh-card)] p-6 shadow-[0_18px_50px_rgba(0,0,0,0.14)]">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <h3 className="text-xl font-bold text-slate-900">
+                    <h3 className="text-xl font-bold text-[var(--bh-text)]">
                       Breakdown Chart
                     </h3>
-                    <p className="mt-1 text-sm text-slate-500">
+                    <p className="mt-1 text-sm text-[var(--bh-muted)]">
                       Simple visual split of your estimate
                     </p>
                   </div>
@@ -855,14 +1051,14 @@ export const CostEstimatorPage: React.FC = () => {
                     breakdownRows.map((row) => (
                       <div key={row.label} className="space-y-2">
                         <div className="flex items-center justify-between gap-4 text-sm">
-                          <span className="font-medium text-slate-700">
+                          <span className="font-medium text-[var(--bh-text)]">
                             {row.label}
                           </span>
                           <span className="text-slate-500">
-                            {row.percentage}% · {formatCompactPKR(row.amount)}
+                            {row.percentage}% - {formatCompactPKR(row.amount)}
                           </span>
                         </div>
-                        <div className="h-3 rounded-full bg-slate-100">
+                        <div className="h-3 rounded-full bg-[var(--bh-surface)]">
                           <div
                             className={`h-3 rounded-full bg-gradient-to-r from-yellow-400 to-amber-500 ${widthClassForPercent(row.percentage)}`}
                           />
@@ -870,7 +1066,7 @@ export const CostEstimatorPage: React.FC = () => {
                       </div>
                     ))
                   ) : (
-                    <p className="text-sm text-slate-500">
+                    <p className="text-sm text-[var(--bh-muted)]">
                       No breakdown returned by the AI API.
                     </p>
                   )}
@@ -880,22 +1076,22 @@ export const CostEstimatorPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setDetailsOpen((current) => !current)}
-                    className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                    className="inline-flex items-center gap-2 rounded-full border border-[var(--bh-border)] bg-[var(--bh-surface)] px-4 py-2 text-sm font-semibold text-[var(--bh-text)] transition hover:border-[#8B5CF6]"
                   >
-                    View detailed breakdown {detailsOpen ? "▲" : "▼"}
+                    View detailed breakdown {detailsOpen ? "Up" : "Down"}
                   </button>
                 </div>
               </div>
             </div>
 
             {detailsOpen && itemizedRows.length > 0 && (
-              <div className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
-                <h3 className="text-xl font-bold text-slate-900">
+              <div className="rounded-[30px] border border-[var(--bh-border)] bg-[var(--bh-card)] p-6 shadow-[0_18px_50px_rgba(0,0,0,0.14)]">
+                <h3 className="text-xl font-bold text-[var(--bh-text)]">
                   Detailed Breakdown
                 </h3>
-                <div className="mt-6 overflow-hidden rounded-3xl border border-slate-200">
-                  <table className="min-w-full divide-y divide-slate-200 text-sm">
-                    <thead className="bg-slate-50 text-slate-600">
+                <div className="mt-6 overflow-x-auto rounded-3xl border border-[var(--bh-border)]">
+                  <table className="min-w-[760px] divide-y divide-[var(--bh-border)] text-sm">
+                    <thead className="bg-[var(--bh-surface)] text-[var(--bh-muted)]">
                       <tr>
                         <th className="px-4 py-3 text-left font-semibold">
                           Item
@@ -914,22 +1110,22 @@ export const CostEstimatorPage: React.FC = () => {
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200">
+                    <tbody className="divide-y divide-[var(--bh-border)]">
                       {itemizedRows.map((row) => (
                         <tr key={`${row.item}-${row.qty}-${row.unit}`}>
-                          <td className="px-4 py-3 font-medium text-slate-800">
+                          <td className="px-4 py-3 font-medium text-[var(--bh-text)]">
                             {row.item}
                           </td>
-                          <td className="px-4 py-3 text-slate-600">
+                          <td className="px-4 py-3 text-[var(--bh-muted)]">
                             {row.qty}
                           </td>
-                          <td className="px-4 py-3 text-slate-600">
+                          <td className="px-4 py-3 text-[var(--bh-muted)]">
                             {row.unit}
                           </td>
-                          <td className="px-4 py-3 text-slate-600">
+                          <td className="px-4 py-3 text-[var(--bh-muted)]">
                             {formatCompactPKR(row.rate)}
                           </td>
-                          <td className="px-4 py-3 text-slate-600">
+                          <td className="px-4 py-3 text-[var(--bh-muted)]">
                             {formatCompactPKR(row.total)}
                           </td>
                         </tr>
@@ -943,7 +1139,7 @@ export const CostEstimatorPage: React.FC = () => {
             {tips.length > 0 && (
               <div className="rounded-[30px] border border-amber-200 bg-amber-50 p-6 shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
                 <h3 className="text-xl font-bold text-amber-950">
-                  💡 Tips to reduce cost
+                  ðŸ’¡ Tips to reduce cost
                 </h3>
                 <ul className="mt-4 space-y-3 text-sm leading-6 text-amber-900">
                   {tips.map((tip: any, index: number) => (
@@ -982,13 +1178,13 @@ export const CostEstimatorPage: React.FC = () => {
           </section>
         )}
 
-        <section className="mt-8 rounded-[30px] border border-slate-200 bg-white p-6 shadow-[0_18px_50px_rgba(15,23,42,0.08)] sm:p-8">
+        <section className="mt-8 rounded-[30px] border border-[var(--bh-border)] bg-[var(--bh-card)] p-6 shadow-[0_18px_50px_rgba(0,0,0,0.14)] sm:p-8">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h3 className="text-2xl font-bold text-slate-900">
+              <h3 className="text-2xl font-bold text-[var(--bh-text)]">
                 Construction Phases Guide
               </h3>
-              <p className="mt-2 text-sm text-slate-500">
+              <p className="mt-2 text-sm text-[var(--bh-muted)]">
                 10 phases from site preparation to handover.
               </p>
             </div>
@@ -999,7 +1195,7 @@ export const CostEstimatorPage: React.FC = () => {
               <details
                 key={phase.phase_number}
                 open={index < 3}
-                className="group rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
+                className="group rounded-2xl border border-[var(--bh-border)] bg-[var(--bh-surface)] px-4 py-3"
               >
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
                   <div className="flex items-center gap-4">
@@ -1007,11 +1203,11 @@ export const CostEstimatorPage: React.FC = () => {
                       {phase.phase_number}
                     </span>
                     <div>
-                      <div className="font-semibold text-slate-900">
+                      <div className="font-semibold text-[var(--bh-text)]">
                         {phase.name}
                       </div>
-                      <div className="text-xs text-slate-500">
-                        {phase.categories.join(" · ")}
+                      <div className="text-xs text-[var(--bh-muted)]">
+                        {phase.categories.join(" - ")}
                       </div>
                     </div>
                   </div>
@@ -1021,7 +1217,7 @@ export const CostEstimatorPage: React.FC = () => {
                   {phase.categories.map((category) => (
                     <span
                       key={category}
-                      className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-600"
+                      className="rounded-full border border-[var(--bh-border)] bg-[var(--bh-card)] px-3 py-1 text-xs font-medium text-[var(--bh-muted)]"
                     >
                       {category}
                     </span>
@@ -1041,7 +1237,7 @@ const Field: React.FC<{ label: string; children: React.ReactNode }> = ({
   children,
 }) => (
   <label className="block space-y-2">
-    <span className="text-sm font-semibold text-slate-700">{label}</span>
+    <span className="text-sm font-semibold text-[var(--bh-text)]">{label}</span>
     {children}
   </label>
 );
@@ -1050,9 +1246,9 @@ const InfoRow: React.FC<{ label: string; value: string }> = ({
   label,
   value,
 }) => (
-  <div className="flex items-center justify-between gap-4 rounded-2xl bg-slate-50 px-4 py-3">
-    <span className="font-medium text-slate-500">{label}</span>
-    <span className="font-semibold text-slate-900">{value}</span>
+  <div className="flex items-center justify-between gap-4 rounded-2xl border px-4 py-3" style={{ background: "var(--bh-card)", borderColor: "var(--bh-border)" }}>
+    <span className="font-medium text-[var(--bh-muted)]">{label}</span>
+    <span className="font-semibold text-[var(--bh-text)]">{value}</span>
   </div>
 );
 
@@ -1061,10 +1257,10 @@ const SummaryCard: React.FC<{
   value: string;
   accent: string;
 }> = ({ label, value, accent }) => (
-  <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
+  <div className="overflow-hidden rounded-[28px] border p-5 shadow-[0_18px_50px_rgba(0,0,0,0.14)]" style={{ background: "var(--bh-card)", borderColor: "var(--bh-border)" }}>
     <div className={`mb-4 h-1.5 rounded-full bg-gradient-to-r ${accent}`} />
-    <div className="text-sm font-medium text-slate-500">{label}</div>
-    <div className="mt-2 text-2xl font-black tracking-tight text-slate-900">
+    <div className="text-sm font-medium text-[var(--bh-muted)]">{label}</div>
+    <div className="mt-2 text-2xl font-black tracking-tight text-[var(--bh-text)]">
       {value}
     </div>
   </div>
@@ -1077,13 +1273,13 @@ const ComparisonRowTable: React.FC<{
   valueAccessor: (row: ComparisonRow) => string;
 }> = ({ label, rows, selectedQuality, valueAccessor }) => (
   <tr>
-    <td className="px-4 py-3 font-semibold text-slate-700">{label}</td>
+    <td className="min-w-[140px] px-4 py-3 font-semibold text-[var(--bh-text)]">{label}</td>
     {rows.map((row) => (
       <td
         key={`${label}-${row.quality}`}
-        className={`px-4 py-3 text-slate-700 ${row.quality.toLowerCase() === selectedQuality ? "bg-yellow-50 font-semibold text-yellow-900" : ""}`}
+        className={`min-w-[150px] px-4 py-3 text-[var(--bh-muted)] ${row.quality.toLowerCase() === selectedQuality ? "bg-[#6C3BD5]/10 font-semibold text-[var(--bh-text)]" : ""}`}
       >
-        {valueAccessor(row)}
+        {valueAccessor(row).replace("Ã¢â‚¬â€", "â€”")}
       </td>
     ))}
   </tr>

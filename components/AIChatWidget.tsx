@@ -32,7 +32,14 @@ export const AIChatWidget: React.FC = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [quickReplies, setQuickReplies] = useState<string[]>(QUICK_REPLIES);
+  const [hasClickedChat, setHasClickedChat] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setHasClickedChat(
+      window.localStorage.getItem("buildhive-ai-chat-clicked") === "true",
+    );
+  }, []);
 
   useEffect(() => {
     if (isOpen && messages.length === 0) {
@@ -83,6 +90,10 @@ export const AIChatWidget: React.FC = () => {
   };
 
   const toggleWidget = () => {
+    if (!hasClickedChat) {
+      window.localStorage.setItem("buildhive-ai-chat-clicked", "true");
+      setHasClickedChat(true);
+    }
     setIsOpen((current) => !current);
   };
 
@@ -94,18 +105,21 @@ export const AIChatWidget: React.FC = () => {
   return (
     <div className="fixed bottom-6 right-6 z-[70]">
       {!isOpen ? (
-        <button
-          type="button"
-          onClick={toggleWidget}
-          title={title}
-          className="group flex h-16 w-16 items-center justify-center rounded-full border border-yellow-300/60 bg-yellow-400 text-slate-950 shadow-[0_18px_40px_rgba(0,0,0,0.28)] transition-transform duration-200 hover:-translate-y-1 hover:bg-yellow-300"
-        >
-          <Icons.Bot className="h-7 w-7" />
-          <span className="sr-only">Ask BuildHive AI</span>
-        </button>
+        <div className="relative">
+          {!hasClickedChat && <span className="ai-pulse-ring" />}
+          <button
+            type="button"
+            onClick={toggleWidget}
+            title={title}
+            className="group relative flex h-14 items-center justify-center gap-3 rounded-full bg-gradient-to-r from-[#6C3BD5] to-[#8B5CF6] px-5 text-white shadow-[0_18px_40px_rgba(108,59,213,0.35)] transition-transform duration-200 hover:-translate-y-1 hover:shadow-[0_22px_50px_rgba(108,59,213,0.45)] sm:min-w-[168px]"
+          >
+            <Icons.Bot className="h-6 w-6" />
+            <span className="hidden text-sm font-bold sm:inline">Chat with AI</span>
+          </button>
+        </div>
       ) : (
-        <div className="w-[320px] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_24px_60px_rgba(15,23,42,0.24)]">
-          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-950 px-4 py-3 text-white">
+        <div className="ai-chat-panel w-[340px] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-[28px] border shadow-[0_24px_60px_rgba(15,23,42,0.24)] backdrop-blur-xl" style={{ background: "color-mix(in srgb, var(--bh-card) 86%, transparent)", borderColor: "var(--bh-border)" }}>
+          <div className="flex items-center justify-between border-b px-4 py-3 text-white" style={{ borderColor: "var(--bh-border)", background: "linear-gradient(135deg,#13131A,#2D1B69)" }}>
             <div>
               <div className="text-sm font-semibold">
                 BuildHive AI Assistant
@@ -136,8 +150,8 @@ export const AIChatWidget: React.FC = () => {
                 <div
                   className={`max-w-[85%] whitespace-pre-line rounded-2xl px-4 py-3 text-sm leading-6 ${
                     message.role === "user"
-                      ? "bg-yellow-400 text-slate-950"
-                      : "bg-slate-100 text-slate-700"
+                      ? "bg-[#6C3BD5] text-white"
+                      : "border border-[var(--bh-border)] bg-[var(--bh-card)] text-[var(--bh-text)]"
                   }`}
                 >
                   {message.content}
@@ -147,7 +161,7 @@ export const AIChatWidget: React.FC = () => {
 
             {isTyping && (
               <div className="flex justify-start">
-                <div className="rounded-2xl bg-slate-100 px-4 py-3 text-sm text-slate-500">
+                <div className="rounded-2xl border border-[var(--bh-border)] bg-[var(--bh-card)] px-4 py-3 text-sm text-[var(--bh-muted)]">
                   <span className="mr-2">BuildHive AI is typing</span>
                   <span className="ai-typing-dots">
                     <span />
@@ -165,7 +179,7 @@ export const AIChatWidget: React.FC = () => {
                     key={reply}
                     type="button"
                     onClick={() => sendMessage(reply)}
-                    className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:border-yellow-300 hover:bg-yellow-50 hover:text-slate-900"
+                    className="rounded-full border border-[var(--bh-border)] bg-[var(--bh-card)] px-3 py-2 text-left text-xs font-medium text-[var(--bh-muted)] transition-colors hover:border-[#8B5CF6] hover:text-[var(--bh-text)]"
                   >
                     {reply}
                   </button>
@@ -174,8 +188,8 @@ export const AIChatWidget: React.FC = () => {
             )}
           </div>
 
-          <div className="border-t border-slate-200 bg-white px-4 py-4">
-            <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+          <div className="border-t px-4 py-4" style={{ borderColor: "var(--bh-border)", background: "var(--bh-card)" }}>
+            <div className="flex items-center gap-2 rounded-2xl border px-3 py-2" style={{ borderColor: "var(--bh-border)", background: "var(--bh-surface)" }}>
               <input
                 type="text"
                 value={inputValue}
@@ -187,12 +201,12 @@ export const AIChatWidget: React.FC = () => {
                   }
                 }}
                 placeholder="Ask about a project, material, or contractor..."
-                className="min-w-0 flex-1 border-0 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                className="min-w-0 flex-1 border-0 bg-transparent text-sm text-[var(--bh-text)] outline-none placeholder:text-[var(--bh-muted)]"
               />
               <button
                 type="button"
                 onClick={() => void sendMessage(inputValue)}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950 text-white transition-colors hover:bg-slate-800"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[#6C3BD5] text-white transition-colors hover:bg-[#5B21B6]"
                 aria-label="Send message"
               >
                 <Icons.ArrowRight className="h-4 w-4" />
@@ -210,6 +224,18 @@ export const AIChatWidget: React.FC = () => {
           display: inline-flex;
           gap: 4px;
           vertical-align: middle;
+        }
+
+        .ai-pulse-ring {
+          position: absolute;
+          inset: -8px;
+          border-radius: 999px;
+          border: 2px solid rgba(139, 92, 246, .45);
+          animation: ai-pulse-ring 5s infinite ease-out;
+        }
+
+        .ai-chat-panel {
+          animation: ai-slide-up .3s ease both;
         }
 
         .ai-typing-dots span {
@@ -236,6 +262,31 @@ export const AIChatWidget: React.FC = () => {
           40% {
             transform: translateY(-4px);
             opacity: 1;
+          }
+        }
+
+        @keyframes ai-pulse-ring {
+          0%, 72%, 100% {
+            transform: scale(.94);
+            opacity: 0;
+          }
+          8% {
+            opacity: .75;
+          }
+          22% {
+            transform: scale(1.12);
+            opacity: 0;
+          }
+        }
+
+        @keyframes ai-slide-up {
+          from {
+            opacity: 0;
+            transform: translateY(18px) scale(.98);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
           }
         }
       `}</style>

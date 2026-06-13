@@ -9,16 +9,28 @@
     href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏗️</text></svg>">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('buildhive-theme') || 'dark';
+        document.documentElement.classList.toggle('light', saved === 'light');
+      } catch (error) {
+        document.documentElement.classList.remove('light');
+      }
+    })();
+  </script>
+  <script>
     tailwind.config = {
       theme: {
         extend: {
           colors: {
             primary: {
-              DEFAULT: '#8B5CF6', // Violet-500/600 range
-              hover: '#7C3AED',
+              DEFAULT: '#6C3BD5',
+              hover: '#5B21B6',
               light: '#F3F0FF',
+              soft: '#8B5CF6',
             },
-            dark: '#0F172A', // Slate-900
+            accent: '#10B981',
+            dark: '#0A0A0F',
           },
           fontFamily: {
             sans: ['Inter', 'sans-serif'],
@@ -29,8 +41,67 @@
   </script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
+    :root {
+      --bh-primary: #6C3BD5;
+      --bh-primary-light: #8B5CF6;
+      --bh-primary-dark: #5B21B6;
+      --bh-accent: #10B981;
+      --bh-bg: #0A0A0F;
+      --bh-surface: #13131A;
+      --bh-card: #1A1A24;
+      --bh-border: #2A2A3A;
+      --bh-text: #F1F1F3;
+      --bh-muted: #9B9BAD;
+    }
+
+    html.light {
+      --bh-bg: #F8F7FF;
+      --bh-surface: #FFFFFF;
+      --bh-card: #FFFFFF;
+      --bh-border: #E5E3F0;
+      --bh-text: #1A1A2E;
+      --bh-muted: #6B6B80;
+    }
+
     body {
       font-family: 'Inter', sans-serif;
+      background: var(--bh-bg);
+      color: var(--bh-text);
+      transition: background-color .3s ease, color .3s ease;
+    }
+
+    body, button, a, input, textarea, select, .bh-card, .listing-card, .category-pill-card {
+      transition: background-color .3s ease, border-color .3s ease, color .3s ease, box-shadow .25s ease, transform .25s ease;
+    }
+
+    button:active, a:active {
+      transform: scale(.98);
+    }
+
+    .page-fade {
+      animation: bh-fade-in .2s ease both;
+    }
+
+    @keyframes bh-fade-in {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .bh-card {
+      background: var(--bh-card);
+      border: 1px solid var(--bh-border);
+      color: var(--bh-text);
+    }
+
+    .bh-muted {
+      color: var(--bh-muted);
+    }
+
+    .bh-gradient-text {
+      background: linear-gradient(135deg, var(--bh-primary-light), var(--bh-accent));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
     }
 
     /* Custom scrollbar for horizontal scrolling sections */

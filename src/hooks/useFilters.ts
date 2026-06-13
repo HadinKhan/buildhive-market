@@ -28,7 +28,7 @@ export const useFilters = (allProducts: Product[]) => {
     availability: null,
     sortBy: 'featured',
     page: 1,
-    itemsPerPage: 12,
+    itemsPerPage: 24,
   });
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -191,7 +191,7 @@ export const useFilters = (allProducts: Product[]) => {
       availability: null,
       sortBy: 'featured',
       page: 1,
-      itemsPerPage: 12,
+      itemsPerPage: 24,
     });
     setSearchQuery('');
   }, [defaultMaxPrice]);

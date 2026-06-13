@@ -96,6 +96,7 @@ export interface GetProductsParams {
   featured?: boolean;
   is_featured?: boolean;
   trending?: boolean;
+  tag?: string;
 }
 
 // =============================================

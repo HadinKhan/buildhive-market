@@ -39,7 +39,7 @@ type ModalState =
   | { type: "order"; order: any }
   | { type: "refund"; order: any }
   | { type: "project"; project: any }
-  | { type: "project-form" }
+  | { type: "project-form"; project?: any }
   | { type: "dispute-form"; order?: any }
   | { type: "dispute"; dispute: any }
   | { type: "ticket"; ticket: any }
@@ -163,6 +163,39 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
     category: "general",
     priority: "medium",
   });
+
+  const resetProjectForm = () =>
+    setProjectForm({
+      title: "",
+      description: "",
+      budget: "",
+      startDate: "",
+      deadline: "",
+      milestones: [{ name: "", dueDate: "" }],
+    });
+
+  const openCreateProject = () => {
+    resetProjectForm();
+    setModal({ type: "project-form" });
+  };
+
+  const openEditProject = (project: any) => {
+    setProjectForm({
+      title: project.title || "",
+      description: project.description || "",
+      budget: String(project.budget || project.budget_max || project.budgetMax || ""),
+      startDate: String(project.start_date || project.startDate || "").slice(0, 10),
+      deadline: String(project.deadline || project.due_date || "").slice(0, 10),
+      milestones:
+        asArray(project.milestones, []).length > 0
+          ? asArray(project.milestones, []).map((milestone: any) => ({
+              name: milestone.name || milestone.title || "",
+              dueDate: String(milestone.due_date || milestone.dueDate || "").slice(0, 10),
+            }))
+          : [{ name: "", dueDate: "" }],
+    });
+    setModal({ type: "project-form", project });
+  };
 
   const loadAll = async () => {
     setLoading(true);
@@ -333,26 +366,58 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
   const createProject = async (event: React.FormEvent) => {
     event.preventDefault();
     setBusy("project");
+    const editingProject = modal?.type === "project-form" ? modal.project : null;
+    const payload = {
+      title: projectForm.title,
+      description: projectForm.description,
+      budget: Number(projectForm.budget),
+      startDate: projectForm.startDate || undefined,
+      deadline: projectForm.deadline || undefined,
+      milestones: projectForm.milestones
+        .filter((milestone) => milestone.name && milestone.dueDate)
+        .map((milestone) => ({ name: milestone.name, dueDate: milestone.dueDate })),
+    };
     try {
-      await api.post("/projects", {
-        title: projectForm.title,
-        description: projectForm.description,
-        budget: Number(projectForm.budget),
-        startDate: projectForm.startDate || undefined,
-        deadline: projectForm.deadline || undefined,
-        milestones: projectForm.milestones
-          .filter((milestone) => milestone.name && milestone.dueDate)
-          .map((milestone) => ({ name: milestone.name, dueDate: milestone.dueDate })),
-      });
-      toast.success("Project created.");
+      if (editingProject?.id) {
+        await api.put(`/projects/${editingProject.id}`, payload);
+        toast.success("Project updated.");
+      } else {
+        await api.post("/projects", payload);
+        toast.success("Project created.");
+      }
       setModal(null);
-      setProjectForm({ title: "", description: "", budget: "", startDate: "", deadline: "", milestones: [{ name: "", dueDate: "" }] });
+      resetProjectForm();
       await loadAll();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Unable to create project.");
+      toast.error(err?.response?.data?.message || "Unable to save project.");
     } finally {
       setBusy("");
     }
+  };
+
+  const deleteProject = async (project: any) => {
+    setModal({
+      type: "confirm",
+      title: "Delete project?",
+      message: "This will remove the project if deletion is supported. Otherwise it will be marked cancelled.",
+      onConfirm: async () => {
+        setBusy(`project-delete-${project.id}`);
+        try {
+          try {
+            await api.delete(`/projects/${project.id}`);
+          } catch {
+            await api.put(`/projects/${project.id}`, { status: "cancelled" });
+          }
+          toast.success("Project removed.");
+          setModal(null);
+          await loadAll();
+        } catch (err: any) {
+          toast.error(err?.response?.data?.message || "Unable to remove project.");
+        } finally {
+          setBusy("");
+        }
+      },
+    });
   };
 
   const createDispute = async (event: React.FormEvent) => {
@@ -852,7 +917,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
               {activeTab === "projects" && (
                 <section className="space-y-4">
                   <div className="flex justify-end">
-                    <Button onClick={() => setModal({ type: "project-form" })}><Icons.Plus className="mr-2 h-4 w-4" /> Create New Project</Button>
+                    <Button onClick={openCreateProject}><Icons.Plus className="mr-2 h-4 w-4" /> New Project</Button>
                   </div>
                   <ListPanel empty="No projects posted yet.">
                     {projects.map((project) => (
@@ -862,10 +927,13 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
                             <h3 className="font-bold text-gray-900">{project.title || "Untitled project"}</h3>
                             <p className="mt-1 line-clamp-2 text-sm text-gray-500">{project.description || "No description"}</p>
                             <p className="mt-2 text-sm font-semibold text-gray-700">{money(project.budget || project.budget_max || project.budgetMax)}</p>
+                            <p className="mt-1 text-xs text-gray-500">Deadline: {dateLabel(project.deadline || project.due_date)}</p>
                           </div>
-                          <div className="flex items-center gap-3">
+                          <div className="flex flex-wrap items-center gap-2">
                             <StatusBadge status={project.status || "open"} />
                             <Button className={accountOutlineButton} variant="outline" size="sm" onClick={() => void openProject(project)}>View Details</Button>
+                            <Button className={accountOutlineButton} variant="outline" size="sm" onClick={() => openEditProject(project)}>Edit</Button>
+                            <Button className={accountDangerButton} variant="outline" size="sm" disabled={busy === `project-delete-${project.id}`} onClick={() => void deleteProject(project)}>Delete</Button>
                           </div>
                         </div>
                       </article>
@@ -1030,7 +1098,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
             <ProjectDetail project={modal.project} busy={busy} onProposalUpdate={updateProposal} />
           )}
           {modal.type === "project-form" && (
-            <ProjectForm form={projectForm} setForm={setProjectForm} busy={busy} onSubmit={createProject} />
+            <ProjectForm form={projectForm} setForm={setProjectForm} busy={busy} onSubmit={createProject} isEditing={Boolean(modal.project)} />
           )}
           {modal.type === "dispute-form" && (
             <DisputeForm form={disputeForm} setForm={setDisputeForm} orders={orders} projects={projects} busy={busy} onSubmit={createDispute} />
@@ -1257,9 +1325,9 @@ const ProjectDetail = ({ project, busy, onProposalUpdate }: { project: any; busy
   );
 };
 
-const ProjectForm = ({ form, setForm, busy, onSubmit }: { form: any; setForm: React.Dispatch<React.SetStateAction<any>>; busy: string; onSubmit: (event: React.FormEvent) => void }) => (
+const ProjectForm = ({ form, setForm, busy, onSubmit, isEditing }: { form: any; setForm: React.Dispatch<React.SetStateAction<any>>; busy: string; onSubmit: (event: React.FormEvent) => void; isEditing?: boolean }) => (
   <form onSubmit={onSubmit} className="space-y-4">
-    <h2 className="text-xl font-bold text-gray-900">Create New Project</h2>
+    <h2 className="text-xl font-bold text-gray-900">{isEditing ? "Edit Project" : "Create New Project"}</h2>
     <TextInput label="Title" value={form.title} onChange={(value) => setForm((current: any) => ({ ...current, title: value }))} />
     <label className="block text-sm font-semibold text-gray-700">
       Description
@@ -1279,7 +1347,7 @@ const ProjectForm = ({ form, setForm, busy, onSubmit }: { form: any; setForm: Re
       ))}
       <Button type="button" className={accountOutlineButton} variant="outline" onClick={() => setForm((current: any) => ({ ...current, milestones: [...current.milestones, { name: "", dueDate: "" }] }))}>Add Milestone</Button>
     </QuickList>
-    <Button type="submit" disabled={busy === "project"}>Create Project</Button>
+    <Button type="submit" disabled={busy === "project"}>{isEditing ? "Update Project" : "Create Project"}</Button>
   </form>
 );
 

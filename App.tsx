@@ -21,8 +21,6 @@ import { CheckoutPage } from "./pages/CheckoutPage";
 import OrderConfirmationPage from "./pages/OrderConfirmationPage";
 import { ContactPage } from "./pages/ContactPage";
 import { AboutPage } from "./pages/AboutPage";
-import { BlogPage } from "./pages/BlogPage";
-import { BlogDetailPage } from "./pages/BlogDetailPage";
 import { SignInPage } from "./pages/SignInPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import EmailVerifyPage from "./pages/EmailVerifyPage";
@@ -37,6 +35,7 @@ import { ContractorProfilePage } from "./pages/ContractorProfilePage";
 import { NotificationPage } from "./pages/NotificationPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { CostEstimatorPage } from "./pages/CostEstimatorPage";
+import RecommendationsPage from "./pages/RecommendationsPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import { MessagesPage } from "./src/pages/Messages";
 import { SupportPage } from "./src/pages/Support";
@@ -198,20 +197,6 @@ const ProductDetailWrapper: React.FC<{
       onNavigate={onNavigate}
       onAddToCart={onAddToCart}
       onMessageSeller={handleMessageSeller}
-    />
-  );
-};
-
-const BlogDetailWrapper: React.FC<{
-  onNavigate: (page: string) => void;
-}> = ({ onNavigate }) => {
-  const { postId } = useParams<{ postId: string }>();
-
-  return (
-    <BlogDetailPage
-      postId={postId || ""}
-      onNavigate={onNavigate}
-      onBack={() => onNavigate(postId ? `blog?post=${postId}` : "blog")}
     />
   );
 };
@@ -565,12 +550,7 @@ const AppContent: React.FC = () => {
 
         <Route path="/about" element={<AboutPage onNavigate={navigateTo} />} />
 
-        <Route path="/blog" element={<BlogPage onNavigate={navigateTo} />} />
-
-        <Route
-          path="/blog/:postId"
-          element={<BlogDetailWrapper onNavigate={navigateTo} />}
-        />
+        <Route path="/recommendations" element={<RecommendationsPage />} />
 
         <Route
           path="/product-detail/:id"

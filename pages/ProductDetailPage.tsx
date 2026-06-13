@@ -44,7 +44,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   onMessageSeller,
 }) => {
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const { toggleWishlist, isInWishlist } = useWishlist();
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState("Overview");
@@ -53,6 +53,9 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   const [reviews, setReviews] = useState<ProductReview[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [reviewsError, setReviewsError] = useState<string | null>(null);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [questions, setQuestions] = useState<any[]>([]);
   const [timeline, setTimeline] = useState<any[]>([]);
   const [questionText, setQuestionText] = useState("");
@@ -104,10 +107,11 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     galleryImages[selectedImage] ||
     galleryImages[0] ||
     (product as any).image ||
-    "";
-  const activeImageSrc = resolveMarketplaceImageSrc({ image: activeImage });
+    "/productsplaceholder.png";
+  const activeImageSrc = resolveMarketplaceImageSrc({ image: activeImage }) || "/productsplaceholder.png";
   const productInitials = getMarketplaceInitials(product.name);
   const isOutOfStock = product.quantity === 0;
+  const isBuyer = String(user?.role || "").toLowerCase() === "buyer";
 
   useEffect(() => {
     setImageFailed(false);
@@ -234,6 +238,39 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     }
   };
 
+  const submitReview = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!requireAuth()) return;
+    if (!isBuyer) {
+      toast.error("Only buyers can review products.");
+      return;
+    }
+    if (reviewRating < 1 || reviewRating > 5) {
+      toast.error("Select a rating from 1 to 5 stars.");
+      return;
+    }
+    if (reviewComment.trim().length < 5) {
+      toast.error("Review must be at least 5 characters.");
+      return;
+    }
+
+    setReviewSubmitting(true);
+    try {
+      await productService.createReview(product.id, {
+        rating: reviewRating,
+        comment: reviewComment.trim(),
+      });
+      setReviewComment("");
+      setReviewRating(5);
+      setReviews(await productService.getProductReviews(product.id));
+      toast.success("Review submitted.");
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Failed to submit review.");
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
+
   const submitReport = async () => {
     if (!reportTarget || !reportReason) return;
     setReportSubmitting(true);
@@ -287,8 +324,8 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                   alt={product.title}
                   className="h-full w-full object-cover transition-all duration-500"
                   onError={(e) => {
-                    e.currentTarget.style.display = "none";
-                    setImageFailed(true);
+                    e.currentTarget.onerror = null;
+                    e.currentTarget.src = "/productsplaceholder.png";
                   }}
                 />
               ) : null}
@@ -331,12 +368,8 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                         alt=""
                         className="h-full w-full object-cover"
                         onError={(e) => {
-                          e.currentTarget.style.display = "none";
-                          const placeholder = e.currentTarget
-                            .nextElementSibling as HTMLElement | null;
-                          if (placeholder) {
-                            placeholder.style.display = "flex";
-                          }
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = "/productsplaceholder.png";
                         }}
                       />
                       <div className="hidden h-full w-full items-center justify-center bg-gray-200 text-gray-500">
@@ -621,6 +654,64 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 )}
                 {activeTab === "Reviews" && (
                   <div className="space-y-4">
+                    {isAuthenticated && isBuyer ? (
+                      <form
+                        onSubmit={submitReview}
+                        className="rounded-2xl border border-violet-100 bg-violet-50/60 p-5"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-4">
+                          <div>
+                            <h3 className="font-bold text-gray-900">
+                              Write a Review
+                            </h3>
+                            <p className="mt-1 text-sm text-gray-500">
+                              Share your experience with this product.
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {Array.from({ length: 5 }, (_, index) => {
+                              const value = index + 1;
+                              return (
+                                <button
+                                  key={value}
+                                  type="button"
+                                  onClick={() => setReviewRating(value)}
+                                  aria-label={`${value} star rating`}
+                                  className="rounded-full p-1 transition hover:scale-110"
+                                >
+                                  <Icons.Star
+                                    className={`h-6 w-6 ${
+                                      value <= reviewRating
+                                        ? "fill-current text-yellow-400"
+                                        : "text-gray-300"
+                                    }`}
+                                  />
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <textarea
+                          value={reviewComment}
+                          onChange={(event) => setReviewComment(event.target.value)}
+                          rows={4}
+                          placeholder="Write your review..."
+                          className="mt-4 w-full rounded-2xl border border-violet-100 bg-white px-4 py-3 text-sm text-gray-700 outline-none transition focus:border-violet-300"
+                        />
+                        <div className="mt-4 flex justify-end">
+                          <Button type="submit" disabled={reviewSubmitting}>
+                            {reviewSubmitting ? "Submitting..." : "Submit Review"}
+                          </Button>
+                        </div>
+                      </form>
+                    ) : (
+                      <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-500">
+                        {isAuthenticated
+                          ? "Only buyer accounts can write product reviews."
+                          : "Sign in as a buyer to write a review."}
+                      </div>
+                    )}
+
                     {reviewsLoading ? (
                       <p className="text-sm text-gray-500">
                         Loading reviews...

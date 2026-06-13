@@ -152,6 +152,7 @@ export const Icons = {
   Eye,
   EyeOff,
   Clock,
+  Sparkles,
   AI: Sparkles,
   Bot,
   Brain: BrainCircuit,

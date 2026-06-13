@@ -28,7 +28,6 @@ export const Header: React.FC<HeaderProps> = ({
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [headerSearch, setHeaderSearch] = useState("");
-  const [isDarkMode, setIsDarkMode] = useState(true);
   const dropdownTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
@@ -144,10 +143,6 @@ export const Header: React.FC<HeaderProps> = ({
       setIsMobileMenuOpen(false);
       return;
     }
-    if (page === "toggle-theme") {
-      setIsDarkMode(!isDarkMode);
-      return;
-    }
     if (onNavigate) onNavigate(page === "messages" ? "account?tab=messages" : page);
     setIsMobileMenuOpen(false);
     setIsUserMenuOpen(false);
@@ -177,7 +172,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <>
-      <header className="sticky top-0 z-50 w-full bg-[#0b0f12] text-gray-200 border-b border-zinc-800 transition-all">
+      <header className="sticky top-0 z-50 w-full border-b border-gray-800 bg-gray-900 shadow-lg shadow-black/20">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex h-20 items-center justify-between">
             {/* Logo */}
@@ -197,21 +192,13 @@ export const Header: React.FC<HeaderProps> = ({
               {!isLoggedIn &&
                 (() => {
                   const items: Array<any> = [
-                    {
-                      label: "Home",
-                      slug: "home",
-                    },
+                    { label: "Home", slug: "home" },
+                    { label: "Products", slug: "products" },
+                    { label: "Services", slug: "services" },
                     {
                       label: "AI",
                       slug: "ai",
                       submenu: [
-                        {
-                          title: "AI Chatbot",
-                          desc: "Real-time project assistant",
-                          slug: "ai-chatbot",
-                          icon: "Bot",
-                          tone: "green",
-                        },
                         {
                           title: "Cost Estimator",
                           desc: "Smart budget planning",
@@ -220,34 +207,13 @@ export const Header: React.FC<HeaderProps> = ({
                           tone: "blue",
                         },
                         {
-                          title: "Smart Recommendations",
-                          desc: "Personalised picks for you",
-                          slug: "ai-reco",
+                          title: "AI Recommendations",
+                          desc: "Material recommendations",
+                          slug: "recommendations",
                           icon: "Brain",
                           tone: "purple",
                         },
                       ],
-                    },
-                    {
-                      label: "Services",
-                      slug: "services",
-                    },
-                    {
-                      label: "Cost Estimator",
-                      slug: "cost-estimator",
-                    },
-                    {
-                      label: "Find a Contractor",
-                      slug: "contractors",
-                    },
-                    {
-                      label: "Messages",
-                      slug: "messages",
-                      icon: Icons.Message,
-                    },
-                    {
-                      label: "Product",
-                      slug: "products",
                     },
                     {
                       label: "About",
@@ -266,13 +232,6 @@ export const Header: React.FC<HeaderProps> = ({
                           url: "/about?section=team",
                           icon: "Users",
                           tone: "cyan",
-                        },
-                        {
-                          title: "Blog & Resources",
-                          desc: "Guides, news & insights",
-                          url: "/blog",
-                          icon: "Book",
-                          tone: "amber",
                         },
                       ],
                     },
@@ -374,27 +333,12 @@ export const Header: React.FC<HeaderProps> = ({
                 (() => {
                   const items: Array<any> = [
                     { label: "Home", slug: "home" },
-                    {
-                      label: "Messages",
-                      slug: "messages",
-                      icon: Icons.Message,
-                    },
-                    {
-                      label: "Support",
-                      slug: "support",
-                      icon: Icons.HelpCircle,
-                    },
+                    { label: "Products", slug: "products" },
+                    { label: "Services", slug: "services" },
                     {
                       label: "AI",
                       slug: "ai",
                       submenu: [
-                        {
-                          title: "AI Chatbot",
-                          desc: "Real-time project assistant",
-                          slug: "ai-chatbot",
-                          icon: "Bot",
-                          tone: "green",
-                        },
                         {
                           title: "Cost Estimator",
                           desc: "Smart budget planning",
@@ -403,29 +347,13 @@ export const Header: React.FC<HeaderProps> = ({
                           tone: "blue",
                         },
                         {
-                          title: "Smart Recommendations",
-                          desc: "Personalised picks for you",
-                          slug: "ai-reco",
+                          title: "AI Recommendations",
+                          desc: "Material recommendations",
+                          slug: "recommendations",
                           icon: "Brain",
                           tone: "purple",
                         },
                       ],
-                    },
-                    {
-                      label: "Services",
-                      slug: "services",
-                    },
-                    {
-                      label: "Cost Estimator",
-                      slug: "cost-estimator",
-                    },
-                    {
-                      label: "Find a Contractor",
-                      slug: "contractors",
-                    },
-                    {
-                      label: "Product",
-                      slug: "products",
                     },
                     {
                       label: "About",
@@ -444,13 +372,6 @@ export const Header: React.FC<HeaderProps> = ({
                           url: "/about?section=team",
                           icon: "Users",
                           tone: "cyan",
-                        },
-                        {
-                          title: "Blog & Resources",
-                          desc: "Guides, news & insights",
-                          url: "/blog",
-                          icon: "Book",
-                          tone: "amber",
                         },
                       ],
                     },
@@ -536,6 +457,14 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Right Actions */}
             <div className="hidden lg:flex items-center gap-4">
+              <a
+                href="http://localhost:5000"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center justify-center rounded-full bg-white px-5 py-2.5 text-sm font-bold text-[#6B21A8] shadow-lg shadow-purple-950/20 transition-all duration-200 hover:-translate-y-0.5 hover:scale-105 hover:bg-emerald-50"
+              >
+                Join as Seller / Contractor
+              </a>
               {isLoggedIn ? (
                 <div className="flex items-center gap-3">
                   <button
@@ -665,8 +594,8 @@ export const Header: React.FC<HeaderProps> = ({
                         <div className="grid gap-2">
                           {[
                             {
-                              label: "Dashboard",
-                              desc: "Portfolio & reviews",
+                              label: "My Account",
+                              desc: "Profile, orders, and settings",
                               slug: "account",
                               icon: Icons.Dashboard,
                               gradient: "from-blue-500 to-blue-600",
@@ -747,17 +676,17 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Mobile Menu */}
         {isMobileMenuOpen && (
-          <div className="lg:hidden border-t border-gray-100 bg-white px-4 py-4 shadow-lg animate-in slide-in-from-top-2 duration-200">
+          <div
+            className="lg:hidden border-t px-4 py-4 shadow-lg animate-in slide-in-from-top-2 duration-200"
+            style={{ background: "var(--bh-surface)", borderColor: "var(--bh-border)", color: "var(--bh-text)" }}
+          >
             <nav className="flex flex-col gap-4">
               {(isLoggedIn
                 ? [
                     { label: "Home", slug: "home" },
                     { label: "Products", slug: "products" },
-                    { label: "Cost Estimator", slug: "cost-estimator" },
-                    { label: "Messages", slug: "messages" },
                     { label: "Support", slug: "support" },
                     { label: "Services", slug: "services" },
-                    { label: "Find a Contractor", slug: "contractors" },
                     { label: "AI", slug: "ai" },
                     { label: "About Us", slug: "about" },
                     { label: "Contact", slug: "contact" },
@@ -765,9 +694,7 @@ export const Header: React.FC<HeaderProps> = ({
                 : [
                     { label: "Home", slug: "home" },
                     { label: "Products", slug: "products" },
-                    { label: "Cost Estimator", slug: "cost-estimator" },
                     { label: "Services", slug: "services" },
-                    { label: "Find a Contractor", slug: "contractors" },
                     { label: "AI", slug: "ai" },
                     { label: "About Us", slug: "about" },
                     { label: "Contact", slug: "contact" },
@@ -780,7 +707,7 @@ export const Header: React.FC<HeaderProps> = ({
                   className={`flex items-center justify-between py-2 text-base font-medium ${
                     item.slug === "ai"
                       ? "text-primary"
-                      : "text-gray-600 hover:text-primary"
+                      : "text-[var(--bh-text)] hover:text-primary"
                   }`}
                 >
                   <span className="flex items-center gap-2">
@@ -791,7 +718,15 @@ export const Header: React.FC<HeaderProps> = ({
                 </a>
               ))}
 
-              <div className="border-t border-gray-100 pt-4 mt-2 space-y-4">
+                <div className="mt-2 space-y-4 border-t pt-4" style={{ borderColor: "var(--bh-border)" }}>
+                <a
+                  href="http://localhost:5000"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex w-full items-center justify-center rounded-xl bg-white px-3 py-3 text-sm font-bold text-[#6B21A8] shadow-sm transition-transform hover:scale-[1.02]"
+                >
+                  Join as Seller / Contractor
+                </a>
                 {/* Mobile User Actions */}
                 {user ? (
                   <>
@@ -800,15 +735,15 @@ export const Header: React.FC<HeaderProps> = ({
                         <Icons.User className="h-5 w-5" />
                       </div>
                       <div>
-                        <p className="font-medium text-gray-900">
+                        <p className="font-medium text-[var(--bh-text)]">
                           {displayName}
                         </p>
-                        <p className="text-xs text-gray-500">{displayEmail}</p>
+                        <p className="text-xs text-[var(--bh-muted)]">{displayEmail}</p>
                       </div>
                     </div>
                     <button
                       onClick={(e) => handleNav(e, "account")}
-                      className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-base text-gray-700 hover:bg-gray-50"
+                      className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-base text-[var(--bh-text)] hover:bg-white/10"
                     >
                       <Icons.Dashboard className="h-5 w-5" /> My Dashboard
                     </button>
@@ -843,7 +778,8 @@ export const Header: React.FC<HeaderProps> = ({
                   <input
                     type="text"
                     placeholder="Search supplies..."
-                    className="h-10 w-full rounded-lg border border-gray-200 bg-gray-50 pl-10 pr-4 text-sm outline-none"
+                    className="h-10 w-full rounded-lg border pl-10 pr-4 text-sm outline-none"
+                    style={{ background: "var(--bh-card)", borderColor: "var(--bh-border)", color: "var(--bh-text)" }}
                   />
                 </div>
               </div>
@@ -868,39 +804,35 @@ interface FooterColumn {
 
 const footerColumns: FooterColumn[] = [
   {
-    title: "Quick Links",
+    title: "Marketplace",
     links: [
-      { label: "Home", path: "home" },
-      { label: "Services", path: "services" },
       { label: "Products", path: "products" },
+      { label: "Services", path: "services" },
+      { label: "Contractors", path: "contractors" },
+    ],
+  },
+  {
+    title: "AI Tools",
+    links: [
+      { label: "Cost Estimator", path: "cost-estimator" },
+      { label: "AI Recommendations", path: "recommendations" },
+    ],
+  },
+  {
+    title: "Company",
+    links: [
       { label: "About", path: "about" },
       { label: "Contact", path: "contact" },
-    ],
-  },
-  {
-    title: "Useful Links",
-    links: [
-      { label: "Dashboard", path: "account" },
-      { label: "Settings", path: "settings" },
-      { label: "Notifications", path: "notifications" },
-      { label: "Cart", path: "cart" },
-    ],
-  },
-  {
-    title: "Support",
-    links: [
-      { label: "Contact Us", path: "contact" },
-      { label: "Privacy Policy", path: "privacy" },
-      { label: "Terms of Service", path: "terms" },
+      { label: "Terms", path: "terms" },
+      { label: "Privacy", path: "privacy" },
     ],
   },
 ];
 
 const footerSocialLinks = [
-  { icon: "Linkedin", label: "LinkedIn" },
   { icon: "Instagram", label: "Instagram" },
+  { icon: "Linkedin", label: "LinkedIn" },
   { icon: "Facebook", label: "Facebook" },
-  { icon: "Youtube", label: "YouTube" },
 ];
 
 export const Footer = () => {
@@ -926,7 +858,7 @@ export const Footer = () => {
           margin: 0 auto;
           padding: 56px 24px 36px;
           display: grid;
-          grid-template-columns: 1.35fr repeat(4, minmax(170px, 1fr));
+          grid-template-columns: 1.35fr repeat(4, minmax(150px, 1fr));
           gap: 48px;
           align-items: start;
         }
@@ -1214,15 +1146,7 @@ export const Footer = () => {
 
       <div className="footer-bottom">
         <span className="footer-copyright">
-          {"\u00a9"} 2026 <span>BuildHive</span>. All rights reserved.{" "}
-          <a
-            className="footer-campus-link"
-            href="https://lahore.comsats.edu.pk/default.aspx"
-            target="_blank"
-            rel="noreferrer noopener"
-          >
-            COMSATS University Islamabad, Lahore Campus.
-          </a>
+          {"\u00a9"} 2026 <span>BuildHive</span>. All rights reserved.
         </span>
       </div>
     </footer>

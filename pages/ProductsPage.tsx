@@ -12,10 +12,7 @@ import { useFilters } from "../src/hooks/useFilters";
 import { useAuth } from "../src/context/AuthContext";
 import { aiService } from "../src/services/aiService";
 import api from "../src/services/api";
-import {
-  getMarketplaceInitials,
-  resolveMarketplaceImageSrc,
-} from "../src/utils/marketplaceImage";
+import { resolveMarketplaceImageSrc } from "../src/utils/marketplaceImage";
 import {
   productService,
   type Product as ApiProduct,
@@ -61,6 +58,14 @@ interface Category {
   tone: string;
   description: string;
   subcategories: string[];
+}
+
+interface ApiCategoryOption {
+  id: string;
+  name: string;
+  slug?: string;
+  parent_id?: string | null;
+  parentId?: string | null;
 }
 
 interface MaterialGroup {
@@ -2033,6 +2038,8 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
   const [productsError, setProductsError] = useState<string | null>(null);
+  const [apiCategories, setApiCategories] = useState<ApiCategoryOption[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [productPagination, setProductPagination] = useState({
     page: 1,
     totalPages: 1,
@@ -2055,6 +2062,9 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
 
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTag = searchParams.get("tag") || "";
+  const [searchDraft, setSearchDraft] = useState(
+    searchParams.get("search") || "",
+  );
   const [activeCategory, setActiveCategory] = useState<string>(
     initialCategory || searchParams.get("categoryId") || "all",
   );
@@ -2085,10 +2095,88 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
   );
 
   useEffect(() => {
+    const initialSearch = searchParams.get("search");
+    if (initialSearch) {
+      setSearchQuery(initialSearch);
+      setSearchDraft(initialSearch);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      const nextSearch = searchDraft.trim();
+      setSearchQuery(nextSearch);
+      updateFilter("page", 1);
+
+      const currentSearch = searchParams.get("search") || "";
+      if (currentSearch === nextSearch) return;
+
+      const params = new URLSearchParams(searchParams);
+      if (nextSearch) {
+        params.set("search", nextSearch);
+      } else {
+        params.delete("search");
+      }
+      setSearchParams(params);
+    }, 400);
+
+    return () => window.clearTimeout(timeout);
+  }, [searchDraft, searchParams, setSearchParams, setSearchQuery, updateFilter]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCategoriesLoading(true);
+    api
+      .get("/categories", { params: { limit: 100 } })
+      .then((response) => {
+        const payload = response.data?.data ?? response.data;
+        const rows = Array.isArray(payload)
+          ? payload
+          : payload?.categories || payload?.items || [];
+        if (!cancelled) {
+          setApiCategories(
+            (Array.isArray(rows) ? rows : []).filter(
+              (category: ApiCategoryOption) =>
+                !category.parent_id && !category.parentId,
+            ),
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setApiCategories([]);
+      })
+      .finally(() => {
+        if (!cancelled) setCategoriesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const sortMap: Record<string, { sortBy: string; sortOrder: "asc" | "desc" }> = {
+      newest: { sortBy: "created_at", sortOrder: "desc" },
+      "price-low": { sortBy: "price", sortOrder: "asc" },
+      "price-high": { sortBy: "price", sortOrder: "desc" },
+      rating: { sortBy: "rating", sortOrder: "desc" },
+      featured: { sortBy: "created_at", sortOrder: "desc" },
+    };
+    const sort = sortMap[filters.sortBy] || sortMap.newest;
+    const maxPrice =
+      filters.priceRange[1] !== 1000 ? filters.priceRange[1] : undefined;
+
     productService
       .getProducts({
         page: filters.page,
-        limit: filters.itemsPerPage,
+        limit: filters.itemsPerPage || 24,
+        status: "approved",
+        isActive: true,
+        ...(activeCategory !== "all" ? { categoryId: activeCategory } : {}),
+        ...(searchQuery.trim() ? { search: searchQuery.trim() } : {}),
+        ...(filters.priceRange[0] > 0 ? { minPrice: filters.priceRange[0] } : {}),
+        ...(maxPrice ? { maxPrice } : {}),
+        sortBy: sort.sortBy,
+        sortOrder: sort.sortOrder,
         ...(activeTag ? { tag: activeTag } : {}),
       })
       .then((response) => {
@@ -2112,12 +2200,17 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
       .finally(() => {
         setIsLoadingProducts(false);
       });
-  }, [activeTag, filters.itemsPerPage, filters.page]);
+  }, [
+    activeCategory,
+    activeTag,
+    filters.itemsPerPage,
+    filters.page,
+    filters.priceRange,
+    filters.sortBy,
+    searchQuery,
+  ]);
   const categoryProducts = useMemo(() => {
-    let filtered =
-      activeCategory === "all"
-        ? filteredProducts
-        : filteredProducts.filter((p) => p.category === activeCategory);
+    let filtered = filteredProducts;
     if (activeTag) {
       filtered = filtered.filter((p) =>
         (p.tags || []).some(
@@ -2182,7 +2275,9 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
   };
 
   const handleSearch = async (query: string) => {
+    setSearchDraft(query);
     setSearchQuery(query);
+    updateFilter("page", 1);
     const trimmed = query.trim();
 
     if (trimmed.length > 2) {
@@ -2190,22 +2285,6 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
         api.get("/search", {
           params: { q: trimmed, type: "products", limit: 10 },
         }).catch(() => undefined);
-      }
-      try {
-        const result = await aiService.searchProducts(trimmed, 20);
-        const items = Array.isArray(result?.results) ? result.results : [];
-        if (items.length > 0) {
-          setAiResults(
-            items.map((item: any, index: number) => mapAiProduct(item, index)),
-          );
-          setUseAiSearch(true);
-          setAiSearchLabel(trimmed);
-          return;
-        }
-      } catch (error) {
-        setAiResults([]);
-        setUseAiSearch(false);
-        setAiSearchLabel("");
       }
     }
 
@@ -2340,6 +2419,22 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
     [searchParams, setSearchParams, updateFilter],
   );
 
+  const handleClearProductFilters = useCallback(() => {
+    clearAllFilters();
+    updateFilter("sortBy", "newest");
+    setSearchDraft("");
+    setSearchQuery("");
+    setActiveCategory("all");
+    setUseAiSearch(false);
+    setAiResults([]);
+    setAiSearchLabel("");
+    const params = new URLSearchParams(searchParams);
+    params.delete("categoryId");
+    params.delete("search");
+    params.delete("tag");
+    setSearchParams(params);
+  }, [clearAllFilters, searchParams, setSearchParams, setSearchQuery, updateFilter]);
+
   const renderHeart = (filled: boolean = false) => (
     <svg
       viewBox="0 0 24 24"
@@ -2459,7 +2554,6 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
     const productRating = Number(productData?.rating ?? 0);
     const productReviews = Number(productData?.reviews ?? 0);
     const imageSrc = resolveMarketplaceImageSrc(productData);
-    const initials = getMarketplaceInitials(productName);
 
     return (
       <article
@@ -2494,47 +2588,20 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
         }}
       >
         <div style={{ position: "relative", overflow: "hidden" }}>
-          {imageSrc ? (
-            <>
-              <img
-                src={imageSrc}
-                alt={productName}
-                style={{
-                  width: "100%",
-                  height: "204px",
-                  objectFit: "cover",
-                  transition: "transform 0.5s ease",
-                }}
-                onError={(e) => {
-                  e.currentTarget.style.display = "none";
-                  const placeholder = e.currentTarget
-                    .nextElementSibling as HTMLElement | null;
-                  if (placeholder) placeholder.style.display = "flex";
-                }}
-              />
-              <div className="hidden h-[204px] w-full items-center justify-center bg-gray-200 text-gray-500">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gray-300 text-base font-bold text-gray-600">
-                  {initials}
-                </div>
-              </div>
-            </>
-          ) : (
-            <div
-              style={{
-                width: "100%",
-                height: "204px",
-                background: "#1f2937",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#9ca3af",
-              }}
-            >
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gray-300 text-base font-bold text-gray-600">
-                {initials}
-              </div>
-            </div>
-          )}
+          <img
+            src={imageSrc || "/productsplaceholder.png"}
+            alt={productName}
+            style={{
+              width: "100%",
+              height: "204px",
+              objectFit: "cover",
+              transition: "transform 0.5s ease",
+            }}
+            onError={(e) => {
+              e.currentTarget.onerror = null;
+              e.currentTarget.src = "/productsplaceholder.png";
+            }}
+          />
           {product.badge && (
             <span
               style={{
@@ -2944,474 +3011,131 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
 
   return (
     <div className="products-page-enhanced">
-      <style>{productsPageStyles}</style>
-
-      <div
-        style={{ maxWidth: "1400px", margin: "0 auto", padding: "20px 20px 0" }}
-      >
-        <div className="category-nav-row">
-          <div className="category-search">
-            <Icons.Search />
-            <input
-              type="search"
-              placeholder="Search categories"
-              value={categoryNavSearch}
-              onChange={(event) => setCategoryNavSearch(event.target.value)}
-            />
-          </div>
-          <nav
-            style={{
-              display: "flex",
-              gap: 10,
-              overflowX: "auto",
-              padding: "0 0 14px",
-              scrollbarWidth: "none",
-              flex: 1,
-            }}
-          >
-            <button
-              onClick={() => scrollToCategory("all")}
-              style={{
-                minHeight: "42px",
-                padding: "0 18px",
-                borderRadius: "999px",
-                border:
-                  activeCategory === "all"
-                    ? "1px solid rgba(167, 139, 250, 0.44)"
-                    : "1px solid rgba(255,255,255,0.08)",
-                background:
-                  activeCategory === "all"
-                    ? "linear-gradient(180deg, rgba(196, 181, 253, 0.12), rgba(124, 58, 237, 0.06)), #1a1426"
-                    : "rgba(255,255,255,0.03)",
-                color: activeCategory === "all" ? "#f5f3ff" : "#94a3b8",
-                boxShadow:
-                  activeCategory === "all"
-                    ? "inset 0 1px 0 rgba(255,255,255,0.12), 0 10px 22px rgba(0,0,0,0.22)"
-                    : "none",
-                cursor: "pointer",
-                whiteSpace: "nowrap",
-                transition: "all 0.25s ease",
-              }}
-            >
-              All Categories
-            </button>
-            {visibleCategories.map((cat) => (
-              <button
-                key={cat.id}
-                onClick={() => scrollToCategory(cat.id)}
-                style={{
-                  minHeight: "42px",
-                  padding: "0 18px",
-                  borderRadius: "999px",
-                  border:
-                    activeCategory === cat.id
-                      ? "1px solid rgba(167, 139, 250, 0.44)"
-                      : "1px solid rgba(255,255,255,0.08)",
-                  background:
-                    activeCategory === cat.id
-                      ? "linear-gradient(180deg, rgba(196, 181, 253, 0.12), rgba(124, 58, 237, 0.06)), #1a1426"
-                      : "rgba(255,255,255,0.03)",
-                  color: activeCategory === cat.id ? "#f5f3ff" : "#94a3b8",
-                  boxShadow:
-                    activeCategory === cat.id
-                      ? "inset 0 1px 0 rgba(255,255,255,0.12), 0 10px 22px rgba(0,0,0,0.22)"
-                      : "none",
-                  cursor: "pointer",
-                  whiteSpace: "nowrap",
-                  transition: "all 0.25s ease",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                }}
-              >
-                {cat.icon}
-                {cat.title}
-              </button>
-            ))}
-          </nav>
-        </div>
-      </div>
-
-      <div style={{ padding: "20px", maxWidth: "1400px", margin: "0 auto" }}>
+      <style>{productsPageStyles}</style>
+<div style={{ padding: "20px", maxWidth: "1400px", margin: "0 auto" }}>
         <div className="products-layout">
           {/* Sidebar Filters */}
           <aside className="sidebar">
-            <div className="active-filters">
-              {filters.materialTypes.map((type) => (
-                <div key={type} className="filter-chip">
-                  {type}
-                  <button onClick={() => toggleMaterialType(type)}>x</button>
-                </div>
-              ))}
-              {filters.sellers.map((seller) => (
-                <div key={seller} className="filter-chip">
-                  {seller}
-                  <button onClick={() => toggleSeller(seller)}>x</button>
-                </div>
-              ))}
-              {showWishlistOnly && (
-                <div className="filter-chip">
-                  Liked Items Only
-                  <button onClick={() => setShowWishlistOnly(false)}>x</button>
-                </div>
-              )}
-              {activeFilterCount > 0 && (
-                <button className="btn-reset" onClick={clearAllFilters}>
-                  Reset Filters ({activeFilterCount})
-                </button>
-              )}
-            </div>
-
-            {/* Material Types Filter */}
             <div className="filter-group">
-              <button
-                className="filter-group-title"
-                onClick={() =>
-                  setFilterExpanded((p) => ({ ...p, category: !p.category }))
-                }
-              >
-                Material Types
-                <span
-                  className={`filter-group-toggle ${filterExpanded.category ? "expanded" : ""}`}
-                >
-                  v
-                </span>
-              </button>
-              {filterExpanded.category && (
-                <>
-                  <div className="filter-search">
-                    <Icons.Search />
-                    <input
-                      type="search"
-                      placeholder={`Search ${currentCategoryLabel}`}
-                      value={currentCategorySearch}
-                      onChange={(event) =>
-                        setCategorySearches((prev) => ({
-                          ...prev,
-                          [activeCategory]: event.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="filter-options">
-                    {activeMaterialGroups.map((group) => (
-                      <div key={group.label} className="filter-subgroup">
-                        <div className="filter-subgroup-title">
-                          {group.label}
-                        </div>
-                        {group.options.map((type) => {
-                          const count = getMaterialCount(type);
-                          return (
-                            <div key={type} className="filter-checkbox">
-                              <input
-                                type="checkbox"
-                                id={`material-${activeCategory}-${type}`}
-                                checked={filters.materialTypes.includes(type)}
-                                onChange={() => toggleMaterialType(type)}
-                              />
-                              <label
-                                htmlFor={`material-${activeCategory}-${type}`}
-                              >
-                                <span>{type}</span>
-                                <span className="filter-badge">({count})</span>
-                              </label>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ))}
-                    {activeMaterialGroups.length === 0 && (
-                      <div
-                        style={{
-                          color: "#7f8da6",
-                          fontSize: 12,
-                          padding: "8px 0",
-                        }}
-                      >
-                        No material types found.
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Price Range Filter */}
-            <div className="filter-group">
-              <button
-                className="filter-group-title"
-                onClick={() =>
-                  setFilterExpanded((p) => ({ ...p, price: !p.price }))
-                }
-              >
-                Price Range
-                <span
-                  className={`filter-group-toggle ${filterExpanded.price ? "expanded" : ""}`}
-                >
-                  v
-                </span>
-              </button>
-              {filterExpanded.price && (
-                <div className="price-slider">
-                  <input
-                    type="range"
-                    min="0"
-                    max={categoryMaxPrice}
-                    value={visiblePriceMin}
-                    onChange={(e) =>
-                      updatePriceRange([
-                        Number(e.target.value),
-                        filters.priceRange[1],
-                      ])
-                    }
-                  />
-                  <input
-                    type="range"
-                    min="0"
-                    max={categoryMaxPrice}
-                    value={visiblePriceMax}
-                    onChange={(e) =>
-                      updatePriceRange([
-                        filters.priceRange[0],
-                        Number(e.target.value),
-                      ])
-                    }
-                  />
-                  <div className="price-inputs">
-                    <input
-                      type="number"
-                      value={visiblePriceMin}
-                      min="0"
-                      max={categoryMaxPrice}
-                      onChange={(event) =>
-                        updatePriceRange([
-                          Number(event.target.value),
-                          filters.priceRange[1],
-                        ])
-                      }
-                      placeholder="Min"
-                    />
-                    <span>-</span>
-                    <input
-                      type="number"
-                      value={visiblePriceMax}
-                      min="0"
-                      max={categoryMaxPrice}
-                      onChange={(event) =>
-                        updatePriceRange([
-                          filters.priceRange[0],
-                          Number(event.target.value),
-                        ])
-                      }
-                      placeholder="Max"
-                    />
-                  </div>
-                  <div className="range-helper">
-                    Max updates from the highest product price in{" "}
-                    {currentCategoryLabel}.
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Seller Filter */}
-            <div className="filter-group">
-              <button
-                className="filter-group-title"
-                onClick={() =>
-                  setFilterExpanded((p) => ({ ...p, seller: !p.seller }))
-                }
-              >
-                Sellers
-                <span
-                  className={`filter-group-toggle ${filterExpanded.seller ? "expanded" : ""}`}
-                >
-                  v
-                </span>
-              </button>
-              {filterExpanded.seller && (
-                <>
-                  <div className="filter-search">
-                    <Icons.Search />
-                    <input
-                      type="search"
-                      placeholder="Search sellers"
-                      value={sellerSearch}
-                      onChange={(event) => setSellerSearch(event.target.value)}
-                    />
-                  </div>
-                  <div className="filter-options">
-                    {visibleSellers.map((seller) => {
-                      const count = products.filter(
-                        (p) =>
-                          p.seller === seller &&
-                          (activeCategory === "all" ||
-                            p.category === activeCategory),
-                      ).length;
-                      return (
-                        <div key={seller} className="filter-checkbox">
-                          <input
-                            type="checkbox"
-                            id={`seller-${seller}`}
-                            checked={filters.sellers.includes(seller)}
-                            onChange={() => toggleSeller(seller)}
-                          />
-                          <label htmlFor={`seller-${seller}`}>
-                            <span>{seller}</span>
-                            <span className="filter-badge">({count})</span>
-                          </label>
-                        </div>
-                      );
-                    })}
-                    {visibleSellers.length === 0 && (
-                      <div
-                        style={{
-                          color: "#7f8da6",
-                          fontSize: 12,
-                          padding: "8px 0",
-                        }}
-                      >
-                        No sellers found.
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Rating Filter */}
-            <div className="filter-group">
-              <button
-                className="filter-group-title"
-                onClick={() =>
-                  setFilterExpanded((p) => ({ ...p, rating: !p.rating }))
-                }
-              >
-                Rating
-                <span
-                  className={`filter-group-toggle ${filterExpanded.rating ? "expanded" : ""}`}
-                >
-                  v
-                </span>
-              </button>
-              {filterExpanded.rating && (
-                <div className="rating-control">
-                  <input
-                    type="range"
-                    min="0"
-                    max="5"
-                    step="0.1"
-                    value={visibleRating}
-                    onChange={(event) => {
-                      const nextRating = Number(event.target.value);
-                      updateFilter(
-                        "rating",
-                        nextRating === 0 ? null : nextRating,
-                      );
-                    }}
-                  />
-                  <div className="rating-value-row">
-                    <input
-                      type="number"
-                      min="0"
-                      max="5"
-                      step="0.1"
-                      value={visibleRating}
-                      onChange={(event) => {
-                        const nextRating = Math.min(
-                          5,
-                          Math.max(0, Number(event.target.value)),
-                        );
-                        updateFilter(
-                          "rating",
-                          nextRating === 0 ? null : nextRating,
-                        );
-                      }}
-                    />
-                    <span>
-                      {visibleRating === 0
-                        ? "Any rating"
-                        : `${visibleRating.toFixed(1)}+ Stars`}
-                    </span>
-                  </div>
-                  {filters.rating !== null && (
-                    <button
-                      className="btn-reset"
-                      style={{ marginTop: 10 }}
-                      onClick={() => updateFilter("rating", null)}
-                    >
-                      Clear Rating
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Wishlist Filter */}
-            <div className="filter-group">
-              <div className="filter-checkbox">
-                <input
-                  type="checkbox"
-                  id="wishlist-only"
-                  checked={showWishlistOnly}
-                  onChange={() => setShowWishlistOnly(!showWishlistOnly)}
-                />
-                <label htmlFor="wishlist-only">
-                  <span>Show Liked Items Only ({wishlist.length})</span>
-                </label>
-              </div>
-            </div>
-          </aside>
-
-          {/* Main Products Area */}
-          <main className="products-main">
-            <div className="products-toolbar">
-              <div className="products-search">
+              <div className="filter-group-title">Search</div>
+              <div className="filter-search">
                 <Icons.Search />
                 <input
                   type="search"
-                  placeholder="Search products, sellers, or tags"
-                  value={searchQuery}
-                  onChange={(event) => void handleSearch(event.target.value)}
+                  placeholder="Search products"
+                  value={searchDraft}
+                  onChange={(event) => setSearchDraft(event.target.value)}
                   onFocus={() => {
                     setShowSearchHistory(true);
                     void loadSearchHistory();
                   }}
                 />
-                {isAuthenticated && showSearchHistory && recentSearches.length > 0 && (
-                  <div className="absolute left-0 top-full z-20 mt-2 w-full rounded-2xl border border-gray-200 bg-white p-2 shadow-xl">
-                    <div className="flex items-center justify-between px-3 py-2">
-                      <span className="text-xs font-bold uppercase text-gray-400">
-                        Recent searches
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => void clearSearchHistory()}
-                        className="text-xs font-semibold text-red-500"
-                      >
-                        Clear
-                      </button>
-                    </div>
-                    {recentSearches.map((item) => {
-                      const query = item.query_text || item.query || "";
-                      return (
-                        <button
-                          key={item.id || query}
-                          type="button"
-                          onClick={() => {
-                            setShowSearchHistory(false);
-                            void handleSearch(query);
-                          }}
-                          className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
-                        >
-                          <Icons.Search className="h-4 w-4 text-gray-400" />
-                          {query}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
               </div>
+              {isAuthenticated && showSearchHistory && recentSearches.length > 0 && (
+                <div className="mt-2 rounded-2xl border border-white/10 bg-[#120f1c] p-2 shadow-xl">
+                  <div className="flex items-center justify-between px-2 py-1">
+                    <span className="text-xs font-bold uppercase text-gray-400">
+                      Recent searches
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void clearSearchHistory()}
+                      className="text-xs font-semibold text-red-400"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  {recentSearches.map((item) => {
+                    const query = item.query_text || item.query || "";
+                    return (
+                      <button
+                        key={item.id || query}
+                        type="button"
+                        onClick={() => {
+                          setShowSearchHistory(false);
+                          void handleSearch(query);
+                        }}
+                        className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left text-sm text-gray-200 hover:bg-white/10"
+                      >
+                        <Icons.Search className="h-4 w-4 text-gray-400" />
+                        {query}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="filter-group">
+              <div className="filter-group-title">Category</div>
+              <select
+                className="w-full rounded-xl border border-white/10 bg-[#120f1c] px-3 py-3 text-sm text-white outline-none transition focus:border-violet-400"
+                value={activeCategory}
+                onChange={(event) => scrollToCategory(event.target.value)}
+                disabled={categoriesLoading}
+              >
+                <option value="all">All Categories</option>
+                {apiCategories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="filter-group">
+              <div className="filter-group-title">Price Range</div>
+              <div className="price-inputs">
+                <input
+                  type="number"
+                  min="0"
+                  value={filters.priceRange[0]}
+                  onChange={(event) =>
+                    updatePriceRange([
+                      Number(event.target.value || 0),
+                      filters.priceRange[1],
+                    ])
+                  }
+                  placeholder="Min Price (PKR)"
+                />
+                <span>-</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={filters.priceRange[1]}
+                  onChange={(event) =>
+                    updatePriceRange([
+                      filters.priceRange[0],
+                      Number(event.target.value || 0),
+                    ])
+                  }
+                  placeholder="Max Price (PKR)"
+                />
+              </div>
+            </div>
+
+            <div className="filter-group">
+              <div className="filter-group-title">Sort</div>
+              <select
+                className="w-full rounded-xl border border-white/10 bg-[#120f1c] px-3 py-3 text-sm text-white outline-none transition focus:border-violet-400"
+                value={filters.sortBy}
+                onChange={(event) => updateFilter("sortBy", event.target.value)}
+              >
+                <option value="newest">Newest</option>
+                <option value="price-low">Price Low-High</option>
+                <option value="price-high">Price High-Low</option>
+                <option value="rating">Top Rated</option>
+              </select>
+            </div>
+
+            <button className="btn-reset" onClick={handleClearProductFilters}>
+              Clear Filters
+            </button>
+          </aside>
+
+          {/* Main Products Area */}
+          <main className="products-main">
+            <div className="products-toolbar">
               <span className="results-summary">
                 {useAiSearch
                   ? `${displayedCount} AI results`
@@ -3561,36 +3285,18 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
               <div className="compare-grid">
                 {comparedProducts.map((product) => (
                   <div key={product.id} className="compare-card">
-                    {resolveMarketplaceImageSrc(product as any) ? (
-                      <img
-                        src={
-                          resolveMarketplaceImageSrc(product as any) ||
-                          product.image
-                        }
-                        alt={product.name}
-                        onError={(e) => {
-                          e.currentTarget.style.display = "none";
-                          const placeholder = e.currentTarget
-                            .nextElementSibling as HTMLElement | null;
-                          if (placeholder) {
-                            placeholder.style.display = "flex";
-                          }
-                        }}
-                      />
-                    ) : null}
-                    {!resolveMarketplaceImageSrc(product as any) ? (
-                      <div className="flex h-44 w-full items-center justify-center bg-gray-200 text-gray-500">
-                        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gray-300 text-sm font-bold text-gray-600">
-                          {getMarketplaceInitials(product.name)}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="hidden h-44 w-full items-center justify-center bg-gray-200 text-gray-500">
-                        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gray-300 text-sm font-bold text-gray-600">
-                          {getMarketplaceInitials(product.name)}
-                        </div>
-                      </div>
-                    )}
+                    <img
+                      src={
+                        resolveMarketplaceImageSrc(product as any) ||
+                        product.image ||
+                        "/productsplaceholder.png"
+                      }
+                      alt={product.name}
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = "/productsplaceholder.png";
+                      }}
+                    />
                     <div className="compare-card-body">
                       <h3>{product.name}</h3>
                       <p>{product.seller}</p>
@@ -3703,37 +3409,19 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
               <div className="product-detail-grid">
                 {/* Images */}
                 <div className="product-images">
-                  {resolveMarketplaceImageSrc(selectedProduct as any) ? (
-                    <>
-                      <img
-                        src={
-                          resolveMarketplaceImageSrc(selectedProduct as any) ||
-                          selectedProduct.image
-                        }
-                        alt={selectedProduct.name}
-                        className="main-image"
-                        onError={(e) => {
-                          e.currentTarget.style.display = "none";
-                          const placeholder = e.currentTarget
-                            .nextElementSibling as HTMLElement | null;
-                          if (placeholder) {
-                            placeholder.style.display = "flex";
-                          }
-                        }}
-                      />
-                      <div className="hidden h-full w-full items-center justify-center bg-gray-200 text-gray-500">
-                        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gray-300 text-xl font-bold text-gray-600">
-                          {getMarketplaceInitials(selectedProduct.name)}
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center bg-gray-200 text-gray-500">
-                      <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gray-300 text-xl font-bold text-gray-600">
-                        {getMarketplaceInitials(selectedProduct.name)}
-                      </div>
-                    </div>
-                  )}
+                  <img
+                    src={
+                      resolveMarketplaceImageSrc(selectedProduct as any) ||
+                      selectedProduct.image ||
+                      "/productsplaceholder.png"
+                    }
+                    alt={selectedProduct.name}
+                    className="main-image"
+                    onError={(e) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = "/productsplaceholder.png";
+                    }}
+                  />
                 </div>
 
                 {/* Details */}
@@ -4049,3 +3737,4 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
     </div>
   );
 };
+

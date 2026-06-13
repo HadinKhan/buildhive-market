@@ -3,10 +3,7 @@ import { Icons } from "./Icons";
 import { Product } from "../types";
 import { Button } from "./Button";
 import { useNavigate } from "react-router-dom";
-import {
-  getMarketplaceInitials,
-  resolveMarketplaceImageSrc,
-} from "../src/utils/marketplaceImage";
+import { resolveMarketplaceImageSrc } from "../src/utils/marketplaceImage";
 
 interface ProductCardProps {
   product: Product;
@@ -38,12 +35,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       : product.quantity < 10
         ? {
             label: "Low Stock",
-            className: "bg-orange-500 text-white",
+            className: "bg-amber-500 text-slate-950",
           }
-        : null;
+        : {
+            label: "In Stock",
+            className: "bg-emerald-500 text-white",
+          };
 
   const imgSrc = resolveMarketplaceImageSrc(product as any);
-  const initials = getMarketplaceInitials(product.name);
 
   const handleExplore = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -114,7 +113,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     return (
       <div
         onClick={() => onNavigate && onNavigate("product-detail", product.id)}
-        className="group cursor-pointer rounded-xl bg-slate-100/50 p-3 transition-all hover:bg-white hover:shadow-lg"
+        className="group cursor-pointer overflow-hidden rounded-2xl border p-3 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl"
+        style={{ background: "var(--bh-card)", borderColor: "var(--bh-border)", color: "var(--bh-text)" }}
       >
         {/* Image Area */}
         <div className="relative mb-3 aspect-[4/3] overflow-hidden rounded-lg bg-gray-300">
@@ -125,34 +125,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               {stockBadge.label}
             </span>
           )}
-          {showPlaceholder || !imgSrc ? (
-            <div className="flex h-full w-full items-center justify-center bg-gray-200 text-gray-500">
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gray-300 text-sm font-bold text-gray-600">
-                {initials}
-              </div>
-            </div>
-          ) : (
-            <>
-              <img
-                src={imgSrc}
-                alt={product.name}
-                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
-                onError={(e) => {
-                  e.currentTarget.style.display = "none";
-                  const placeholder = e.currentTarget
-                    .nextElementSibling as HTMLElement | null;
-                  if (placeholder) {
-                    placeholder.style.display = "flex";
-                  }
-                }}
-              />
-              <div className="hidden h-full w-full items-center justify-center bg-gray-200 text-gray-500">
-                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gray-300 text-sm font-bold text-gray-600">
-                  {initials}
-                </div>
-              </div>
-            </>
-          )}
+          <img
+            src={showPlaceholder || !imgSrc ? "/productsplaceholder.png" : imgSrc}
+            alt={product.name}
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+            onError={(e) => {
+              e.currentTarget.onerror = null;
+              e.currentTarget.src = "/productsplaceholder.png";
+            }}
+          />
           <button
             aria-label="Add to wishlist"
             className="absolute right-2 top-2 h-8 w-8 rounded-full bg-white text-gray-400 hover:text-red-500 flex items-center justify-center transition-colors"
@@ -163,14 +144,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
         {/* Content */}
         <div className="space-y-2 px-1">
-          <h3 className="font-bold text-gray-900 line-clamp-2 leading-tight min-h-[2.5rem]">
+          <h3 className="line-clamp-2 min-h-[2.5rem] font-semibold leading-tight text-[var(--bh-text)]">
             {product.name}
           </h3>
 
           <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-500">by {product.author}</span>
+            <span className="inline-flex items-center gap-1 text-xs text-[var(--bh-muted)]"><Icons.Package className="h-3 w-3" /> {product.author}</span>
             <div className="flex items-center gap-2">
-              <span className="font-bold text-gray-900">
+              <span className="font-bold text-[var(--bh-text)]">
                 PKR {product.price.toLocaleString()}
               </span>
               {product.compare_at_price && (
@@ -218,9 +199,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     <div
       onClick={() => onNavigate && onNavigate("product-detail", product.id)}
       className={`group relative cursor-pointer rounded-2xl border transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${
-        isDark
-          ? "bg-slate-800 border-slate-700"
-          : "bg-white border-gray-100 hover:border-gray-200"
+        "bg-[var(--bh-card)] border-[var(--bh-border)]"
       }`}
     >
       {/* Image Area */}
@@ -232,34 +211,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             {stockBadge.label}
           </span>
         )}
-        {imgSrc ? (
-          <>
-            <img
-              src={imgSrc}
-              alt={product.name}
-              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
-              onError={(e) => {
-                e.currentTarget.style.display = "none";
-                const placeholder = e.currentTarget
-                  .nextElementSibling as HTMLElement | null;
-                if (placeholder) {
-                  placeholder.style.display = "flex";
-                }
-              }}
-            />
-            <div className="hidden h-full w-full items-center justify-center bg-gray-200 text-gray-500">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gray-300 text-base font-bold text-gray-600">
-                {initials}
-              </div>
-            </div>
-          </>
-        ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gray-200 text-gray-500">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gray-300 text-base font-bold text-gray-600">
-              {initials}
-            </div>
-          </div>
-        )}
+        <img
+          src={imgSrc || "/productsplaceholder.png"}
+          alt={product.name}
+          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+          onError={(e) => {
+            e.currentTarget.onerror = null;
+            e.currentTarget.src = "/productsplaceholder.png";
+          }}
+        />
 
         {/* Wishlist Button */}
         <button
@@ -281,20 +241,20 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       <div className="p-4">
         <h3
           className={`mb-1 text-lg font-bold line-clamp-1 ${
-            isDark ? "text-white" : "text-gray-900"
+            "text-[var(--bh-text)]"
           }`}
         >
           {product.name}
         </h3>
         <p
           className={`mb-3 text-sm ${
-            isDark ? "text-slate-400" : "text-gray-500"
+            "text-[var(--bh-muted)]"
           }`}
         >
           by{" "}
           <span
             className={`${
-              isDark ? "text-slate-300" : "text-gray-700"
+              "text-[var(--bh-text)]"
             } font-medium`}
           >
             {product.author}
@@ -306,7 +266,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           <div className="flex items-end gap-2">
             <span
               className={`text-xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
+                "text-[var(--bh-text)]"
               }`}
             >
               PKR {product.price.toLocaleString()}
@@ -324,12 +284,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         {/* Footer Row */}
         <div
           className={`flex items-center justify-between border-t pt-3 ${
-            isDark ? "border-slate-700" : "border-gray-100"
+            "border-[var(--bh-border)]"
           }`}
         >
-          <span
-            className={`text-sm ${isDark ? "text-slate-400" : "text-gray-500"}`}
-          >
+          <span className="text-sm text-[var(--bh-muted)]">
             {product.sales || 0} Sales
           </span>
           <Button
