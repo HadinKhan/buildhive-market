@@ -142,6 +142,9 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ embedded = false }) 
   const emojiPickerRef = useRef<HTMLDivElement | null>(null);
   const activeConversationRef = useRef<string | null>(null);
   const createConversationLockRef = useRef(false);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const lastConvRef = useRef<string | null>(null);
+  const messagesLengthRef = useRef(messages.length);
 
   const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const requestedConversationId = query.get("conversationId") || query.get("conv");
@@ -287,7 +290,21 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ embedded = false }) 
   }, [searchTerm]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const prevLength = messagesLengthRef.current;
+    messagesLengthRef.current = messages.length;
+    const convChanged = selectedConversationId !== lastConvRef.current;
+    
+    if (convChanged) {
+      lastConvRef.current = selectedConversationId;
+    }
+
+    if (scrollContainerRef.current && (convChanged || messages.length > prevLength)) {
+      setTimeout(() => {
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+        }
+      }, 50);
+    }
   }, [messages, selectedConversationId]);
 
   useEffect(() => {
@@ -417,7 +434,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ embedded = false }) 
                   <p className="text-xs text-gray-500">Private conversation</p>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4">
                   {loadingMessages ? (
                     <div className="flex items-center justify-center h-full text-gray-400">
                       Loading messages...

@@ -7,8 +7,18 @@ import { Order, orderService } from "../src/services/orderService";
 const formatPkr = (value: unknown) =>
   `PKR ${Number(value || 0).toLocaleString("en-PK")}`;
 
-const getOrderItems = (order: Order | null) =>
-  Array.isArray(order?.items) ? order.items : [];
+const getOrderItems = (order: Order | null) => {
+  const rawItems = order?.items || (order as any)?.order_items;
+  const itemsArray = Array.isArray(rawItems) ? rawItems : [];
+  return itemsArray.map((item: any) => ({
+    ...item,
+    product: item.product || (item.products ? {
+      name: item.products.name,
+      slug: item.products.slug,
+      business_name: (order as any)?.businesses?.business_name || (order as any)?.businessName || "Seller"
+    } : undefined)
+  }));
+};
 
 const getSellerNames = (order: Order | null) => {
   const names = getOrderItems(order)
@@ -105,7 +115,7 @@ export default function OrderConfirmationPage({
 
         <section className="rounded-3xl bg-white p-6 shadow-sm">
           <div className="grid gap-4 md:grid-cols-3">
-            <div>
+            <div className="rounded-2xl bg-gray-50 p-4 text-center">
               <p className="text-xs font-bold uppercase text-gray-400">
                 Seller
               </p>
@@ -113,15 +123,15 @@ export default function OrderConfirmationPage({
                 {getSellerNames(order)}
               </p>
             </div>
-            <div>
+            <div className="rounded-2xl bg-gray-50 p-4 text-center">
               <p className="text-xs font-bold uppercase text-gray-400">
                 Total
               </p>
-              <p className="mt-1 font-semibold text-gray-900">
-                {formatPkr(order.total_amount)}
+              <p className="mt-1 font-semibold text-gray-900 font-mono">
+                {formatPkr(order.total_amount || (order as any).totalAmount)}
               </p>
             </div>
-            <div>
+            <div className="rounded-2xl bg-gray-50 p-4 text-center">
               <p className="text-xs font-bold uppercase text-gray-400">
                 Estimated Delivery
               </p>
@@ -136,32 +146,29 @@ export default function OrderConfirmationPage({
           <h2 className="mb-4 text-lg font-bold text-gray-900">
             Items ordered
           </h2>
-          {items.length === 0 ? (
-            <p className="text-sm text-gray-500">
-              Item details are not available for this order.
-            </p>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {items.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center justify-between gap-4 py-4"
-                >
-                  <div>
-                    <p className="font-semibold text-gray-900">
-                      {item.product?.name || "Product"}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      Qty {item.quantity} - {item.product?.business_name || "Seller"}
-                    </p>
-                  </div>
-                  <p className="font-semibold text-gray-900">
-                    {formatPkr(item.subtotal || item.price * item.quantity)}
+          <div className="divide-y divide-gray-100">
+            {items.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center justify-between gap-4 py-4 text-sm"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-900 truncate">
+                    {item.product?.name || item.product_name || item.name || "Product"}
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    by {item.product?.business_name || "Seller"}
                   </p>
                 </div>
-              ))}
-            </div>
-          )}
+                <div className="text-center text-gray-500 px-4">
+                  {item.quantity} × {formatPkr(item.price || item.unit_price)}
+                </div>
+                <div className="text-right font-bold text-gray-900 font-mono">
+                  {formatPkr(item.subtotal || item.total_price || (Number(item.price || item.unit_price || 0) * item.quantity))}
+                </div>
+              </div>
+            ))}
+          </div>
         </section>
 
         <div className="flex flex-col gap-3 sm:flex-row">

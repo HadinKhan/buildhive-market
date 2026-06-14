@@ -1009,7 +1009,7 @@ const faqItems = [
   },
   {
     q: "How can I get support if I encounter issues?",
-    a: "We offer multiple support channels: our AI Chatbot provides instant 24/7 assistance for common queries; you can contact our support team via email at support@buildhive.pk with a 24-hour response time; and our comprehensive documentation covers platform features and troubleshooting. For urgent matters, our team is available Monday through Friday, 9 AM to 6 PM PST.",
+    a: "We offer multiple support channels: our AI Chatbot provides instant 24/7 assistance for common queries; you can contact our support team via email at teambuildhive@gmail.com with a 24-hour response time; and our comprehensive documentation covers platform features and troubleshooting. For urgent matters, our team is available Monday through Friday, 9 AM to 6 PM PST.",
   },
 ];
 
@@ -1162,13 +1162,13 @@ export const ContactPage: React.FC<ContactPageProps> = ({ onNavigate: _onNavigat
           </p>
 
           <div className="contact-pills reveal stagger-3">
-            <a href="tel:+923001234567" className="contact-pill">
+            <a href="tel:03097011748" className="contact-pill">
               <Icons.Phone />
-              +92 300 1234567
+              03097011748
             </a>
-            <a href="mailto:support@buildhive.pk" className="contact-pill">
+            <a href="mailto:teambuildhive@gmail.com" className="contact-pill">
               <Icons.Mail />
-              support@buildhive.pk
+              teambuildhive@gmail.com
             </a>
             <span className="contact-pill">
               <Icons.Clock />
@@ -1195,7 +1195,7 @@ export const ContactPage: React.FC<ContactPageProps> = ({ onNavigate: _onNavigat
                 <div className="info-content">
                   <h3>Phone</h3>
                   <p>
-                    <a href="tel:+923001234567">+92 300 1234567</a>
+                    <a href="tel:03097011748">03097011748</a>
                   </p>
                   <p style={{ fontSize: "13px", marginTop: "4px" }}>
                     Mon - Fri, 9am - 6pm PST
@@ -1210,7 +1210,7 @@ export const ContactPage: React.FC<ContactPageProps> = ({ onNavigate: _onNavigat
                 <div className="info-content">
                   <h3>Email</h3>
                   <p>
-                    <a href="mailto:support@buildhive.pk">support@buildhive.pk</a>
+                    <a href="mailto:teambuildhive@gmail.com">teambuildhive@gmail.com</a>
                   </p>
                   <p style={{ fontSize: "13px", marginTop: "4px" }}>
                     We reply within 24 hours

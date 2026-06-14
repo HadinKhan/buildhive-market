@@ -46,7 +46,17 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   const navigate = useNavigate();
   const { isAuthenticated, user } = useAuth();
   const { toggleWishlist, isInWishlist } = useWishlist();
-  const [quantity, setQuantity] = useState(1);
+  const moq = useMemo(() => {
+    const val = parseInt(String((product as any).minimum_order_quantity ?? (product as any).minimumOrderQuantity ?? 1), 10);
+    return isNaN(val) || val < 1 ? 1 : val;
+  }, [product]);
+
+  const [quantity, setQuantity] = useState(moq);
+
+  useEffect(() => {
+    setQuantity(moq);
+  }, [moq]);
+
   const [activeTab, setActiveTab] = useState("Overview");
   const [selectedImage, setSelectedImage] = useState(0);
   const [imageFailed, setImageFailed] = useState(false);
@@ -170,7 +180,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     Array.from({ length: 5 }, (_, index) => (
       <Icons.Star
         key={index}
-        className={`h-4 w-4 ${index < rating ? "fill-current text-yellow-400" : "text-gray-300"}`}
+        className={`h-4 w-4 ${index < rating ? "fill-current text-yellow-400" : "text-slate-600"}`}
       />
     ));
 
@@ -258,7 +268,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     try {
       await productService.createReview(product.id, {
         rating: reviewRating,
-        comment: reviewComment.trim(),
+        body: reviewComment.trim(),
       });
       setReviewComment("");
       setReviewRating(5);
@@ -291,10 +301,10 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-white pb-20 pt-6">
+    <div className="min-h-screen pb-20 pt-6" style={{background:"#0a0a1a"}}>
       <div className="container mx-auto px-4 lg:px-8">
         {/* Breadcrumb */}
-        <nav className="mb-8 flex items-center gap-2 text-sm text-gray-500">
+        <nav className="mb-8 flex items-center gap-2 text-sm text-slate-400">
           <span
             className="cursor-pointer hover:text-primary"
             onClick={() => onNavigate("home")}
@@ -309,7 +319,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
             Products
           </span>
           <Icons.ChevronRight className="h-4 w-4" />
-          <span className="font-medium text-gray-900 truncate max-w-[200px]">
+          <span className="font-medium text-slate-200 truncate max-w-[200px]">
             {product.name}
           </span>
         </nav>
@@ -317,11 +327,11 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
         <div className="grid gap-12 lg:grid-cols-2 lg:gap-16">
           {/* Left Column - Images */}
           <div className="flex flex-col gap-6">
-            <div className="relative aspect-square w-full overflow-hidden rounded-3xl bg-gray-100">
+            <div className="relative aspect-square w-full overflow-hidden rounded-3xl" style={{background:"#1e1e35"}}>
               {activeImageSrc && !imageFailed ? (
                 <img
                   src={activeImageSrc}
-                  alt={product.title}
+                  alt={product.name}
                   className="h-full w-full object-cover transition-all duration-500"
                   onError={(e) => {
                     e.currentTarget.onerror = null;
@@ -330,8 +340,8 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 />
               ) : null}
               {!activeImageSrc || imageFailed ? (
-                <div className="flex h-full w-full items-center justify-center bg-gray-200 text-gray-500">
-                  <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gray-300 text-xl font-bold text-gray-600">
+                <div className="flex h-full w-full items-center justify-center text-slate-500" style={{background:"#1e1e35"}}>
+                  <div className="flex h-20 w-20 items-center justify-center rounded-full text-xl font-bold text-slate-400" style={{background:"#2a2a45"}}>
                     {productInitials}
                   </div>
                 </div>
@@ -339,8 +349,8 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               <button
                 aria-label="Add to wishlist"
                 onClick={() => void handleWishlistToggle()}
-                className={`absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/80 backdrop-blur-sm transition-colors hover:text-red-500 ${
-                  isInWishlist(product.id) ? "text-red-500" : "text-gray-500"
+                className={`absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full backdrop-blur-sm transition-colors hover:text-red-500 bg-[#16162a]/80 ${
+                  isInWishlist(product.id) ? "text-red-500" : "text-slate-400"
                 }`}
               >
                 <Icons.Heart
@@ -358,7 +368,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                   className={`relative aspect-square overflow-hidden rounded-2xl border-2 transition-all ${
                     selectedImage === idx
                       ? "border-primary ring-2 ring-primary/20"
-                      : "border-transparent hover:border-gray-200"
+                      : "border-transparent hover:border-slate-600"
                   }`}
                 >
                   {img ? (
@@ -372,15 +382,15 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                           e.currentTarget.src = "/productsplaceholder.png";
                         }}
                       />
-                      <div className="hidden h-full w-full items-center justify-center bg-gray-200 text-gray-500">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-300 text-xs font-bold text-gray-600">
+                      <div className="hidden h-full w-full items-center justify-center text-slate-500" style={{background:"#1e1e35"}}>
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full text-xs font-bold text-slate-400" style={{background:"#2a2a45"}}>
                           {productInitials}
                         </div>
                       </div>
                     </>
                   ) : (
-                    <div className="flex h-full w-full items-center justify-center bg-gray-200 text-gray-500">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-300 text-xs font-bold text-gray-600">
+                    <div className="flex h-full w-full items-center justify-center text-slate-500" style={{background:"#1e1e35"}}>
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full text-xs font-bold text-slate-400" style={{background:"#2a2a45"}}>
                         {productInitials}
                       </div>
                     </div>
@@ -392,23 +402,23 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
           {/* Right Column - Details */}
           <div>
-            <div className="mb-2 text-sm font-medium uppercase tracking-wider text-gray-500">
+            <div className="mb-2 text-sm font-medium uppercase tracking-wider text-slate-400">
               Construction Material
             </div>
-            <h1 className="mb-4 text-3xl font-bold text-gray-900 sm:text-4xl">
+            <h1 className="mb-4 text-3xl font-bold text-white sm:text-4xl">
               {product.name}
             </h1>
 
             <div className="mb-6 flex flex-wrap items-center gap-3">
-              <div className="text-sm text-gray-500">
+              <div className="text-sm text-slate-400">
                 Seller:{" "}
-                <span className="font-semibold text-gray-900">
+                <span className="font-semibold text-white">
                   {product.author || "BuildHive Seller"}
                 </span>
               </div>
               <Button
                 variant="outline"
-                className="border-violet-200 text-violet-700 hover:border-violet-300 hover:bg-violet-50"
+                className="border-violet-500 text-violet-400 hover:border-violet-400 hover:bg-violet-900/20"
                 size="sm"
                 onClick={handleMessageSeller}
               >
@@ -428,11 +438,11 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
             <div className="mb-6 flex items-center gap-2">
               <div className="flex text-yellow-400">
                 <Icons.Star className="h-4 w-4 fill-current" />
-                <span className="ml-1 font-bold text-gray-900">
+                <span className="ml-1 font-bold text-white">
                   {product.rating || 0}
                 </span>
               </div>
-              <span className="text-gray-400">
+              <span className="text-slate-500">
                 ({(product as any).total_reviews || (product as any).review_count || reviews.length || product.sales || 0} reviews)
               </span>
             </div>
@@ -446,23 +456,23 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 ["Low Stock", (product as any).low_stock_threshold ?? "N/A"],
                 ["Weight", (product as any).weight ? `${(product as any).weight} ${(product as any).weight_unit || ""}` : "N/A"],
               ].map(([label, value]) => (
-                <div key={label} className="rounded-2xl border border-gray-100 bg-gray-50 p-3">
-                  <div className="text-xs font-bold uppercase text-gray-400">{label}</div>
-                  <div className="mt-1 font-semibold text-gray-900">{String(value)}</div>
+                <div key={label} className="rounded-2xl border p-3" style={{background:"#16162a",borderColor:"#2a2a45"}}>
+                  <div className="text-xs font-bold uppercase text-slate-500">{label}</div>
+                  <div className="mt-1 font-semibold text-slate-200">{String(value)}</div>
                 </div>
               ))}
             </div>
 
-            <div className="mb-8 text-3xl font-bold text-gray-900">
+            <div className="mb-8 text-3xl font-bold text-white">
               PKR {product.price.toLocaleString()}
               {product.compare_at_price && (
-                <span className="ml-3 text-lg font-medium text-gray-400 line-through">
+                <span className="ml-3 text-lg font-medium text-slate-600 line-through">
                   PKR {product.compare_at_price.toLocaleString()}
                 </span>
               )}
             </div>
 
-            <p className="mb-8 text-base leading-relaxed text-gray-500">
+            <p className="mb-8 text-base leading-relaxed text-slate-400">
               {product.description ||
                 "Designed for professional durability and performance, this construction essential meets all safety standards. Ideal for heavy-duty applications, providing reliability when you need it most."}
             </p>
@@ -483,7 +493,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                   className={`h-2 w-2 rounded-full ${isOutOfStock ? "bg-red-500" : "bg-green-500"}`}
                 ></div>
                 <span
-                  className={`text-sm ${isOutOfStock ? "text-red-600" : "text-gray-600"}`}
+                  className={`text-sm ${isOutOfStock ? "text-red-400" : "text-slate-400"}`}
                 >
                   {product.quantity} items in stock
                 </span>
@@ -492,46 +502,51 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
             {/* Quantity */}
             <div className="mb-8">
-              <div className="mb-3 text-sm font-medium text-gray-900">
-                Quantity
+              <div className="mb-3 flex items-center gap-3 text-sm font-medium text-slate-200">
+                <span>Quantity</span>
+                {moq > 1 && (
+                  <span className="rounded-full bg-violet-900/40 border border-violet-500/30 px-2.5 py-0.5 text-[11px] text-violet-300 font-semibold">
+                    Minimum order: {moq} units
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-4">
-                <div className="flex items-center rounded-full border border-gray-200 bg-gray-50 px-2 py-1">
+                <div className="flex items-center rounded-full px-2 py-1" style={{border:"1px solid #2a2a45",background:"#16162a"}}>
                   <button
-                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                    onClick={() => setQuantity(Math.max(moq, quantity - 1))}
                     aria-label="Decrease quantity"
-                    className="flex h-8 w-8 items-center justify-center rounded-full text-gray-500 hover:bg-white hover:text-primary hover:shadow-sm"
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-violet-900/30 hover:text-violet-400"
                   >
                     <Icons.Minus className="h-4 w-4" />
                   </button>
-                  <span className="w-12 text-center font-bold text-gray-900">
+                  <span className="w-12 text-center font-bold text-white">
                     {quantity}
                   </span>
                   <button
                     onClick={() => setQuantity(quantity + 1)}
                     aria-label="Increase quantity"
-                    className="flex h-8 w-8 items-center justify-center rounded-full text-gray-500 hover:bg-white hover:text-primary hover:shadow-sm"
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-violet-900/30 hover:text-violet-400"
                   >
                     <Icons.Plus className="h-4 w-4" />
                   </button>
                 </div>
-                <div className="text-sm text-gray-500">
-                  {product.stock || 50} pieces available
+                <div className="text-sm text-slate-400">
+                   {product.quantity || 50} pieces available
                 </div>
               </div>
             </div>
 
             {/* Tabs */}
             <div className="mb-8">
-              <div className="flex gap-2 rounded-full bg-gray-100 p-1">
-                {["Overview", "Specs", "Guide", "Reviews"].map((tab) => (
+              <div className="flex gap-2 rounded-full p-1" style={{background:"#1a1a2e"}}>
+                {["Overview", "Specs", "Reviews"].map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
                     className={`flex-1 rounded-full px-4 py-2 text-sm font-medium transition-all ${
                       activeTab === tab
-                        ? "bg-white text-gray-900 shadow-sm"
-                        : "text-gray-500 hover:text-gray-900"
+                        ? "bg-[#2a2a45] text-white shadow-sm"
+                        : "text-slate-500 hover:text-white"
                     }`}
                   >
                     {tab}
@@ -541,19 +556,19 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               <div className="mt-6">
                 {activeTab === "Overview" && (
                   <div className="space-y-4">
-                    <h3 className="font-bold text-gray-900">
+                    <h3 className="font-bold text-white">
                       About this product
                     </h3>
-                    <p className="text-sm text-gray-500">
-                      The {product.title} is designed with industry
+                    <p className="text-sm text-slate-400">
+                      The {product.name} is designed with industry
                       professionals in mind. Whether you are managing a
                       large-scale commercial project or a home renovation, this
                       tool provides the efficiency and safety you expect.
                     </p>
-                    <h3 className="font-bold text-gray-900">
+                    <h3 className="font-bold text-white">
                       Feature Highlights
                     </h3>
-                    <ul className="list-inside list-disc space-y-2 text-sm text-gray-500">
+                    <ul className="list-inside list-disc space-y-2 text-sm text-slate-400">
                       <li>Industrial grade durability</li>
                       <li>Certified safety standards (ISO 9001)</li>
                       <li>High efficiency performance</li>
@@ -562,16 +577,16 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                     </ul>
                     {productTags.length > 0 && (
                       <div>
-                        <h3 className="font-bold text-gray-900">Tags</h3>
+                        <h3 className="font-bold text-white">Tags</h3>
                         <div className="mt-2 flex flex-wrap gap-2">
-                          {productTags.map((tag) => (
+                          {productTags.map((tag: any) => (
                             <button
                               key={String(tag)}
                               type="button"
                               onClick={() =>
                                 navigate(`/products?tag=${encodeURIComponent(String(tag))}`)
                               }
-                              className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600 hover:bg-violet-50 hover:text-violet-700"
+                              className="rounded-full px-3 py-1 text-xs font-semibold text-slate-400 hover:text-violet-400" style={{background:"#1e1e35"}}
                             >
                               {String(tag)}
                             </button>
@@ -596,75 +611,25 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                       ["Updated", (product as any).updated_at ? new Date((product as any).updated_at).toLocaleDateString() : "N/A"],
                     ].map(([label, value]) => (
                       <React.Fragment key={label}>
-                        <div className="font-medium text-gray-900">{label}</div>
-                        <div className="text-gray-500">{String(value)}</div>
+                        <div className="font-medium text-slate-200">{label}</div>
+                        <div className="text-slate-400">{String(value)}</div>
                       </React.Fragment>
                     ))}
                   </div>
                 )}
-                {activeTab === "Guide" && (
-                  <div className="space-y-5 text-sm text-gray-500">
-                    <p>User manuals and safety guides are available for download after purchase.</p>
-                    <div>
-                      <h3 className="font-bold text-gray-900">Q&A</h3>
-                      {productQuestions.length === 0 ? (
-                        <p className="mt-2">No questions yet.</p>
-                      ) : (
-                        productQuestions.map((item, index) => (
-                          <div key={item.id || index} className="mt-3 rounded-2xl border border-gray-100 p-4">
-                            <p className="font-semibold text-gray-900">
-                              {item.question_text || item.question || item.questionText}
-                            </p>
-                            <p>{item.answer_text || item.answer || "No answer yet."}</p>
-                          </div>
-                        ))
-                      )}
-                      {isAuthenticated && (
-                        <form onSubmit={submitQuestion} className="mt-4 space-y-3">
-                          <textarea
-                            value={questionText}
-                            onChange={(event) => setQuestionText(event.target.value)}
-                            rows={3}
-                            placeholder="Ask the seller a question"
-                            className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-violet-400"
-                          />
-                          <Button type="submit" disabled={questionLoading}>
-                            {questionLoading ? "Submitting..." : "Ask Question"}
-                          </Button>
-                        </form>
-                      )}
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-gray-900">Timeline</h3>
-                      {productTimeline.length === 0 ? (
-                        <p className="mt-2">No timeline entries yet.</p>
-                      ) : (
-                        productTimeline.map((item, index) => (
-                          <div key={item.id || index} className="mt-3 rounded-2xl border border-gray-100 p-4">
-                            <p className="font-semibold text-gray-900">{item.title || item.event_type || "Event"}</p>
-                            <p>{item.description || ""}</p>
-                            <p className="mt-1 text-xs text-gray-400">
-                              {item.created_at ? new Date(item.created_at).toLocaleString() : ""}
-                            </p>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                )}
-                {activeTab === "Reviews" && (
+                                {activeTab === "Reviews" && (
                   <div className="space-y-4">
                     {isAuthenticated && isBuyer ? (
                       <form
                         onSubmit={submitReview}
-                        className="rounded-2xl border border-violet-100 bg-violet-50/60 p-5"
+                        className="rounded-2xl p-5" style={{border:"1px solid rgba(124,58,237,0.25)",background:"rgba(124,58,237,0.08)"}}
                       >
                         <div className="flex flex-wrap items-start justify-between gap-4">
                           <div>
-                            <h3 className="font-bold text-gray-900">
+                            <h3 className="font-bold text-white">
                               Write a Review
                             </h3>
-                            <p className="mt-1 text-sm text-gray-500">
+                            <p className="mt-1 text-sm text-slate-400">
                               Share your experience with this product.
                             </p>
                           </div>
@@ -683,7 +648,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                                     className={`h-6 w-6 ${
                                       value <= reviewRating
                                         ? "fill-current text-yellow-400"
-                                        : "text-gray-300"
+                                        : "text-slate-600"
                                     }`}
                                   />
                                 </button>
@@ -696,7 +661,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                           onChange={(event) => setReviewComment(event.target.value)}
                           rows={4}
                           placeholder="Write your review..."
-                          className="mt-4 w-full rounded-2xl border border-violet-100 bg-white px-4 py-3 text-sm text-gray-700 outline-none transition focus:border-violet-300"
+                          className="mt-4 w-full rounded-2xl px-4 py-3 text-sm text-slate-200 outline-none transition focus:border-violet-500" style={{background:"#16162a",border:"1px solid #2a2a45",colorScheme:"dark"}}
                         />
                         <div className="mt-4 flex justify-end">
                           <Button type="submit" disabled={reviewSubmitting}>
@@ -705,7 +670,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                         </div>
                       </form>
                     ) : (
-                      <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-500">
+                      <div className="rounded-2xl p-4 text-sm text-slate-400" style={{border:"1px solid #2a2a45",background:"#16162a"}}>
                         {isAuthenticated
                           ? "Only buyer accounts can write product reviews."
                           : "Sign in as a buyer to write a review."}
@@ -713,13 +678,13 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                     )}
 
                     {reviewsLoading ? (
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-slate-400">
                         Loading reviews...
                       </p>
                     ) : reviewsError ? (
                       <p className="text-sm text-red-500">{reviewsError}</p>
                     ) : reviews.length === 0 ? (
-                      <p className="text-sm text-gray-500">No reviews yet.</p>
+                      <p className="text-sm text-slate-400">No reviews yet.</p>
                     ) : (
                       reviews.map((review) => {
                         const reviewerName =
@@ -740,32 +705,32 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                         return (
                           <div
                             key={review.id}
-                            className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm"
+                            className="rounded-2xl p-5" style={{border:"1px solid #2a2a45",background:"#16162a"}}
                           >
                             <div className="flex items-start justify-between gap-4">
                               <div>
                                 <div className="flex items-center gap-1">
                                   {renderStars(Number(review.rating || 0))}
                                 </div>
-                                <p className="mt-2 font-semibold text-gray-900">
+                                <p className="mt-2 font-semibold text-white">
                                   {review.title || "Review"}
                                 </p>
-                                <p className="mt-1 text-sm text-gray-500">
+                                <p className="mt-1 text-sm text-slate-400">
                                   {reviewerName}
                                 </p>
                               </div>
-                              <div className="text-sm font-semibold text-gray-900">
+                              <div className="text-sm font-semibold text-white">
                                 {Number(review.rating || 0).toFixed(1)}
                               </div>
                             </div>
-                            <div className="mt-2 flex items-center gap-2 text-xs text-gray-400">
+                            <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
                               <span>
                                 {review.created_at || review.createdAt
                                   ? new Date(review.created_at || review.createdAt || "").toLocaleDateString()
                                   : "Recent review"}
                               </span>
                               {review.verified_purchase && (
-                                <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700">
+                                <span className="rounded-full px-2 py-0.5 font-semibold text-emerald-400" style={{background:"rgba(16,185,129,0.12)"}}>
                                   Verified Purchase
                                 </span>
                               )}
@@ -785,12 +750,12 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                               )}
                             </div>
                             {comment && (
-                              <p className="mt-3 text-sm leading-relaxed text-gray-600">
+                              <p className="mt-3 text-sm leading-relaxed text-slate-300">
                                 {comment}
                               </p>
                             )}
                             {sellerResponse && (
-                              <div className="mt-3 rounded-xl bg-violet-50 p-3 text-sm text-violet-800">
+                              <div className="mt-3 rounded-xl p-3 text-sm text-violet-300" style={{background:"rgba(124,58,237,0.12)"}}>
                                 <span className="font-bold">Seller response: </span>
                                 {sellerResponse}
                               </div>
@@ -815,7 +780,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               </Button>
               <Button
                 variant="outline"
-                className="flex-1 border-gray-300 hover:border-gray-900 hover:bg-gray-50"
+                className="flex-1 border-slate-600 text-slate-300 hover:border-slate-400 hover:bg-slate-800/40"
                 size="lg"
                 onClick={handleBuyNow}
               >
@@ -827,17 +792,17 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       </div>
       {reportTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl">
-            <h2 className="text-xl font-bold text-gray-900">
+          <div className="w-full max-w-md rounded-3xl p-6 shadow-xl" style={{background:"#16162a",border:"1px solid #2a2a45"}}>
+            <h2 className="text-xl font-bold text-white">
               Report {reportTarget.type === "product" ? "Product" : "Review"}
             </h2>
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-1 text-sm text-slate-400">
               Choose the reason that best describes the issue.
             </p>
             <select
               value={reportReason}
               onChange={(event) => setReportReason(event.target.value)}
-              className="mt-4 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-red-300"
+              className="mt-4 w-full rounded-xl px-3 py-2 text-sm text-slate-200 outline-none focus:border-red-400" style={{background:"#0a0a1a",border:"1px solid #2a2a45",colorScheme:"dark"}}
             >
               <option value="">Select a reason</option>
               <option value="Spam or misleading">Spam or misleading</option>
@@ -852,7 +817,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                   setReportTarget(null);
                   setReportReason("");
                 }}
-                className="rounded-xl px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100"
+                className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-400 hover:bg-slate-700/40"
               >
                 Cancel
               </button>

@@ -4,6 +4,7 @@ export const homePageStyles = `
   background: #0b0f12;
   color: #e2e8f0;
   overflow-x: hidden;
+  overflow-y: visible;
 }
 
 .hero-section {
@@ -41,7 +42,10 @@ export const homePageStyles = `
 .btn-secondary { background: rgba(255, 255, 255, 0.025); color: #e9d5ff; border: 1px solid rgba(167, 139, 250, 0.28); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08); }
 .btn-secondary:hover { background: rgba(255, 255, 255, 0.055); color: #ffffff; transform: translateY(-2px); border-color: rgba(167, 139, 250, 0.5); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 16px 34px rgba(0, 0, 0, 0.24); }
 
-.hero-stats-bar { display: flex; justify-content: center; gap: 44px; flex-wrap: wrap; padding: 24px; background: rgba(17, 21, 29, 0.72); border: 1px solid rgba(126, 107, 199, 0.18); border-radius: 20px; backdrop-filter: blur(12px); }
+.hero-stats-bar { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; padding: 20px; background: rgba(17, 21, 29, 0.72); border: 1px solid rgba(126, 107, 199, 0.18); border-radius: 20px; backdrop-filter: blur(12px); }
+@media (min-width: 640px) {
+  .hero-stats-bar { gap: 44px; padding: 24px; }
+}
 .hero-stat { text-align: center; }
 .hero-stat-value { font-size: 24px; font-weight: 900; color: white; margin-bottom: 4px; }
 .hero-stat-label { font-size: 13px; color: #94a3b8; font-weight: 700; }
@@ -54,7 +58,10 @@ export const homePageStyles = `
 .section-title { font-size: clamp(28px, 4vw, 40px); font-weight: 900; color: white; margin: 0 0 12px; }
 .section-subtitle { font-size: 16px; color: #94a3b8; max-width: 560px; margin: 0 auto; line-height: 1.6; }
 
-.home-about-grid { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 56px; align-items: center; }
+.home-about-grid { display: grid; grid-template-columns: 1fr; gap: 32px; align-items: center; }
+@media (min-width: 1024px) {
+  .home-about-grid { grid-template-columns: 1.05fr 0.95fr; gap: 56px; }
+}
 .home-about-copy h2 { font-size: clamp(30px, 4vw, 48px); line-height: 1.12; font-weight: 900; color: #fff; margin: 0 0 20px; }
 
 `;

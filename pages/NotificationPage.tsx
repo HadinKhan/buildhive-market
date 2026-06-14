@@ -536,6 +536,7 @@ export const NotificationPage: React.FC<NotificationPageProps> = ({ onNavigate }
   }, []);
 
   const deleteNotification = useCallback((id: string) => {
+    userService.deleteNotification(id).catch(() => undefined);
     setNotifications((current) => current.filter((notification) => notification.id !== id));
   }, []);
 

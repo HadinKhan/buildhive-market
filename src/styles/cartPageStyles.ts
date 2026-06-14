@@ -833,4 +833,25 @@ export const cartPageStyles = `
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 480px) {
+  .cart-item-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .cart-item-total {
+    text-align: left;
+  }
+  .cart-action-row {
+    justify-content: flex-start;
+    width: 100%;
+  }
+  .btn-remove,
+  .btn-save-later {
+    flex: 1;
+    justify-content: center;
+    min-height: 44px;
+  }
+}
 `;

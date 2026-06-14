@@ -393,12 +393,11 @@ export const CartPage: React.FC<CartPageProps> = ({
                             onNavigate("product-detail", item.productId)
                           }
                         >
-                          {item.image
-                            ? (() => {
-                                const imageSrc = resolveMarketplaceImageSrc({
-                                  image: item.image,
-                                });
-                                return imageSrc ? (
+                          {(() => {
+                            const imageSrc = item.image ? resolveMarketplaceImageSrc({ image: item.image }) : null;
+                            if (imageSrc) {
+                              return (
+                                <>
                                   <img
                                     src={imageSrc}
                                     alt={item.name}
@@ -412,22 +411,23 @@ export const CartPage: React.FC<CartPageProps> = ({
                                       }
                                     }}
                                   />
-                                ) : null;
-                              })()
-                            : null}
-                          {!item.image ? (
-                            <div className="flex h-full w-full items-center justify-center rounded-2xl bg-gray-200 text-gray-500">
-                              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-300 text-xs font-bold text-gray-600">
-                                {getMarketplaceInitials(item.name)}
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="hidden h-full w-full items-center justify-center rounded-2xl bg-gray-200 text-gray-500">
-                              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-300 text-xs font-bold text-gray-600">
-                                {getMarketplaceInitials(item.name)}
-                              </div>
-                            </div>
-                          )}
+                                  <div className="hidden h-full w-full items-center justify-center rounded-2xl bg-gray-200 text-gray-500">
+                                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-300 text-xs font-bold text-gray-600">
+                                      {getMarketplaceInitials(item.name)}
+                                    </div>
+                                  </div>
+                                </>
+                              );
+                            } else {
+                              return (
+                                <div className="flex h-full w-full items-center justify-center rounded-2xl bg-gray-200 text-gray-500">
+                                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-300 text-xs font-bold text-gray-600">
+                                    {getMarketplaceInitials(item.name)}
+                                  </div>
+                                </div>
+                              );
+                            }
+                          })()}
                         </div>
 
                         <div className="cart-item-details">
@@ -550,12 +550,11 @@ export const CartPage: React.FC<CartPageProps> = ({
                       style={{ opacity: 0.72 }}
                     >
                       <div className="cart-item-image-wrap">
-                        {item.image
-                          ? (() => {
-                              const imageSrc = resolveMarketplaceImageSrc({
-                                image: item.image,
-                              });
-                              return imageSrc ? (
+                        {(() => {
+                          const imageSrc = item.image ? resolveMarketplaceImageSrc({ image: item.image }) : null;
+                          if (imageSrc) {
+                            return (
+                              <>
                                 <img
                                   src={imageSrc}
                                   alt={item.name}
@@ -569,22 +568,23 @@ export const CartPage: React.FC<CartPageProps> = ({
                                     }
                                   }}
                                 />
-                              ) : null;
-                            })()
-                          : null}
-                        {!item.image ? (
-                          <div className="flex h-full w-full items-center justify-center rounded-2xl bg-gray-200 text-gray-500">
-                            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-300 text-xs font-bold text-gray-600">
-                              {getMarketplaceInitials(item.name)}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="hidden h-full w-full items-center justify-center rounded-2xl bg-gray-200 text-gray-500">
-                            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-300 text-xs font-bold text-gray-600">
-                              {getMarketplaceInitials(item.name)}
-                            </div>
-                          </div>
-                        )}
+                                <div className="hidden h-full w-full items-center justify-center rounded-2xl bg-gray-200 text-gray-500">
+                                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-300 text-xs font-bold text-gray-600">
+                                    {getMarketplaceInitials(item.name)}
+                                  </div>
+                                </div>
+                              </>
+                            );
+                          } else {
+                            return (
+                              <div className="flex h-full w-full items-center justify-center rounded-2xl bg-gray-200 text-gray-500">
+                                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-300 text-xs font-bold text-gray-600">
+                                  {getMarketplaceInitials(item.name)}
+                                </div>
+                              </div>
+                            );
+                          }
+                        })()}
                       </div>
                       <div className="cart-item-details">
                         <h3 className="cart-item-name">{item.name}</h3>
@@ -634,65 +634,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                 </div>
               )}
 
-              {visibleCartItems.length > 0 && (
-                <div className="recommended-section">
-                  <h3 className="recommended-title">
-                    Frequently Bought Together
-                  </h3>
-                  <div className="recommended-grid">
-                    {recommendedProducts.map((product) => (
-                      <div key={product.id} className="recommended-card">
-                        {product.image ? (
-                          <>
-                            <img
-                              src={
-                                resolveMarketplaceImageSrc({
-                                  image: product.image,
-                                }) || product.image
-                              }
-                              alt={product.name}
-                              onError={(e) => {
-                                e.currentTarget.style.display = "none";
-                                const placeholder = e.currentTarget
-                                  .nextElementSibling as HTMLElement | null;
-                                if (placeholder) {
-                                  placeholder.style.display = "flex";
-                                }
-                              }}
-                            />
-                            <div className="hidden h-full w-full items-center justify-center bg-gray-200 text-gray-500">
-                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-300 text-xs font-bold text-gray-600">
-                                {getMarketplaceInitials(product.name)}
-                              </div>
-                            </div>
-                          </>
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center bg-gray-200 text-gray-500">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-300 text-xs font-bold text-gray-600">
-                              {getMarketplaceInitials(product.name)}
-                            </div>
-                          </div>
-                        )}
-                        <div className="recommended-card-body">
-                          <div
-                            style={{
-                              color: "#fff",
-                              fontWeight: 800,
-                              fontSize: 13,
-                              marginBottom: 6,
-                            }}
-                          >
-                            {product.name}
-                          </div>
-                          <div style={{ color: "#c4b5fd", fontWeight: 900 }}>
-                            PKR {product.price.toLocaleString()}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+
             </div>
 
             <aside className="order-summary">

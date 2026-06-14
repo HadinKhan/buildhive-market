@@ -4,6 +4,7 @@ import { Button } from "../components/Button";
 import { useAuth } from "../src/context/AuthContext";
 import { getStartedPageData } from "../src/data/getStartedPageData";
 import { authPageStyles } from "../src/styles/authPageStyles";
+import { toast } from "react-toastify";
 
 interface GetStartedPageProps {
   onNavigate: (page: string) => void;
@@ -22,14 +23,21 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
     password: "",
     confirmPassword: "",
     accountType: "buyer",
+    businessName: "",
     termsAccepted: false,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const needsBusinessName = formData.accountType === "supplier" || formData.accountType === "contractor";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setPhoneError(null);
 
     if (formData.password !== formData.confirmPassword) {
       setError("Passwords do not match");
@@ -41,6 +49,20 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
       return;
     }
 
+    const phone = formData.phone ? formData.phone.trim() : "";
+    if (phone) {
+      const phoneRegex = /^03[0-9]{9}$/;
+      if (!phoneRegex.test(phone)) {
+        setPhoneError("Phone number must start with 03 and be 11 digits (e.g. 03001234567)");
+        return;
+      }
+    }
+
+    if (needsBusinessName && !formData.businessName.trim()) {
+      setError("Business name is required for Seller and Contractor accounts");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -48,14 +70,23 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
         email: formData.email,
         password: formData.password,
         fullName: formData.name,
-        phone: formData.phone || undefined,
+        phone: phone || undefined,
         role: formData.accountType as "buyer" | "contractor" | "supplier",
+        businessName: needsBusinessName ? formData.businessName.trim() : undefined,
         termsAccepted: formData.termsAccepted,
-      });
+      } as any);
+      toast.success("Account created! Check your email to verify before logging in.");
       onRegister(formData.name, formData.email);
       onNavigate("signin");
     } catch (err: any) {
-      setError(err.message || "Registration failed");
+      // Parse human-readable message from backend response
+      const msg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.response?.data?.errors?.[0]?.message ||
+        err?.message ||
+        "Registration failed. Please try again.";
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -121,10 +152,19 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
               <input
                 name="phone"
                 type="tel"
-                onChange={handleChange}
+                placeholder="03XXXXXXXXX"
+                onChange={(e) => {
+                  handleChange(e);
+                  if (phoneError) setPhoneError(null);
+                }}
                 aria-label="Phone Number"
                 className="auth-input"
               />
+              {phoneError && (
+                <div style={{ color: "#f87171", fontSize: "12px", marginTop: "4px" }}>
+                  {phoneError}
+                </div>
+              )}
             </div>
           </div>
 
@@ -133,27 +173,55 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
               <label className="auth-label">
                 {getStartedPageData.form.passwordLabel}
               </label>
-              <input
-                name="password"
-                type="password"
-                required
-                onChange={handleChange}
-                aria-label="Password"
-                className="auth-input"
-              />
+              <div className="auth-input-wrap">
+                <input
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  required
+                  onChange={handleChange}
+                  aria-label="Password"
+                  className="auth-input with-right-icon"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="auth-icon-btn"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? (
+                    <Icons.EyeOff className="h-5 w-5" />
+                  ) : (
+                    <Icons.Eye className="h-5 w-5" />
+                  )}
+                </button>
+              </div>
             </div>
             <div className="auth-field">
               <label className="auth-label">
                 {getStartedPageData.form.confirmPasswordLabel}
               </label>
-              <input
-                name="confirmPassword"
-                type="password"
-                required
-                onChange={handleChange}
-                aria-label="Confirm Password"
-                className="auth-input"
-              />
+              <div className="auth-input-wrap">
+                <input
+                  name="confirmPassword"
+                  type={showConfirmPassword ? "text" : "password"}
+                  required
+                  onChange={handleChange}
+                  aria-label="Confirm Password"
+                  className="auth-input with-right-icon"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="auth-icon-btn"
+                  aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                >
+                  {showConfirmPassword ? (
+                    <Icons.EyeOff className="h-5 w-5" />
+                  ) : (
+                    <Icons.Eye className="h-5 w-5" />
+                  )}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -175,6 +243,22 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
               ))}
             </select>
           </div>
+
+          {needsBusinessName && (
+            <div className="auth-field">
+              <label className="auth-label">Business / Company Name</label>
+              <input
+                name="businessName"
+                type="text"
+                required
+                onChange={handleChange}
+                value={formData.businessName}
+                aria-label="Business Name"
+                className="auth-input"
+                placeholder="Your business or company name"
+              />
+            </div>
+          )}
 
           <div
             className="auth-actions"

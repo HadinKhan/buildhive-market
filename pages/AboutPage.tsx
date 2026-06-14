@@ -486,7 +486,23 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
                 className={`team-card reveal-scale stagger-${index + 1}`}
               >
                 <div className="team-avatar-wrap">
-                  <div className={`team-avatar ${member.tone}`}>
+                  {(member as any).photo ? (
+                    <img
+                      src={(member as any).photo}
+                      alt={member.name}
+                      className="team-avatar object-cover"
+                      style={{ display: "block" }}
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                        const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+                        if (fallback) fallback.style.display = "flex";
+                      }}
+                    />
+                  ) : null}
+                  <div
+                    className={`team-avatar ${member.tone}`}
+                    style={{ display: (member as any).photo ? "none" : "flex" }}
+                  >
                     {member.initials}
                   </div>
                   <div className="status-dot"></div>
@@ -495,15 +511,39 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
                 <div className="team-role">{member.role}</div>
                 <p className="team-desc">{member.desc}</p>
                 <div className="team-social">
-                  <a href="#" className="social-link" aria-label="LinkedIn">
-                    <Icons.Linkedin />
-                  </a>
-                  <a href="#" className="social-link" aria-label="Instagram">
-                    <Icons.Instagram />
-                  </a>
-                  <a href="#" className="social-link" aria-label="Email">
-                    <Icons.Mail />
-                  </a>
+                  {(member as any).linkedin && (
+                    <a
+                      href={(member as any).linkedin}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="social-link"
+                      aria-label="LinkedIn"
+                    >
+                      <Icons.Linkedin />
+                    </a>
+                  )}
+                  {(member as any).instagram && (
+                    <a
+                      href={(member as any).instagram}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="social-link"
+                      aria-label="Instagram"
+                    >
+                      <Icons.Instagram />
+                    </a>
+                  )}
+                  {(member as any).email && (
+                    <a
+                      href={(member as any).email}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="social-link"
+                      aria-label="Email"
+                    >
+                      <Icons.Mail />
+                    </a>
+                  )}
                 </div>
               </div>
             ))}

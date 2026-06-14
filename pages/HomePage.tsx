@@ -365,10 +365,8 @@ const renderContractorSkeletons = (count: number) =>
 
 const homePageStyles = `
 .home-root {
-  min-height: 100vh;
   background: #0b0f12;
   color: #e2e8f0;
-  overflow-x: hidden;
 }
 
 .hero-section {
@@ -753,8 +751,14 @@ const homePageStyles = `
 
 .listings-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(1, minmax(0, 1fr));
   gap: 24px;
+}
+
+@media (min-width: 640px) {
+  .listings-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (min-width: 1024px) {
@@ -831,7 +835,7 @@ const homePageStyles = `
 
 .ai-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 24px;
 }
 
@@ -1086,9 +1090,7 @@ const homePageStyles = `
   transform: none;
 }
 
-.home-root ::-webkit-scrollbar { width: 8px; }
-.home-root ::-webkit-scrollbar-track { background: #0b0f12; }
-.home-root ::-webkit-scrollbar-thumb { background: rgba(126, 107, 199, 0.35); border-radius: 4px; }
+/* global scrollbar styled in index.html */
 
 @media (max-width: 768px) {
   .hero-stats-bar { gap: 24px; padding: 16px; }
@@ -1230,12 +1232,21 @@ html.light .estimator-banner {
 }
 
 @media (max-width: 900px) {
-  .category-pills-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .category-pills-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 640px) {
   .section { padding: 56px 16px; }
-  .category-pills-grid { grid-template-columns: 1fr; }
+  .category-pills-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .ai-card {
+    padding: 32px 24px;
+  }
 }
 `;
 
@@ -1309,7 +1320,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
             { params: { status: "approved", isActive: true, sortBy: "created_at", sortOrder: "desc", limit: 8 } },
           ),
           api.get<ApiResponse<CategoryApi[]>>("/categories", {
-            params: { limit: 10 },
+            params: { limit: 10, type: "product" },
           }),
           api.get<ApiResponse<any>>("/services", { params: { limit: 6 } }),
         ]);
@@ -1587,7 +1598,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                       key={listing.id}
                       className="listing-card reveal"
                       style={{ transitionDelay: `${index * 80}ms` }}
-                      onClick={() => onNavigate("products")}
+                      onClick={() => onNavigate("product-detail", listing.id)}
                     >
                       <div className="listing-image-wrap">
                         <img
@@ -1802,7 +1813,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                 title: "AI Recommendations",
                 text: "Get material suggestions based on your project, budget, and quality preferences.",
                 action: "Try Recommendations",
-                route: "ai",
+                route: "recommendations",
               },
               {
                 icon: Icons.Calculator,
@@ -1810,7 +1821,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                 title: "Cost Estimation",
                 text: "Generate itemized project cost estimates with cost-saving suggestions.",
                 action: "Estimate Costs",
-                route: "ai",
+                route: "cost-estimator",
               },
               {
                 icon: Icons.Message,
@@ -1833,7 +1844,13 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                 <p>{item.text}</p>
                 <button
                   className="ai-link"
-                  onClick={() => onNavigate(item.route)}
+                  onClick={() => {
+                    if (item.action === "Chat with AI") {
+                      window.dispatchEvent(new CustomEvent("open-ai-chat"));
+                    } else {
+                      onNavigate(item.route);
+                    }
+                  }}
                 >
                   {item.action} <Icons.ArrowRight className="h-4 w-4" />
                 </button>

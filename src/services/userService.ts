@@ -273,6 +273,13 @@ class UserService {
   async markAllNotificationsRead(): Promise<void> {
     await api.put('/notifications/mark-all-as-read');
   }
+
+  /**
+   * Delete a notification
+   */
+  async deleteNotification(id: string): Promise<void> {
+    await api.delete(`/notifications/${id}`);
+  }
 }
 
 export const userService = new UserService();

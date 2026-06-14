@@ -1951,6 +1951,12 @@ const productsPageStyles = `
 
   .modal-content {
     border-radius: 16px;
+    max-height: 95vh;
+  }
+
+  .modal-header,
+  .modal-body {
+    padding: 16px;
   }
 }
 `;
@@ -2044,6 +2050,7 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
     page: 1,
     totalPages: 1,
   });
+  const [apiTotal, setApiTotal] = useState<number | null>(null);
   const {
     filters,
     searchQuery,
@@ -2068,7 +2075,6 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
   const [activeCategory, setActiveCategory] = useState<string>(
     initialCategory || searchParams.get("categoryId") || "all",
   );
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedSeller, setSelectedSeller] = useState<SellerProfile | null>(
     null,
   );
@@ -2127,7 +2133,7 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
     let cancelled = false;
     setCategoriesLoading(true);
     api
-      .get("/categories", { params: { limit: 100 } })
+      .get("/categories", { params: { limit: 100, type: "product" } })
       .then((response) => {
         const payload = response.data?.data ?? response.data;
         const rows = Array.isArray(payload)
@@ -2189,6 +2195,7 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
           page: Number(response.meta?.page ?? filters.page),
           totalPages: Math.max(Number(response.meta?.totalPages ?? 1), 1),
         });
+        setApiTotal(Number(response.meta?.total ?? response.meta?.totalItems ?? 0) || null);
         setProductsError(null);
         setIsLoadingProducts(false);
       })
@@ -2570,7 +2577,7 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
           transition:
             "transform 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease",
         }}
-        onClick={() => setSelectedProduct(product)}
+        onClick={() => navigate('/product-detail/' + product.id)}
         onMouseEnter={(e) => {
           if (e.currentTarget instanceof HTMLElement) {
             e.currentTarget.style.transform = "translateY(-8px)";
@@ -3011,7 +3018,8 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
 
   return (
     <div className="products-page-enhanced">
-      <style>{productsPageStyles}</style>
+      <style>{productsPageStyles}</style>
+
 <div style={{ padding: "20px", maxWidth: "1400px", margin: "0 auto" }}>
         <div className="products-layout">
           {/* Sidebar Filters */}
@@ -3139,7 +3147,7 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
               <span className="results-summary">
                 {useAiSearch
                   ? `${displayedCount} AI results`
-                  : `${displayedCount} of ${resultCount} products`}
+                  : `${displayedCount} of ${apiTotal != null ? apiTotal : resultCount} products`}
                 {useAiSearch && (
                   <span
                     style={{
@@ -3383,220 +3391,6 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
                     ))}
                   </tbody>
                 </table>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Product Detail Modal */}
-      {selectedProduct && (
-        <div
-          className="modal-backdrop"
-          onClick={() => setSelectedProduct(null)}
-        >
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>{selectedProduct.name}</h2>
-              <button
-                className="modal-close"
-                onClick={() => setSelectedProduct(null)}
-              >
-                x
-              </button>
-            </div>
-            <div className="modal-body">
-              <div className="product-detail-grid">
-                {/* Images */}
-                <div className="product-images">
-                  <img
-                    src={
-                      resolveMarketplaceImageSrc(selectedProduct as any) ||
-                      selectedProduct.image ||
-                      "/productsplaceholder.png"
-                    }
-                    alt={selectedProduct.name}
-                    className="main-image"
-                    onError={(e) => {
-                      e.currentTarget.onerror = null;
-                      e.currentTarget.src = "/productsplaceholder.png";
-                    }}
-                  />
-                </div>
-
-                {/* Details */}
-                <div className="product-details-info">
-                  <h3>{selectedProduct.name}</h3>
-                  <div className="product-details-price">
-                    PKR {selectedProduct.price.toLocaleString()}
-                  </div>
-                  <div className="product-details-unit">
-                    {selectedProduct.unit}
-                  </div>
-
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 16,
-                      marginBottom: 20,
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 6,
-                        color: "#fbbf24",
-                        fontSize: "14px",
-                        fontWeight: 700,
-                      }}
-                    >
-                      {renderStar()}
-                      {selectedProduct.rating.toFixed(1)} (
-                      {selectedProduct.reviews} reviews)
-                    </div>
-                  </div>
-
-                  <p
-                    style={{
-                      color: "#cbd5e1",
-                      lineHeight: 1.6,
-                      marginBottom: 20,
-                    }}
-                  >
-                    {selectedProduct.description}
-                  </p>
-
-                  {selectedProduct.specs && (
-                    <div>
-                      <h4
-                        style={{
-                          color: "#fff",
-                          marginBottom: 12,
-                          fontSize: "14px",
-                          fontWeight: 700,
-                        }}
-                      >
-                        Specifications
-                      </h4>
-                      <table className="specs-table">
-                        <tbody>
-                          {Object.entries(selectedProduct.specs).map(
-                            ([key, value]) => (
-                              <tr key={key}>
-                                <td style={{ fontWeight: 600 }}>{key}</td>
-                                <td>{value}</td>
-                              </tr>
-                            ),
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  <div
-                    style={{
-                      padding: 16,
-                      borderRadius: 12,
-                      background: "rgba(124, 58, 237, 0.08)",
-                      border: "1px solid rgba(124, 58, 237, 0.15)",
-                      marginBottom: 20,
-                    }}
-                  >
-                    <p style={{ color: "#cbd5e1", margin: 0, fontSize: 13 }}>
-                      <strong style={{ color: "#fff" }}>Seller:</strong>{" "}
-                      {selectedProduct.seller}
-                      {selectedProduct.verified && (
-                        <span
-                          style={{
-                            color: "#34d399",
-                            marginLeft: 8,
-                            fontWeight: 600,
-                          }}
-                        >
-                          Verified
-                        </span>
-                      )}
-                    </p>
-                  </div>
-
-                  <button
-                    className="btn-secondary"
-                    style={{ width: "100%", marginBottom: 20 }}
-                    onClick={() => {
-                      void handleViewSellerProfile(selectedProduct);
-                    }}
-                  >
-                    View Seller Profile
-                  </button>
-
-                  {selectedProduct.category === "project-templates" && (
-                    <div className="template-section">
-                      <h4>Template Includes</h4>
-                      <div className="template-stats-grid">
-                        <div className="template-stat-card">
-                          <div className="template-stat-value">BOQ</div>
-                          <div className="template-stat-label">
-                            Material list
-                          </div>
-                        </div>
-                        <div className="template-stat-card">
-                          <div className="template-stat-value">Cost</div>
-                          <div className="template-stat-label">Estimate</div>
-                        </div>
-                        <div className="template-stat-card">
-                          <div className="template-stat-value">Plan</div>
-                          <div className="template-stat-label">Timeline</div>
-                        </div>
-                      </div>
-                      <h4>Sample Timeline</h4>
-                      <div className="template-timeline">
-                        {[
-                          "Foundation and structure",
-                          "Brickwork and plaster",
-                          "Electrical and plumbing",
-                          "Flooring and finishing",
-                          "Paint and handover",
-                        ].map((phase) => (
-                          <div key={phase} className="timeline-phase">
-                            <span className="timeline-dot" />
-                            <span>{phase}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="modal-actions">
-                    <button
-                      className="btn-primary"
-                      onClick={() => {
-                        void handleAddToCart(selectedProduct);
-                        setSelectedProduct(null);
-                      }}
-                    >
-                      <Icons.Cart
-                        style={{ width: 16, height: 16, marginRight: 4 }}
-                      />
-                      Add to Cart
-                    </button>
-                    <button
-                      className="btn-secondary"
-                      onClick={() => {
-                        handleWishlistToggle(selectedProduct);
-                      }}
-                    >
-                      {isInWishlist(selectedProduct.id) ? "Liked" : "Like"}
-                    </button>
-                    <button
-                      className="btn-secondary"
-                      onClick={() => onNavigate("contact")}
-                    >
-                      Contact Seller
-                    </button>
-                  </div>
-                </div>
               </div>
             </div>
           </div>

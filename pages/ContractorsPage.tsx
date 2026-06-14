@@ -192,11 +192,11 @@ export const ContractorsPage: React.FC = () => {
                 Hire verified construction professionals across every trade.
               </p>
             </div>
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={() => navigate("/services")}>
+            <div className="flex flex-wrap gap-3 w-full sm:w-auto">
+              <Button variant="outline" className="flex-1 sm:flex-none justify-center min-h-[44px]" onClick={() => navigate("/services")}>
                 Browse Services
               </Button>
-              <Button variant="primary" onClick={() => navigate("/products")}>
+              <Button variant="primary" className="flex-1 sm:flex-none justify-center min-h-[44px]" onClick={() => navigate("/products")}>
                 Browse Materials
               </Button>
             </div>

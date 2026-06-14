@@ -11,6 +11,8 @@ export const getStartedPageData = {
     accountTypeLabel: "I am a",
     accountTypeOptions: [
       { value: "buyer", label: "Buyer / Individual" },
+      { value: "supplier", label: "Seller" },
+      { value: "contractor", label: "Contractor" },
     ],
     termsPrefix: "I agree to the",
     termsLink: "Terms of Service",

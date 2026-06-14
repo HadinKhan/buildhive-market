@@ -42,6 +42,20 @@ export const AIChatWidget: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    const handleOpenChat = () => {
+      setIsOpen(true);
+      if (!hasClickedChat) {
+        window.localStorage.setItem("buildhive-ai-chat-clicked", "true");
+        setHasClickedChat(true);
+      }
+    };
+    window.addEventListener("open-ai-chat", handleOpenChat);
+    return () => {
+      window.removeEventListener("open-ai-chat", handleOpenChat);
+    };
+  }, [hasClickedChat]);
+
+  useEffect(() => {
     if (isOpen && messages.length === 0) {
       setMessages([createMessage("assistant", WELCOME_MESSAGE)]);
       setQuickReplies(QUICK_REPLIES);

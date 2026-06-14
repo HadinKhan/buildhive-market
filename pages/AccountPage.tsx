@@ -728,7 +728,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
             <p className="mt-2 text-sm text-gray-600">
               {orderItems(order).length
                 ? orderItems(order).map((item: any) => `${item.product?.name || item.products?.name || item.product_name || item.name || "Item"} x${item.quantity}`).join(", ")
-                : "Order items unavailable"}
+                : "Click View Details to see items"}
             </p>
             {(payment?.refund_status || order.refund_status) && (
               <div className="mt-2"><StatusBadge status={`Refund ${payment?.refund_status || order.refund_status}`} /></div>
@@ -755,11 +755,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
                 Cancel
               </Button>
             )}
-            {/delivered|completed/i.test(text(order.status)) && (
-              <Button className={accountOutlineButton} variant="outline" size="sm" onClick={() => setModal({ type: "refund", order })}>
-                Request Refund
-              </Button>
-            )}
+
           </div>
         </div>
         {includeTracking && (
@@ -862,7 +858,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold ${
+                    className={`whitespace-nowrap rounded-lg px-3 py-3 text-sm font-semibold min-h-[44px] flex items-center ${
                       activeTab === tab.id ? "bg-primary text-white" : "text-gray-600"
                     }`}
                   >
@@ -1213,8 +1209,16 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
                   ))
                 )}
               </div>
-              <textarea className="w-full rounded-lg border border-gray-200 px-3 py-2" rows={4} placeholder="Add a reply..." value={ticketMessage} onChange={(event) => setTicketMessage(event.target.value)} />
-              <Button disabled={busy === "ticket-message" || !ticketMessage.trim()} onClick={() => void sendTicketMessage()}>Send Reply</Button>
+              {/resolved/i.test(modal.ticket.status) ? (
+                <div className="rounded-lg bg-emerald-50 border border-emerald-100 p-3 text-sm text-emerald-800 font-medium text-center">
+                  This ticket has been resolved
+                </div>
+              ) : (
+                <>
+                  <textarea className="w-full rounded-lg border border-gray-200 px-3 py-2" rows={4} placeholder="Add a reply..." value={ticketMessage} onChange={(event) => setTicketMessage(event.target.value)} />
+                  <Button disabled={busy === "ticket-message" || !ticketMessage.trim()} onClick={() => void sendTicketMessage()}>Send Reply</Button>
+                </>
+              )}
             </div>
           )}
           {modal.type === "confirm" && (
@@ -1289,7 +1293,7 @@ const TextInput = ({ label, value, onChange, type = "text" }: { label: string; v
 
 const AccountModal = ({ children, onClose }: { children: React.ReactNode; onClose: () => void }) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-    <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
+    <div className="max-h-[95vh] md:max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
       <div className="mb-4 flex justify-end">
         <button aria-label="Close" onClick={onClose} className="rounded-full p-2 text-gray-500 hover:bg-gray-100">
           <Icons.Close className="h-5 w-5" />
@@ -1300,17 +1304,54 @@ const AccountModal = ({ children, onClose }: { children: React.ReactNode; onClos
   </div>
 );
 
+const mapStatusLabel = (status: string): string => {
+  const normalized = String(status || "").toLowerCase().trim();
+  const mapping: Record<string, string> = {
+    pending_payment: "Pending Payment",
+    confirmed: "Confirmed",
+    processing: "Processing",
+    shipped: "Shipped",
+    delivered: "Delivered",
+    cancelled: "Cancelled",
+  };
+  if (mapping[normalized]) return mapping[normalized];
+  return normalized
+    .replace(/_/g, " ")
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+};
+
 const TrackingTimeline = ({ tracking, status }: { tracking: any; status: string }) => {
-  const events = asArray(tracking?.tracking_history || tracking?.events || tracking?.timeline, []);
-  const fallback = ["confirmed", "processing", "shipped", "delivered"];
-  const steps = events.length ? events.map((event: any) => event.status || event.title) : fallback;
+  const currentStatus = String(status || "").toLowerCase().trim();
+  const steps = ["confirmed", "processing", "shipped", "delivered"];
+  const activeIndex = steps.indexOf(currentStatus);
+
+  if (currentStatus === "pending_payment" || currentStatus === "cancelled" || activeIndex === -1) {
+    return (
+      <div className="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3 text-xs font-semibold text-gray-500 text-center">
+        Status: <span className="text-gray-700 font-bold">{mapStatusLabel(status)}</span> (Order not active)
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-2 sm:grid-cols-4">
-      {steps.map((step: string, index: number) => (
-        <div key={`${step}-${index}`} className={`rounded-lg px-3 py-2 text-xs font-semibold ${status.toLowerCase().includes(step.toLowerCase()) || index === 0 ? "bg-primary/10 text-primary" : "bg-white text-gray-500"}`}>
-          {step.replace(/_/g, " ")}
-        </div>
-      ))}
+      {steps.map((step: string, index: number) => {
+        const isPastOrActive = index <= activeIndex;
+        return (
+          <div
+            key={step}
+            className={`rounded-lg px-3 py-2 text-xs font-semibold text-center border ${
+              isPastOrActive
+                ? "bg-primary/10 text-primary border-primary/20"
+                : "bg-gray-50 text-gray-400 border-gray-100"
+            }`}
+          >
+            {mapStatusLabel(step)}
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -1319,19 +1360,56 @@ const OrderDetail = ({ order, tracking }: { order: any; tracking?: any }) => (
   <div className="space-y-5">
     <DetailBlock title={`Order #${order.order_number || order.id}`} rows={[
       ["Seller", order.businesses?.business_name || order.businessName || "Seller"],
-      ["Status", order.status],
+      ["Status", mapStatusLabel(order.status)],
       ["Total", money(order.total_amount || order.totalAmount)],
       ["Date", dateLabel(order.created_at || order.createdAt)],
     ]} />
     <TrackingTimeline tracking={tracking} status={order.status || ""} />
     <QuickList title="Items">
-      {asArray(order.items || order.order_items, []).map((item: any) => (
-        <div key={item.id || item.product_id} className="flex justify-between rounded-lg border border-gray-100 p-3">
-          <span>{item.product?.name || item.products?.name || item.product_name || item.name || "Item"} x{item.quantity}</span>
-          <span className="font-semibold">{money(item.subtotal || item.total_price || item.price || Number(item.unit_price || 0) * Number(item.quantity || 1))}</span>
+      <div className="space-y-3">
+        {asArray(order.items || order.order_items, []).map((item: any) => {
+          const itemPrice = item.price || item.unit_price || 0;
+          const lineTotal = item.subtotal || item.total_price || (Number(itemPrice) * item.quantity);
+          return (
+            <div key={item.id || item.product_id} className="flex items-center justify-between rounded-lg border border-gray-100 p-3 text-sm">
+              <span className="font-semibold text-gray-900">{item.product?.name || item.products?.name || item.product_name || item.name || "Item"}</span>
+              <span className="text-sm text-gray-500">{item.quantity} × {money(itemPrice)}</span>
+              <span className="font-bold text-gray-900 font-mono">{money(lineTotal)}</span>
+            </div>
+          );
+        })}
+        {asArray(order.items || order.order_items, []).length === 0 && <EmptyLine text="No item rows returned." />}
+      </div>
+
+      {/* Summary rows */}
+      <div className="mt-4 pt-3 border-t border-gray-100 space-y-1.5 text-sm">
+        <div className="flex justify-between text-gray-500">
+          <span>Subtotal</span>
+          <span>{money(order.subtotal || (order.total_amount || order.totalAmount || 0) - (order.shipping_fee || 0) - (order.tax_amount || 0) + (order.discount_amount || 0))}</span>
         </div>
-      ))}
-      {asArray(order.items || order.order_items, []).length === 0 && <EmptyLine text="No item rows returned." />}
+        {Number(order.shipping_fee || 0) > 0 && (
+          <div className="flex justify-between text-gray-500">
+            <span>Shipping Fee</span>
+            <span>+{money(order.shipping_fee)}</span>
+          </div>
+        )}
+        {Number(order.tax_amount || 0) > 0 && (
+          <div className="flex justify-between text-gray-500">
+            <span>Tax</span>
+            <span>+{money(order.tax_amount)}</span>
+          </div>
+        )}
+        {Number(order.discount_amount || 0) > 0 && (
+          <div className="flex justify-between text-emerald-600 font-medium">
+            <span>Discount</span>
+            <span>-{money(order.discount_amount)}</span>
+          </div>
+        )}
+        <div className="flex justify-between font-bold text-base text-gray-900 pt-1.5 border-t border-dashed border-gray-100">
+          <span>Total</span>
+          <span>{money(order.total_amount || order.totalAmount)}</span>
+        </div>
+      </div>
     </QuickList>
   </div>
 );

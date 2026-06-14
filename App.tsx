@@ -154,6 +154,9 @@ const ProductDetailWrapper: React.FC<{
           created_at: apiProduct.created_at,
           updated_at: apiProduct.updated_at,
           images: productImages,
+          sku: apiProduct.sku,
+          barcode: apiProduct.barcode,
+          cost_per_item: apiProduct.cost_per_item,
           author: apiProduct.businesses?.business_name || "Unknown",
           rating: apiProduct.average_rating || 0,
           sales: apiProduct.total_reviews || 0,
@@ -500,7 +503,7 @@ const AppContent: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white font-sans text-gray-900">
+    <div className="font-sans">
       {/** Keep the header highlight tied to the current router path */}
       <Header
         onNavigate={navigateTo}

@@ -342,7 +342,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const register = useCallback(
     async (data: RegisterData): Promise<void> => {
-      await authService.register({ ...data, role: "buyer" });
+      await authService.register(data);
     },
     [],
   );

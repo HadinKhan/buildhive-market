@@ -252,7 +252,7 @@ class ProductService {
   /**
    * Create product review
    */
-  async createReview(productId: string, reviewData: { rating: number; comment?: string }): Promise<any> {
+  async createReview(productId: string, reviewData: { rating: number; comment?: string; body?: string; title?: string }): Promise<any> {
     const response = await api.post<ApiResponse<any>>(`/products/${productId}/reviews`, reviewData);
     
     return response.data.data;
@@ -261,7 +261,7 @@ class ProductService {
   /**
    * Update product review
    */
-  async updateReview(productId: string, reviewId: string, reviewData: { rating?: number; comment?: string }): Promise<any> {
+  async updateReview(productId: string, reviewId: string, reviewData: { rating?: number; comment?: string; body?: string; title?: string }): Promise<any> {
     const response = await api.put<ApiResponse<any>>(`/products/${productId}/reviews/${reviewId}`, reviewData);
     
     return response.data.data;

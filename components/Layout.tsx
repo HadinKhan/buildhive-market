@@ -34,6 +34,25 @@ export const Header: React.FC<HeaderProps> = ({
   const [notifications, setNotifications] = useState<any[]>([]);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
+  const notificationRef = useRef<HTMLDivElement | null>(null);
+  const userMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (notificationRef.current && !notificationRef.current.contains(target)) {
+        setIsNotificationsOpen(false);
+      }
+      if (userMenuRef.current && !userMenuRef.current.contains(target)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
   // Declare isLoggedIn before any usage in useEffect or other logic
   const user = authUser || propUser;
   const isLoggedIn = isAuthenticated || !!propUser;
@@ -95,6 +114,15 @@ export const Header: React.FC<HeaderProps> = ({
   const markAllNotificationsRead = async () => {
     await api.put("/notifications/mark-all-as-read");
     await loadNotifications();
+  };
+
+  const deleteNotificationHeader = async (notificationId: string) => {
+    try {
+      await api.delete(`/notifications/${notificationId}`);
+      await loadNotifications();
+    } catch {
+      // ignore
+    }
   };
 
   const handleDropdownEnter = () => {
@@ -195,6 +223,7 @@ export const Header: React.FC<HeaderProps> = ({
                     { label: "Home", slug: "home" },
                     { label: "Products", slug: "products" },
                     { label: "Services", slug: "services" },
+                    { label: "Find Contractors", slug: "contractors" },
                     {
                       label: "AI",
                       slug: "ai",
@@ -335,6 +364,7 @@ export const Header: React.FC<HeaderProps> = ({
                     { label: "Home", slug: "home" },
                     { label: "Products", slug: "products" },
                     { label: "Services", slug: "services" },
+                    { label: "Find Contractors", slug: "contractors" },
                     {
                       label: "AI",
                       slug: "ai",
@@ -457,14 +487,6 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Right Actions */}
             <div className="hidden lg:flex items-center gap-4">
-              <a
-                href="http://localhost:5000"
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center justify-center rounded-full bg-white px-5 py-2.5 text-sm font-bold text-[#6B21A8] shadow-lg shadow-purple-950/20 transition-all duration-200 hover:-translate-y-0.5 hover:scale-105 hover:bg-emerald-50"
-              >
-                Join as Seller / Contractor
-              </a>
               {isLoggedIn ? (
                 <div className="flex items-center gap-3">
                   <button
@@ -493,7 +515,7 @@ export const Header: React.FC<HeaderProps> = ({
                     )}
                   </button>
 
-                  <div className="relative">
+                  <div className="relative" ref={notificationRef}>
                     <button
                       className="relative flex h-12 w-12 items-center justify-center rounded-2xl border border-zinc-800 bg-[#11151d] text-gray-300 transition-colors hover:border-zinc-700 hover:text-white"
                       aria-label="Notifications"
@@ -529,32 +551,42 @@ export const Header: React.FC<HeaderProps> = ({
                             </div>
                           ) : (
                             notifications.map((notification) => (
-                              <button
+                              <div
                                 key={notification.id}
-                                onClick={() =>
-                                  void markNotificationRead(notification.id)
-                                }
-                                className="block w-full rounded-2xl px-3 py-3 text-left hover:bg-white/5"
+                                className="flex items-start justify-between gap-3 rounded-2xl px-3 py-3 hover:bg-white/5 group"
                               >
-                                <div className="flex items-start justify-between gap-3">
-                                  <div>
-                                    <p className="text-sm font-semibold text-white">
-                                      {notification.title || notification.type}
-                                    </p>
-                                    <p className="mt-1 line-clamp-2 text-xs text-gray-400">
-                                      {notification.message}
-                                    </p>
-                                  </div>
-                                  {!notification.is_read && !notification.read && (
-                                    <span className="mt-1 h-2 w-2 rounded-full bg-pink-500" />
-                                  )}
+                                <div
+                                  className="flex-1 cursor-pointer"
+                                  onClick={() => void markNotificationRead(notification.id)}
+                                >
+                                  <p className="text-sm font-semibold text-white">
+                                    {notification.title || notification.type}
+                                  </p>
+                                  <p className="mt-1 line-clamp-2 text-xs text-gray-400">
+                                    {notification.message}
+                                  </p>
+                                  <p className="mt-2 text-[11px] text-gray-500">
+                                    {notification.created_at
+                                      ? new Date(notification.created_at).toLocaleString()
+                                      : ""}
+                                  </p>
                                 </div>
-                                <p className="mt-2 text-[11px] text-gray-500">
-                                  {notification.created_at
-                                    ? new Date(notification.created_at).toLocaleString()
-                                    : ""}
-                                </p>
-                              </button>
+                                <div className="flex flex-col items-end justify-between self-stretch">
+                                  {!notification.is_read && !notification.read && (
+                                    <span className="h-2 w-2 rounded-full bg-pink-500" />
+                                  )}
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      void deleteNotificationHeader(notification.id);
+                                    }}
+                                    className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-400 transition-opacity"
+                                    title="Delete notification"
+                                  >
+                                    <Icons.Trash className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              </div>
                             ))
                           )}
                         </div>
@@ -562,7 +594,7 @@ export const Header: React.FC<HeaderProps> = ({
                     )}
                   </div>
 
-                  <div className="relative">
+                  <div className="relative" ref={userMenuRef}>
                     <button
                       onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
                       className="relative flex h-12 w-12 items-center justify-center rounded-full border border-[#8d7cff] bg-[#20192f] text-base font-semibold text-white transition-all duration-200 hover:bg-[#2a2140] focus:outline-none focus:ring-2 focus:ring-[#a58cff]/30 focus:ring-offset-2 focus:ring-offset-[#0b0f12]"
@@ -662,7 +694,7 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Mobile Menu Button */}
             <button
-              className="lg:hidden p-2 text-gray-600"
+              className="lg:hidden p-3 text-gray-600 min-h-[44px] min-w-[44px] flex items-center justify-center"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             >
               {isMobileMenuOpen ? (
@@ -687,6 +719,7 @@ export const Header: React.FC<HeaderProps> = ({
                     { label: "Products", slug: "products" },
                     { label: "Support", slug: "support" },
                     { label: "Services", slug: "services" },
+                    { label: "Find Contractors", slug: "contractors" },
                     { label: "AI", slug: "ai" },
                     { label: "About Us", slug: "about" },
                     { label: "Contact", slug: "contact" },
@@ -695,6 +728,7 @@ export const Header: React.FC<HeaderProps> = ({
                     { label: "Home", slug: "home" },
                     { label: "Products", slug: "products" },
                     { label: "Services", slug: "services" },
+                    { label: "Find Contractors", slug: "contractors" },
                     { label: "AI", slug: "ai" },
                     { label: "About Us", slug: "about" },
                     { label: "Contact", slug: "contact" },
@@ -704,7 +738,7 @@ export const Header: React.FC<HeaderProps> = ({
                   key={item.slug}
                   href="#"
                   onClick={(e) => handleNav(e, item.slug)}
-                  className={`flex items-center justify-between py-2 text-base font-medium ${
+                  className={`flex items-center justify-between py-3 text-base font-medium min-h-[44px] ${
                     item.slug === "ai"
                       ? "text-primary"
                       : "text-[var(--bh-text)] hover:text-primary"
@@ -719,14 +753,6 @@ export const Header: React.FC<HeaderProps> = ({
               ))}
 
                 <div className="mt-2 space-y-4 border-t pt-4" style={{ borderColor: "var(--bh-border)" }}>
-                <a
-                  href="http://localhost:5000"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex w-full items-center justify-center rounded-xl bg-white px-3 py-3 text-sm font-bold text-[#6B21A8] shadow-sm transition-transform hover:scale-[1.02]"
-                >
-                  Join as Seller / Contractor
-                </a>
                 {/* Mobile User Actions */}
                 {user ? (
                   <>
@@ -804,7 +830,7 @@ interface FooterColumn {
 
 const footerColumns: FooterColumn[] = [
   {
-    title: "Marketplace",
+    title: "Quick Links",
     links: [
       { label: "Products", path: "products" },
       { label: "Services", path: "services" },

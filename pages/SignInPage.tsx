@@ -43,7 +43,25 @@ export const SignInPage: React.FC<SignInPageProps> = ({
       );
       navigate(returnUrl || "/");
     } catch (err: any) {
-      setError(err.message || "Invalid email or password");
+      const status = err?.response?.status;
+      const serverMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error;
+      if (status === 401) {
+        setError("Invalid email or password. Please try again.");
+      } else if (status === 403) {
+        setError(
+          serverMsg?.toLowerCase().includes("verif")
+            ? "Account not verified. Please check your email and verify your account before logging in."
+            : serverMsg?.toLowerCase().includes("inactive") || serverMsg?.toLowerCase().includes("pending")
+            ? "Your account is pending approval. Please contact support."
+            : "Access denied. Please check your credentials."
+        );
+      } else if (serverMsg) {
+        setError(serverMsg);
+      } else {
+        setError("Unable to sign in. Please try again later.");
+      }
     } finally {
       setLoading(false);
     }
@@ -163,6 +181,19 @@ export const SignInPage: React.FC<SignInPageProps> = ({
               : signInPageData.form.submitIdle}
           </Button>
         </form>
+
+        <div className="auth-divider">
+          <span>Are you a Seller / Contractor?</span>
+        </div>
+        <a
+          href="http://localhost:5000"
+          target="_blank"
+          rel="noreferrer"
+          className="auth-social-btn w-full"
+          style={{ display: "flex", textDecoration: "none", width: "100%", boxSizing: "border-box", textAlign: "center", marginBottom: "15px" }}
+        >
+          Join as Seller / Contractor
+        </a>
 
         <div className="auth-bottom">
           {signInPageData.bottomText.prefix}{" "}

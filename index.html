@@ -41,6 +41,39 @@
   </script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
+    /* ── Scroll fix: ONE scrollbar, native browser scroll ── */
+    html {
+      overflow-x: hidden;
+      overflow-y: auto;
+      height: auto;
+    }
+    body {
+      overflow-x: hidden;
+      overflow-y: visible;
+      min-height: 100vh;
+      height: auto;
+    }
+    #root {
+      overflow: visible;
+      height: auto;
+    }
+    /* ──────────────────────────────────────────────────── */
+
+    /* Global scrollbar styling */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0b0f12;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(126, 107, 199, 0.35);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(126, 107, 199, 0.55);
+    }
+
     :root {
       --bh-primary: #6C3BD5;
       --bh-primary-light: #8B5CF6;
