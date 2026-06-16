@@ -427,11 +427,24 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ embedded = false }) 
           <div className="md:col-span-2 border border-zinc-800 rounded-2xl bg-[#11151d] flex flex-col">
             {selectedConversation ? (
               <>
-                <div className="p-4 border-b border-zinc-800">
-                  <h3 className="text-lg font-bold text-white">
-                    {selectedConversation.otherParticipant.fullName}
-                  </h3>
-                  <p className="text-xs text-gray-500">Private conversation</p>
+                <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-white">
+                      {selectedConversation.otherParticipant.fullName}
+                    </h3>
+                    <p className="text-xs text-gray-500">Private conversation</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedConversationId(null);
+                      navigate(embedded ? "/account?tab=messages" : "/messages", { replace: true });
+                    }}
+                    className="rounded-full p-2 text-gray-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                    aria-label="Close conversation"
+                  >
+                    <Icons.Close className="h-5 w-5" />
+                  </button>
                 </div>
 
                 <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4">

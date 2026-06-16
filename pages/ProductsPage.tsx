@@ -2397,7 +2397,7 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
     ? Math.min(...comparedProducts.map((product) => product.price))
     : 0;
   const bestComparedRating = comparedProducts.length
-    ? Math.max(...comparedProducts.map((product) => product.rating))
+    ? Math.max(...comparedProducts.map((product) => Number(product.rating || 0)))
     : 0;
   const comparisonSpecKeys = useMemo(
     () =>
@@ -3339,12 +3339,12 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
                         <td key={`${product.id}-rating`}>
                           <span
                             className={
-                              product.rating === bestComparedRating
+                              Number(product.rating || 0) === bestComparedRating
                                 ? "compare-highlight"
                                 : ""
                             }
                           >
-                            {product.rating.toFixed(1)} / 5 ({product.reviews}{" "}
+                            {Number(product.rating || 0).toFixed(1)} / 5 ({product.reviews}{" "}
                             reviews)
                           </span>
                         </td>
@@ -3363,9 +3363,9 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
                       <td>Quality signal</td>
                       {comparedProducts.map((product) => (
                         <td key={`${product.id}-quality`}>
-                          {product.rating >= 4.7
+                          {Number(product.rating || 0) >= 4.7
                             ? "Premium rated"
-                            : product.rating >= 4.4
+                            : Number(product.rating || 0) >= 4.4
                               ? "Strong buyer rating"
                               : "Standard rating"}
                         </td>
@@ -3446,7 +3446,7 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
               <div className="seller-stats-grid">
                 <div className="seller-stat-card">
                   <div className="seller-stat-value">
-                    {selectedSeller.rating.toFixed(1)}
+                    {Number(selectedSeller.rating || 0).toFixed(1)}
                   </div>
                   <div className="seller-stat-label">Rating</div>
                 </div>

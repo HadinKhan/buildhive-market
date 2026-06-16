@@ -32,7 +32,7 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const needsBusinessName = formData.accountType === "supplier" || formData.accountType === "contractor";
+  const needsBusinessName = false;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,8 +71,7 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
         password: formData.password,
         fullName: formData.name,
         phone: phone || undefined,
-        role: formData.accountType as "buyer" | "contractor" | "supplier",
-        businessName: needsBusinessName ? formData.businessName.trim() : undefined,
+        role: "buyer",
         termsAccepted: formData.termsAccepted,
       } as any);
       toast.success("Account created! Check your email to verify before logging in.");
@@ -225,40 +224,7 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
             </div>
           </div>
 
-          <div className="auth-field">
-            <label className="auth-label">
-              {getStartedPageData.form.accountTypeLabel}
-            </label>
-            <select
-              name="accountType"
-              onChange={handleChange}
-              value={formData.accountType}
-              aria-label="Account Type"
-              className="auth-select"
-            >
-              {getStartedPageData.form.accountTypeOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
 
-          {needsBusinessName && (
-            <div className="auth-field">
-              <label className="auth-label">Business / Company Name</label>
-              <input
-                name="businessName"
-                type="text"
-                required
-                onChange={handleChange}
-                value={formData.businessName}
-                aria-label="Business Name"
-                className="auth-input"
-                placeholder="Your business or company name"
-              />
-            </div>
-          )}
 
           <div
             className="auth-actions"

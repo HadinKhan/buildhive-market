@@ -55,15 +55,15 @@ export function useStripePayment() {
     }
   }, []);
 
-  const createPaymentIntent = useCallback(async (orderId: string): Promise<StripePaymentIntent> => {
-    console.log("[Stripe] Creating payment intent for orderId:", orderId);
-    if (!orderId) {
-      throw new Error("Order ID missing");
+  const createPaymentIntent = useCallback(async (params: { orderId?: string; shippingAddressId?: string; notes?: string }): Promise<StripePaymentIntent> => {
+    console.log("[Stripe] Creating payment intent with params:", params);
+    if (!params.orderId && !params.shippingAddressId) {
+      throw new Error("Order ID or Shipping Address ID missing");
     }
     setLoading(true);
     setError(null);
     try {
-      const res = await api.post("/payment/create-payment-intent", { orderId });
+      const res = await api.post("/payment/create-payment-intent", params);
       console.log("[Stripe] Payment intent response:", res.data);
       const data = normalizeResponseData<Partial<StripePaymentIntent> & { client_secret?: string; payment_intent_id?: string }>(res.data);
       const normalizedIntent: StripePaymentIntent = {

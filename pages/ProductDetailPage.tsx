@@ -309,7 +309,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
             className="cursor-pointer hover:text-primary"
             onClick={() => onNavigate("home")}
           >
-            Shop
+            Home
           </span>
           <Icons.ChevronRight className="h-4 w-4" />
           <span
@@ -472,7 +472,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               )}
             </div>
 
-            <p className="mb-8 text-base leading-relaxed text-slate-400">
+            <p className="mb-8 text-base leading-relaxed text-slate-400 break-all overflow-hidden">
               {product.description ||
                 "Designed for professional durability and performance, this construction essential meets all safety standards. Ideal for heavy-duty applications, providing reliability when you need it most."}
             </p>

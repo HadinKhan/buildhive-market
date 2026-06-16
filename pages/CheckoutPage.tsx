@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { StripeProviderWrapper } from "../src/components/StripeProviderWrapper";
 import { StripeCardForm } from "../src/components/StripeCardForm";
 import { useStripePayment } from "../src/hooks/useStripePayment";
@@ -68,6 +68,23 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
   const [selectedSavedAddressId, setSelectedSavedAddressId] = useState("");
+
+  const paymentSucceededRef = useRef(false);
+  const createdOrderIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    createdOrderIdRef.current = createdOrderId;
+  }, [createdOrderId]);
+
+  useEffect(() => {
+    return () => {
+      if (createdOrderIdRef.current && paymentMethod === "card" && !paymentSucceededRef.current) {
+        console.log("Cleanup: cancelling unpaid order on unmount:", createdOrderIdRef.current);
+        api.post(`/orders/${createdOrderIdRef.current}/cancel`, { reason: "Payment abandoned or failed" })
+          .catch(err => console.error("Failed to cancel unpaid order on unmount:", err));
+      }
+    };
+  }, [paymentMethod]);
 
   useEffect(() => {
     const serviceIdFromQuery = new URLSearchParams(location.search).get(
@@ -328,7 +345,29 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         return;
       }
 
-      // The backend creates one order per seller group and clears the cart once.
+      if (paymentMethod === "card") {
+        stripePayment.resetStripeState();
+        const stripeConfigData = await stripePayment.fetchStripeConfig();
+        const intentData = await stripePayment.createPaymentIntent({
+          shippingAddressId: address.id,
+          notes: formData.notes,
+        });
+
+        if (
+          stripeConfigData.publishableKey &&
+          intentData.clientSecret &&
+          intentData.paymentIntentId
+        ) {
+          setShowStripeForm(true);
+          setPlacedOrdersCount(cartGroups.length);
+        } else {
+          toast.error("Failed to start card payment. Please try again.");
+        }
+        setIsProcessing(false);
+        return;
+      }
+
+      // The backend creates one order per seller group and clears the cart once (COD flow).
       const orderData: CreateOrderData = {
         items: cartItems.map((item) => ({
           product_id: item.product_id,
@@ -349,26 +388,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       const orderId = firstOrder?.id;
       setCreatedOrderId(orderId);
       setPlacedOrdersCount(cartGroups.length);
-
-      if (paymentMethod === "card") {
-        stripePayment.resetStripeState();
-        const stripeConfigData = await stripePayment.fetchStripeConfig();
-        const intentData = await stripePayment.createPaymentIntent(
-          orderId as string,
-        );
-
-        if (
-          stripeConfigData.publishableKey &&
-          intentData.clientSecret &&
-          intentData.paymentIntentId
-        ) {
-          setShowStripeForm(true);
-        } else {
-          toast.error("Failed to start card payment. Please try again.");
-        }
-        setIsProcessing(false);
-        return;
-      }
 
       const fallbackOrderNumber =
         firstOrder?.order_number ||
@@ -400,6 +419,34 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     }
   };
 
+  const handleCancelStripePayment = async () => {
+    if (!createdOrderId) {
+      setShowStripeForm(false);
+      stripePayment.resetStripeState();
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      await api.post(`/orders/${createdOrderId}/cancel`, { reason: "Payment abandoned or failed" });
+      toast.info("Order cancelled. Your items are still in your cart.");
+      setShowStripeForm(false);
+      setCreatedOrderId(null);
+      createdOrderIdRef.current = null;
+      paymentSucceededRef.current = false;
+      stripePayment.resetStripeState();
+    } catch (err) {
+      console.error("Failed to cancel order on user action:", err);
+      // Fallback: Reset state anyway to let user retry or select COD
+      setShowStripeForm(false);
+      setCreatedOrderId(null);
+      createdOrderIdRef.current = null;
+      paymentSucceededRef.current = false;
+      stripePayment.resetStripeState();
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   if (
     showStripeForm &&
     stripePayment.stripeConfig &&
@@ -419,15 +466,35 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
             clientSecret={stripePayment.clientSecret}
             paymentIntentId={stripePayment.paymentIntentId}
             onPaymentSuccess={async (paymentIntentId: string) => {
-              await stripePayment.confirmPaymentToBackend(paymentIntentId);
+              paymentSucceededRef.current = true;
+              const confirmResponse = await stripePayment.confirmPaymentToBackend(paymentIntentId);
               setShowStripeForm(false);
               stripePayment.resetStripeState();
               toast.success("Payment successful! Order confirmed.");
               onPlaceOrder();
-              onNavigate(`order-confirmation/${createdOrderId}`);
+              const confirmedOrderId = confirmResponse.orderId || confirmResponse.data?.orderId;
+              onNavigate(`order-confirmation/${confirmedOrderId}`);
             }}
           />
         </StripeProviderWrapper>
+        <div style={{ marginTop: "1.5rem" }}>
+          <button
+            type="button"
+            onClick={handleCancelStripePayment}
+            disabled={isProcessing}
+            className="success-button-outline"
+            style={{
+              padding: "0.75rem 1.5rem",
+              borderRadius: "0.5rem",
+              cursor: "pointer",
+              fontWeight: 600,
+              fontSize: "0.875rem",
+              transition: "all 0.2s ease",
+            }}
+          >
+            Cancel & Go Back
+          </button>
+        </div>
       </div>
     );
   }

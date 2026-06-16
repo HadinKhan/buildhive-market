@@ -143,12 +143,10 @@ class AuthService {
    * Verify email with token
    */
   async verifyEmail(token: string): Promise<string> {
-    const response = await api.get<ApiResponse<{
+    const response = await api.post<ApiResponse<{
       accountStatus?: string;
       requiresAdminApproval?: boolean;
-    }>>('/auth/verify-email', {
-      params: { token },
-    });
+    }>>('/auth/verify-email', { token });
 
     return response.data.message || "Email verified successfully.";
   }

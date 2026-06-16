@@ -98,7 +98,7 @@ export const serviceMarketplaceService = {
   },
 
   async getServiceReviews(serviceId: string) {
-    const response = await api.get(`/reviews?serviceId=${serviceId}`);
+    const response = await api.get(`/reviews/service/${serviceId}`);
     const data = response.data?.data ?? response.data ?? [];
     return Array.isArray(data)
       ? data
@@ -134,5 +134,10 @@ export const serviceMarketplaceService = {
   async requestQuote(data: ServiceQuoteData) {
     const response = await api.post<ApiResponse<any>>("/service-quotes", data);
     return response.data.data;
+  },
+
+  async createReview(data: { serviceId: string; rating: number; comment: string; contractorId: string; projectId?: string }) {
+    const response = await api.post("/reviews", data);
+    return response.data?.data ?? response.data;
   },
 };

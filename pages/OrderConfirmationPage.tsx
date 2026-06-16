@@ -98,18 +98,47 @@ export default function OrderConfirmationPage({
     );
   }
 
+  const pm = String(order.payment_method || "").toLowerCase();
+  const isCard = ["card", "stripe", "online"].includes(pm);
+  const isPaid = order.payment_status === "paid" || (order.payment_status as string) === "completed";
+  const isCancelled = order.status === "cancelled";
+
+  let statusIcon = (
+    <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+      <Icons.Check className="h-7 w-7" />
+    </div>
+  );
+  let statusTitle = "Order confirmed";
+  let statusDesc = `Order #${order.order_number || order.id}`;
+
+  if (isCancelled) {
+    statusIcon = (
+      <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-50 text-red-600">
+        <Icons.AlertCircle className="h-7 w-7" />
+      </div>
+    );
+    statusTitle = "Order cancelled";
+    statusDesc = `Your order #${order.order_number || order.id} has been cancelled due to a failed or abandoned payment.`;
+  } else if (isCard && !isPaid) {
+    statusIcon = (
+      <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+        <Icons.AlertCircle className="h-7 w-7" />
+      </div>
+    );
+    statusTitle = "Payment pending or failed";
+    statusDesc = `Order #${order.order_number || order.id} requires payment confirmation. Please check your purchase history to retry.`;
+  }
+
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-12">
       <div className="mx-auto max-w-4xl space-y-6">
         <section className="rounded-3xl bg-white p-8 text-center shadow-sm">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
-            <Icons.Check className="h-7 w-7" />
-          </div>
+          {statusIcon}
           <h1 className="text-3xl font-bold text-gray-900">
-            Order confirmed
+            {statusTitle}
           </h1>
           <p className="mt-2 text-gray-500">
-            Order #{order.order_number || order.id}
+            {statusDesc}
           </p>
         </section>
 
@@ -176,7 +205,7 @@ export default function OrderConfirmationPage({
             View Full Order Details
           </Button>
           <Button
-            variant="outline"
+            variant="ghost"
             className="flex-1"
             onClick={() => onNavigate("products")}
           >

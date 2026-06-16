@@ -1434,10 +1434,10 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               </button>
               <button
                 className="btn-secondary"
-                onClick={() => onNavigate("cost-estimator")}
+                onClick={() => onNavigate("services")}
               >
-                <Icons.Calculator className="h-5 w-5" />
-                Try AI Estimator
+                <Icons.Briefcase className="h-5 w-5" />
+                Browse Services
               </button>
             </div>
             <div className="hero-stats-bar reveal">

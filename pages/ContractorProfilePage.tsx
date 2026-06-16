@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { Button } from "../components/Button";
@@ -62,7 +62,18 @@ const PortfolioLightbox: React.FC<{
       <div className="flex items-center justify-between border-b border-white/8 px-6 py-4">
         <div>
           <h3 className="text-lg font-black text-white">{item.title}</h3>
-          {item.description && <p className="mt-1 text-sm text-slate-400">{item.description}</p>}
+          <div className="mt-2 flex flex-col gap-1.5">
+            {item.category && (
+              <div className="text-xs text-slate-400">
+                Category: <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold">{item.category}</span>
+              </div>
+            )}
+            {item.description && (
+              <div className="text-xs text-slate-400">
+                Description: <p className="text-sm text-gray-600 mt-2">{item.description}</p>
+              </div>
+            )}
+          </div>
         </div>
         <button type="button" onClick={onClose} aria-label="Close portfolio preview" title="Close portfolio preview" className="rounded-full border border-white/10 bg-white/5 p-2 text-slate-200">
           <Icons.Close className="h-5 w-5" />
@@ -204,14 +215,103 @@ const HireModal: React.FC<{
   );
 };
 
+const StarRatingSelector: React.FC<{
+  rating: number;
+  hoverRating: number | null;
+  onRatingChange: (rating: number) => void;
+  onHoverChange: (rating: number | null) => void;
+}> = ({ rating, hoverRating, onRatingChange, onHoverChange }) => {
+  return (
+    <div className="flex items-center gap-1.5 py-2">
+      {Array.from({ length: 5 }).map((_, index) => {
+        const starValue = index + 1;
+        const isFilled = hoverRating !== null ? starValue <= hoverRating : starValue <= rating;
+        return (
+          <button
+            key={index}
+            type="button"
+            className="focus:outline-none transition-transform duration-100 active:scale-90"
+            onClick={() => onRatingChange(starValue)}
+            onMouseEnter={() => onHoverChange(starValue)}
+            onMouseLeave={() => onHoverChange(null)}
+          >
+            <Icons.Star
+              className={`h-8 w-8 cursor-pointer ${isFilled ? "fill-current text-amber-400" : "text-slate-600"}`}
+            />
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
 export const ContractorProfilePage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const [profile, setProfile] = useState<ContractorProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedPortfolioItem, setSelectedPortfolioItem] = useState<ContractorPortfolioEntry | null>(null);
   const [showHireModal, setShowHireModal] = useState(false);
+
+  const [existingReviews, setExistingReviews] = useState<ContractorReviewEntry[]>([]);
+  const [isLoadingReviews, setIsLoadingReviews] = useState(true);
+  const [selectedRating, setSelectedRating] = useState(5);
+  const [hoveredRating, setHoveredRating] = useState<number | null>(null);
+  const [reviewText, setReviewText] = useState("");
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewSuccess, setReviewSuccess] = useState(false);
+
+  const loadReviews = useCallback(async () => {
+    if (!id) return;
+    setIsLoadingReviews(true);
+    try {
+      const fetchedReviews = await contractorService.getContractorReviews(id);
+      setExistingReviews(fetchedReviews);
+    } catch (err) {
+      console.error("Failed to load contractor reviews:", err);
+    } finally {
+      setIsLoadingReviews(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    loadReviews();
+  }, [loadReviews]);
+
+  const handleReviewSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!profile) return;
+
+    setIsSubmittingReview(true);
+    setReviewError(null);
+    setReviewSuccess(false);
+
+    const serviceId = profile.services && profile.services.length > 0 ? profile.services[0].id : null;
+    const contractorUserId = profile.userId || profile.id;
+
+    try {
+      await api.post("/reviews", {
+        serviceId,
+        contractorId: contractorUserId,
+        rating: selectedRating,
+        comment: reviewText,
+      });
+      setReviewSuccess(true);
+      setReviewText("");
+      setSelectedRating(5);
+      // Refresh reviews list
+      const fetchedReviews = await contractorService.getContractorReviews(contractorUserId);
+      setExistingReviews(fetchedReviews);
+    } catch (err: any) {
+      console.error("Failed to submit review:", err);
+      const errMsg = err?.response?.data?.message || err?.message || "Failed to submit review. Please try again.";
+      setReviewError(errMsg);
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -262,13 +362,20 @@ export const ContractorProfilePage: React.FC = () => {
     }
 
     if (!isAuthenticated) {
-      navigate(`/signin?returnUrl=${encodeURIComponent(`/contractors/${profile.businessId || profile.id}`)}`);
+      navigate(`/signin?returnUrl=${encodeURIComponent(`/contractors/${profile.userId || profile.id}`)}`);
+      return;
+    }
+
+    const participantId = profile.userId;
+    if (!participantId) {
+      console.error("No contractor user ID found on profile:", profile);
+      toast.error("Cannot message this contractor right now");
       return;
     }
 
     void api
       .post("/chat/conversations", {
-        participantId: profile.userId || profile.id,
+        participantId: participantId,
       })
       .then((response) => {
         const conversationId =
@@ -371,38 +478,49 @@ export const ContractorProfilePage: React.FC = () => {
           </div>
         </section>
 
-        <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-          <section className="rounded-[24px] border border-white/8 bg-white/4 p-6">
-            <h2 className="text-xl font-black text-white">About</h2>
-            <p className="mt-4 whitespace-pre-line text-sm leading-7 text-slate-300">{profile.about || profile.bio || "This contractor has not added a bio yet."}</p>
-
-            <div className="mt-6">
-              <h3 className="text-sm font-bold uppercase tracking-[0.18em] text-slate-500">Skills</h3>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {profileSkills.length > 0 ? profileSkills.map((skill) => (
-                  <span key={skill} className="rounded-full border border-violet-300/15 bg-violet-300/10 px-3 py-1 text-sm font-semibold text-violet-100">{skill}</span>
-                )) : <span className="text-sm text-slate-400">No skills listed yet.</span>}
+        {/* Business Info Strip */}
+        {Boolean(profile.businessName || profile.phone || profile.location || profile.city) && (
+          <div className="bg-white rounded-xl border border-gray-100 p-4 flex flex-wrap gap-6 mt-6">
+            {profile.businessName && (
+              <div className="flex items-center gap-2">
+                <span className="text-gray-400">🏢</span>
+                <div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide">Business</p>
+                  <p className="text-sm font-semibold text-gray-800">{profile.businessName}</p>
+                </div>
               </div>
-            </div>
-          </section>
+            )}
+            {profile.phone && (
+              <div className="flex items-center gap-2">
+                <span className="text-gray-400">📞</span>
+                <div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide">Phone</p>
+                  <p className="text-sm font-semibold text-gray-800">{profile.phone}</p>
+                </div>
+              </div>
+            )}
+            {(profile.location || profile.city) && (
+              <div className="flex items-center gap-2">
+                <span className="text-gray-400">📍</span>
+                <div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide">Location</p>
+                  <p className="text-sm font-semibold text-gray-800">{profile.location || profile.city}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
+        <div className="mt-8">
           <section className="rounded-[24px] border border-white/8 bg-white/4 p-6">
             <h2 className="text-xl font-black text-white">Quick Facts</h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <div className="rounded-2xl border border-white/8 bg-white/5 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Rating</p>
-                <p className="mt-2 text-2xl font-black text-white">{profile.rating.toFixed(1)}</p>
-              </div>
-              <div className="rounded-2xl border border-white/8 bg-white/5 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Reviews</p>
-                <p className="mt-2 text-2xl font-black text-white">{profile.reviewCount}</p>
-              </div>
-              <div className="rounded-2xl border border-white/8 bg-white/5 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Services</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Services Offered</p>
                 <p className="mt-2 text-2xl font-black text-white">{services.length}</p>
               </div>
               <div className="rounded-2xl border border-white/8 bg-white/5 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Portfolio</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Portfolio Items</p>
                 <p className="mt-2 text-2xl font-black text-white">{portfolio.length}</p>
               </div>
             </div>
@@ -422,11 +540,11 @@ export const ContractorProfilePage: React.FC = () => {
           ) : (
             <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {services.map((service: ContractorServiceOffer) => (
-                <article key={service.id} className="rounded-[22px] border border-white/8 bg-[#10151f] p-5">
+                <article key={service.id} className="rounded-[22px] border border-white/8 bg-[#10151f] p-5 max-w-full overflow-hidden">
                   <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h3 className="text-lg font-black text-white">{service.title}</h3>
-                      <p className="mt-2 text-sm leading-6 text-slate-300">{service.description || "Professional contractor service."}</p>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-lg font-black text-white truncate">{service.title}</h3>
+                      <p className="mt-2 text-sm leading-6 text-slate-300 overflow-hidden break-words line-clamp-2" style={{ wordBreak: 'break-word', overflow: 'hidden' }}>{service.description || "Professional contractor service."}</p>
                     </div>
                   </div>
 
@@ -461,14 +579,14 @@ export const ContractorProfilePage: React.FC = () => {
                   key={item.id}
                   type="button"
                   onClick={() => setSelectedPortfolioItem(item)}
-                  className="overflow-hidden rounded-[20px] border border-white/8 bg-[#10151f] text-left"
+                  className="overflow-hidden rounded-[20px] border border-white/8 bg-[#10151f] text-left w-full"
                 >
                   <div className="aspect-[4/3] overflow-hidden bg-slate-800">
                     {item.image ? <img src={item.image} alt={item.title} className="h-full w-full object-cover transition-transform duration-300 hover:scale-105" /> : <div className="flex h-full items-center justify-center text-slate-400">No image</div>}
                   </div>
                   <div className="p-4">
-                    <h3 className="font-bold text-white">{item.title}</h3>
-                    {item.description && <p className="mt-2 text-sm leading-6 text-slate-400">{item.description}</p>}
+                    <h3 className="font-bold text-white truncate">{item.title}</h3>
+                    {item.description && <p className="text-xs text-gray-500 truncate mt-1">{item.description}</p>}
                   </div>
                 </button>
               ))}
@@ -476,37 +594,123 @@ export const ContractorProfilePage: React.FC = () => {
           )}
         </section>
 
-        <section className="mt-8 rounded-[24px] border border-white/8 bg-white/4 p-6">
-          <h2 className="text-xl font-black text-white">Reviews</h2>
-          {reviews.length === 0 ? (
-            <p className="mt-4 text-sm text-slate-400">No reviews yet.</p>
-          ) : (
-            <div className="mt-6 space-y-4">
-              {reviews.map((review: ContractorReviewEntry) => (
-                <article key={review.id} className="rounded-[20px] border border-white/8 bg-[#10151f] p-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h3 className="font-bold text-white">{firstNameOnly(review.reviewerName)}</h3>
-                      <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">
-                        {review.createdAt ? new Date(review.createdAt).toLocaleDateString() : "Recent review"}
-                      </p>
+        {/* Reviews & Leave Review Section */}
+        <div className="mt-8 grid gap-8 lg:grid-cols-2">
+          {/* Existing Reviews List */}
+          <section className="rounded-[24px] border border-white/8 bg-white/4 p-6 flex flex-col h-full">
+            <h2 className="text-xl font-black text-white">Client Reviews</h2>
+            
+            {isLoadingReviews ? (
+              <p className="mt-4 text-sm text-slate-400">Loading reviews...</p>
+            ) : existingReviews.length === 0 ? (
+              <p className="mt-4 text-sm text-slate-400">No reviews yet for this contractor.</p>
+            ) : (
+              <div className="mt-6 space-y-4 max-h-[500px] overflow-y-auto pr-2">
+                {existingReviews.map((review) => (
+                  <article key={review.id} className="rounded-2xl border border-white/8 bg-[#10151f] p-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <p className="font-bold text-white text-sm">{review.reviewerName}</p>
+                      {review.createdAt && (
+                        <span className="text-[11px] text-slate-400 font-semibold">
+                          {new Date(review.createdAt).toLocaleDateString('en-GB', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric'
+                          })}
+                        </span>
+                      )}
                     </div>
-                    <div className="flex items-center gap-1 text-amber-300">
+                    <div className="flex items-center gap-1 text-amber-300 mt-1">
                       {renderStars(review.rating)}
                     </div>
+                    <p className="mt-2 text-sm text-slate-300 break-words overflow-hidden leading-relaxed">
+                      {review.comment}
+                    </p>
+                    {review.response && (
+                      <div className="mt-3 rounded-xl bg-white/5 border border-white/5 p-3">
+                        <p className="text-xs font-semibold text-amber-400">Contractor response:</p>
+                        <p className="text-xs text-slate-300 mt-1 break-words overflow-hidden">{review.response}</p>
+                      </div>
+                    )}
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Leave a Review Form */}
+          <section className="rounded-[24px] border border-white/8 bg-white/4 p-6 flex flex-col h-full justify-between">
+            <div>
+              <h2 className="text-xl font-black text-white">Leave a Review</h2>
+              <p className="mt-2 text-sm text-slate-400">Share your experience working with this contractor</p>
+              
+              {isAuthenticated && user?.role === 'buyer' ? (
+                <form onSubmit={handleReviewSubmit} className="mt-6 space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-200 mb-1">
+                      Rating
+                    </label>
+                    <StarRatingSelector
+                      rating={selectedRating}
+                      hoverRating={hoveredRating}
+                      onRatingChange={setSelectedRating}
+                      onHoverChange={setHoveredRating}
+                    />
                   </div>
-                  <p className="mt-4 text-sm leading-7 text-slate-300">{review.comment}</p>
-                  {review.response && (
-                    <div className="mt-4 rounded-2xl border border-violet-300/10 bg-violet-300/8 p-4">
-                      <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-200">Contractor Response</p>
-                      <p className="mt-2 text-sm leading-6 text-slate-300">{review.response}</p>
-                    </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-200 mb-2">
+                      Review Details
+                    </label>
+                    <textarea
+                      rows={4}
+                      className="w-full rounded-2xl border border-white/8 bg-[#10151f] px-4 py-3 text-white outline-none focus:border-amber-400/40 text-sm placeholder-slate-500"
+                      placeholder="Describe your experience..."
+                      value={reviewText}
+                      onChange={(e) => setReviewText(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  {reviewError && (
+                    <p className="text-sm font-semibold text-rose-400 mt-2">{reviewError}</p>
                   )}
-                </article>
-              ))}
+                  {reviewSuccess && (
+                    <p className="text-sm font-semibold text-emerald-400 mt-2">Review posted!</p>
+                  )}
+
+                  <Button
+                    variant="primary"
+                    type="submit"
+                    disabled={isSubmittingReview}
+                    className="w-full justify-center mt-2 bg-amber-500 hover:bg-amber-600 text-slate-900 border-none font-bold py-3 text-sm rounded-xl"
+                  >
+                    {isSubmittingReview ? (
+                      <span className="flex items-center gap-2">
+                        <svg className="animate-spin h-4 w-4 text-slate-900" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                        Posting...
+                      </span>
+                    ) : (
+                      "Post Review"
+                    )}
+                  </Button>
+                </form>
+              ) : !isAuthenticated ? (
+                <div className="mt-8 text-center py-6">
+                  <button
+                    onClick={() => navigate('/signin')}
+                    className="text-amber-400 hover:text-amber-300 font-bold underline text-sm"
+                  >
+                    Sign in to leave a review
+                  </button>
+                </div>
+              ) : null}
             </div>
-          )}
-        </section>
+          </section>
+        </div>
       </div>
 
       {showHireModal && profile && (

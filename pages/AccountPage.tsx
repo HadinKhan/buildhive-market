@@ -121,7 +121,10 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
 
   const [orders, setOrders] = useState<any[]>([]);
   const [wishlist, setWishlist] = useState<any[]>([]);
+  const [favoriteServices, setFavoriteServices] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
+  const [selectedProjectIds, setSelectedProjectIds] = useState<Set<string>>(new Set());
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [disputes, setDisputes] = useState<any[]>([]);
   const [tickets, setTickets] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -209,6 +212,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
       const [
         orderRes,
         wishlistRes,
+        favoriteServicesRes,
         projectsRes,
         disputesRes,
         ticketsRes,
@@ -218,6 +222,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
       ] = await Promise.all([
         api.get("/orders"),
         api.get("/wishlist").catch(() => null),
+        api.get("/wishlist/services").catch(() => null),
         api.get("/projects").catch(() => null),
         api.get("/disputes").catch(() => null),
         api.get("/tickets").catch(() => null),
@@ -226,8 +231,16 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
         api.get("/orders/buyer/invoices").catch(() => null),
       ]);
 
-      setOrders(asArray(unwrap(orderRes), ["orders"]).sort((a, b) => Date.parse(b.created_at || b.createdAt || "") - Date.parse(a.created_at || a.createdAt || "")));
+      const rawOrders = asArray(unwrap(orderRes), ["orders"]);
+      const filteredOrders = rawOrders.filter((order: any) => {
+        const pm = String(order.payment_method || "").toLowerCase();
+        const isPendingCard = ["card", "stripe", "online"].includes(pm) && order.status === "pending_payment";
+        const isAbandonedCard = order.status === "cancelled" && (/payment abandoned|payment failed/i.test(String(order.cancellation_reason || order.cancellationReason || "")));
+        return !isPendingCard && !isAbandonedCard;
+      });
+      setOrders(filteredOrders.sort((a, b) => Date.parse(b.created_at || b.createdAt || "") - Date.parse(a.created_at || a.createdAt || "")));
       setWishlist(asArray(unwrap(wishlistRes), ["items", "wishlist"]));
+      setFavoriteServices(asArray(unwrap(favoriteServicesRes), ["items", "favoriteServices", "services"]));
       setProjects(asArray(unwrap(projectsRes), ["projects"]));
       setDisputes(asArray(unwrap(disputesRes), ["disputes"]));
       setTickets(asArray(unwrap(ticketsRes), ["tickets"]));
@@ -369,6 +382,21 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
     }
   };
 
+  const removeFavoriteService = async (item: any) => {
+    const service = item.services || item.service || item;
+    const serviceId = item.service_id || service.id;
+    setBusy(`fav-service-${serviceId}`);
+    try {
+      await api.delete(`/wishlist/services/${serviceId}`);
+      setFavoriteServices((current) => current.filter((row) => (row.service_id || (row.services || row.service || row).id) !== serviceId));
+      toast.success("Service removed from saved items.");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Unable to remove saved service.");
+    } finally {
+      setBusy("");
+    }
+  };
+
   const openProject = async (project: any) => {
     setModal({ type: "project", project });
     try {
@@ -458,29 +486,105 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
     }
   };
 
-  const deleteProject = async (project: any) => {
-    setModal({
-      type: "confirm",
-      title: "Delete project?",
-      message: "This will remove the project if deletion is supported. Otherwise it will be marked cancelled.",
-      onConfirm: async () => {
-        setBusy(`project-delete-${project.id}`);
-        try {
-          try {
-            await api.delete(`/projects/${project.id}`);
-          } catch {
-            await api.put(`/projects/${project.id}`, { status: "cancelled" });
-          }
-          toast.success("Project removed.");
-          setModal(null);
-          await loadAll();
-        } catch (err: any) {
-          toast.error(err?.response?.data?.message || "Unable to remove project.");
-        } finally {
-          setBusy("");
-        }
-      },
+  const toggleSelect = (id: string) => {
+    setSelectedProjectIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
     });
+  };
+
+  const deleteProjectById = async (projectId: string) => {
+    const project = projects.find((p) => p.id === projectId);
+    if (!project) {
+      throw new Error("Project not found");
+    }
+    const status = (project.status || "open").toLowerCase();
+    if (status !== "pending" && status !== "open" && status !== "cancelled") {
+      throw new Error("Only pending, open, or cancelled projects can be deleted");
+    }
+    await api.delete(`/projects/${projectId}`);
+  };
+
+  const cancelProjectById = async (projectId: string) => {
+    const project = projects.find((p) => p.id === projectId);
+    if (!project) {
+      throw new Error("Project not found");
+    }
+    const status = (project.status || "open").toLowerCase();
+    if (status !== "pending" && status !== "open") {
+      throw new Error("Only pending or open projects can be cancelled");
+    }
+    await api.put(`/projects/${projectId}`, { status: "cancelled" });
+  };
+
+  const handleDeleteProject = async (projectId: string) => {
+    if (!window.confirm("Delete this project? This cannot be undone.")) return;
+    setBusy(`project-delete-${projectId}`);
+    try {
+      await deleteProjectById(projectId);
+      setProjects((prev) => prev.filter((p) => p.id !== projectId));
+      setSelectedProjectIds((prev) => {
+        if (prev.has(projectId)) {
+          const next = new Set(prev);
+          next.delete(projectId);
+          return next;
+        }
+        return prev;
+      });
+      toast.success("Project deleted successfully");
+    } catch (err: any) {
+      const errMsg = err?.response?.data?.message || err?.message || "Unable to delete project.";
+      toast.error(errMsg);
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const handleCancelProject = async (projectId: string) => {
+    if (!window.confirm("Cancel this project?")) return;
+    setBusy(`project-cancel-${projectId}`);
+    try {
+      await cancelProjectById(projectId);
+      setProjects((prev) =>
+        prev.map((p) => (p.id === projectId ? { ...p, status: "cancelled" } : p))
+      );
+      toast.success("Project cancelled successfully");
+    } catch (err: any) {
+      const errMsg = err?.response?.data?.message || err?.message || "Unable to cancel project.";
+      toast.error(errMsg);
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedProjectIds.size === 0) return;
+    if (!window.confirm(`Delete ${selectedProjectIds.size} projects? This cannot be undone.`)) return;
+
+    setIsBulkDeleting(true);
+    const ids = Array.from(selectedProjectIds);
+    const results = await Promise.allSettled(
+      ids.map((id) => deleteProjectById(id))
+    );
+
+    // Remove successfully deleted ones from state
+    const successIds = new Set(
+      ids.filter((id, i) => results[i].status === "fulfilled")
+    );
+    setProjects((prev) => prev.filter((p) => !successIds.has(p.id)));
+    setSelectedProjectIds(new Set());
+
+    const failCount = results.filter((r) => r.status === "rejected").length;
+    if (failCount > 0) {
+      alert(`${failCount} projects could not be deleted. They may have active proposals.`);
+    }
+
+    setIsBulkDeleting(false);
   };
 
   const createDispute = async (event: React.FormEvent) => {
@@ -906,37 +1010,93 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
               )}
 
               {activeTab === "saved" && (
-                <section className="space-y-4">
-                  {wishlist.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-gray-200 bg-white p-10 text-center">
-                      <p className="text-gray-500">No saved items yet.</p>
-                      <Button className="mt-4" onClick={() => onNavigate("products")}>Browse Products</Button>
-                    </div>
-                  ) : (
-                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                      {wishlist.map((item) => {
-                        const product = wishlistProduct(item);
-                        return (
-                          <article key={item.id || product.id} className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
-                            <div className="flex gap-3">
-                              <div className="h-20 w-20 overflow-hidden rounded-lg bg-gray-100">
-                                {productImage(product) ? <img src={productImage(product)} alt={product.name} className="h-full w-full object-cover" /> : null}
+                <section className="space-y-8">
+                  {/* Saved Products Section */}
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                      📦 Saved Products ({wishlist.length})
+                    </h2>
+                    {wishlist.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-gray-200 bg-white p-8 text-center">
+                        <p className="text-gray-500 text-sm">No saved products yet.</p>
+                        <Button className="mt-3" size="sm" onClick={() => onNavigate("products")}>Browse Products</Button>
+                      </div>
+                    ) : (
+                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                        {wishlist.map((item) => {
+                          const product = wishlistProduct(item);
+                          return (
+                            <article key={item.id || product.id} className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+                              <div className="flex gap-3">
+                                <div className="h-20 w-20 overflow-hidden rounded-lg bg-gray-100 flex-shrink-0">
+                                  {productImage(product) ? (
+                                    <img src={productImage(product)} alt={product.name} className="h-full w-full object-cover" />
+                                  ) : (
+                                    <img src="/productsplaceholder.png" alt={product.name} className="h-full w-full object-cover" />
+                                  )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <h3 className="truncate font-bold text-gray-900">{product.name || item.product_name || "Product"}</h3>
+                                  <p className="text-sm text-gray-500">{product.businesses?.business_name || product.businessName || "Seller"}</p>
+                                  <p className="mt-1 font-bold text-gray-900">{money(product.price || item.price)}</p>
+                                </div>
                               </div>
-                              <div className="min-w-0 flex-1">
-                                <h3 className="truncate font-bold text-gray-900">{product.name || item.product_name || "Product"}</h3>
-                                <p className="text-sm text-gray-500">{product.businesses?.business_name || product.businessName || "Seller"}</p>
-                                <p className="mt-1 font-bold text-gray-900">{money(product.price || item.price)}</p>
+                              <div className="mt-4 flex gap-2">
+                                <Button size="sm" className="flex-1" disabled={busy === `cart-${product.id}`} onClick={() => void addWishlistToCart(item)}>Add to Cart</Button>
+                                <Button size="sm" className={accountDangerButton} variant="outline" disabled={busy === `wishlist-${product.id}`} onClick={() => void removeWishlist(item)}>Remove</Button>
                               </div>
-                            </div>
-                            <div className="mt-4 flex gap-2">
-                              <Button size="sm" className="flex-1" disabled={busy === `cart-${product.id}`} onClick={() => void addWishlistToCart(item)}>Add to Cart</Button>
-                              <Button size="sm" className={accountDangerButton} variant="outline" disabled={busy === `wishlist-${product.id}`} onClick={() => void removeWishlist(item)}>Remove</Button>
-                            </div>
-                          </article>
-                        );
-                      })}
-                    </div>
-                  )}
+                            </article>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Saved Services Section */}
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                      🛠️ Saved Services ({favoriteServices.length})
+                    </h2>
+                    {favoriteServices.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-gray-200 bg-white p-8 text-center">
+                        <p className="text-gray-500 text-sm">No saved services yet.</p>
+                        <Button className="mt-3" size="sm" onClick={() => onNavigate("services")}>Browse Services</Button>
+                      </div>
+                    ) : (
+                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                        {favoriteServices.map((item) => {
+                          const service = item.services || item.service || item;
+                          const serviceId = item.service_id || service.id;
+                          return (
+                            <article key={item.id || serviceId} className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+                              <div className="flex gap-3">
+                                <div className="h-20 w-20 overflow-hidden rounded-lg bg-gray-100 flex-shrink-0">
+                                  <img
+                                    src={service.image || "/productsplaceholder.png"}
+                                    alt={service.title}
+                                    className="h-full w-full object-cover"
+                                    onError={(e) => {
+                                      e.currentTarget.onerror = null;
+                                      e.currentTarget.src = "/productsplaceholder.png";
+                                    }}
+                                  />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <h3 className="truncate font-bold text-gray-900">{service.title || "Service"}</h3>
+                                  <p className="text-sm text-gray-500">{service.creatorName || "Contractor"}</p>
+                                  <p className="mt-1 font-bold text-gray-900">{money(service.price)}</p>
+                                </div>
+                              </div>
+                              <div className="mt-4 flex gap-2">
+                                <Button size="sm" className="flex-1" onClick={() => onNavigate(`checkout?serviceId=${serviceId}`)}>Book Now</Button>
+                                <Button size="sm" className={accountDangerButton} variant="outline" disabled={busy === `fav-service-${serviceId}`} onClick={() => void removeFavoriteService(item)}>Remove</Button>
+                              </div>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </section>
               )}
 
@@ -986,24 +1146,110 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
 
               {activeTab === "projects" && (
                 <section className="space-y-4">
-                  <div className="flex justify-end">
-                    <Button onClick={openCreateProject}><Icons.Plus className="mr-2 h-4 w-4" /> New Project</Button>
+                  <div className="flex items-center justify-between">
+                    {projects.length > 0 ? (
+                      <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={selectedProjectIds.size === projects.length && projects.length > 0}
+                          onChange={() => {
+                            if (selectedProjectIds.size === projects.length) {
+                              setSelectedProjectIds(new Set()); // deselect all
+                            } else {
+                              setSelectedProjectIds(new Set(projects.map((p) => p.id))); // select all
+                            }
+                          }}
+                          className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                        />
+                        Select All
+                      </label>
+                    ) : (
+                      <div />
+                    )}
+                    <Button onClick={openCreateProject}>
+                      <Icons.Plus className="mr-2 h-4 w-4" /> New Project
+                    </Button>
                   </div>
+
+                  {selectedProjectIds.size > 0 && (
+                    <div className="flex items-center justify-between bg-purple-50 border border-purple-200 rounded-xl px-4 py-3 mb-4 animate-in fade-in duration-200">
+                      <span className="text-sm font-medium text-purple-700">
+                        {selectedProjectIds.size} project{selectedProjectIds.size > 1 ? "s" : ""} selected
+                      </span>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedProjectIds(new Set())}
+                          className="text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+                        >
+                          Clear selection
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleBulkDelete}
+                          disabled={isBulkDeleting}
+                          className="text-sm text-white bg-red-500 hover:bg-red-600 px-4 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+                        >
+                          {isBulkDeleting ? (
+                            <>
+                              <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                              </svg>
+                              Deleting...
+                            </>
+                          ) : (
+                            `Delete ${selectedProjectIds.size} selected`
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   <ListPanel empty="No projects posted yet.">
                     {projects.map((project) => (
                       <article key={project.id} className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
-                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                          <div>
-                            <h3 className="font-bold text-gray-900">{project.title || "Untitled project"}</h3>
-                            <p className="mt-1 line-clamp-2 text-sm text-gray-500">{project.description || "No description"}</p>
-                            <p className="mt-2 text-sm font-semibold text-gray-700">{money(project.budget || project.budget_max || project.budgetMax)}</p>
-                            <p className="mt-1 text-xs text-gray-500">Deadline: {dateLabel(project.deadline || project.due_date)}</p>
+                        <div className="flex items-start gap-4">
+                          <div className="pt-1">
+                            <input
+                              type="checkbox"
+                              checked={selectedProjectIds.has(project.id)}
+                              onChange={() => toggleSelect(project.id)}
+                              className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                            />
                           </div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <StatusBadge status={project.status || "open"} />
-                            <Button className={accountOutlineButton} variant="outline" size="sm" onClick={() => void openProject(project)}>View Details</Button>
-                            <Button className={accountOutlineButton} variant="outline" size="sm" onClick={() => openEditProject(project)}>Edit</Button>
-                            <Button className={accountDangerButton} variant="outline" size="sm" disabled={busy === `project-delete-${project.id}`} onClick={() => void deleteProject(project)}>Delete</Button>
+                          <div className="flex-1 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                            <div>
+                              <h3 className="font-bold text-gray-900">{project.title || "Untitled project"}</h3>
+                              <p className="mt-1 line-clamp-2 text-sm text-gray-500">{project.description || "No description"}</p>
+                              <p className="mt-2 text-sm font-semibold text-gray-700">{money(project.budget || project.budget_max || project.budgetMax)}</p>
+                              <p className="mt-1 text-xs text-gray-500">Deadline: {dateLabel(project.deadline || project.due_date)}</p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <StatusBadge status={project.status || "open"} />
+                              <Button className={accountOutlineButton} variant="outline" size="sm" onClick={() => void openProject(project)}>View Details</Button>
+                              <Button className={accountOutlineButton} variant="outline" size="sm" onClick={() => openEditProject(project)}>Edit</Button>
+                              {(project.status === "pending" || project.status === "open" || !project.status) && (
+                                <Button
+                                  className={accountOutlineButton}
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={busy === `project-cancel-${project.id}` || isBulkDeleting}
+                                  onClick={() => void handleCancelProject(project.id)}
+                                >
+                                  Cancel
+                                </Button>
+                              )}
+                              <Button
+                                className={accountDangerButton}
+                                variant="outline"
+                                size="sm"
+                                disabled={busy === `project-delete-${project.id}` || isBulkDeleting}
+                                onClick={() => void handleDeleteProject(project.id)}
+                              >
+                                Delete
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       </article>

@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { authService } from "../src/services/authService";
+import { Icons } from "../components/Icons";
+import { Button } from "../components/Button";
+import { authPageStyles } from "../src/styles/authPageStyles";
 
 export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
@@ -10,6 +13,8 @@ export default function ResetPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -27,7 +32,6 @@ export default function ResetPasswordPage() {
     try {
       await authService.resetPassword({ token, newPassword: password });
       setDone(true);
-      setTimeout(() => navigate("/signin"), 2000);
     } catch {
       setError("Reset failed. Link may have expired.");
     } finally {
@@ -36,58 +40,94 @@ export default function ResetPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-md rounded-xl bg-white p-10 shadow-sm">
-        <h2 className="mb-2 text-2xl font-semibold text-gray-900">
-          Reset Password
-        </h2>
-        <p className="mb-6 text-sm text-gray-500">
-          Enter your new password below.
-        </p>
+    <div className="auth-root">
+      <style>{authPageStyles}</style>
+
+      <div className="auth-card signin">
+        <div className="auth-header">
+          <span className="auth-badge">Security Access</span>
+          <h1>Reset Password</h1>
+          <p>Choose a new secure password below</p>
+        </div>
+
         {done ? (
-          <div className="rounded-lg bg-green-50 px-3 py-3 text-center text-sm text-green-600">
-            Password reset successful! Redirecting to sign in...
+          <div className="auth-success" style={{ padding: "20px 0" }}>
+            <div className="auth-success-icon">
+              <Icons.Check className="h-8 w-8" />
+            </div>
+            <h3>Password updated</h3>
+            <p>Your password has been reset successfully. You can now use your new password to sign in.</p>
           </div>
         ) : (
           <form onSubmit={handleSubmit}>
             {error && (
-              <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
-                {error}
+              <div className="auth-error">
+                <Icons.AlertCircle className="h-5 w-5" />
+                <span>{error}</span>
               </div>
             )}
-            <div className="mb-4">
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                New Password
-              </label>
-              <input
-                type="password"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Min. 8 characters"
-                required
-              />
+            
+            <div className="auth-field">
+              <label className="auth-label">New Password</label>
+              <div className="auth-input-wrap">
+                <Icons.Lock className="auth-icon" />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  className="auth-input with-left-icon with-right-icon"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Min. 8 characters"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="auth-icon-btn"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? (
+                    <Icons.EyeOff className="h-5 w-5" />
+                  ) : (
+                    <Icons.Eye className="h-5 w-5" />
+                  )}
+                </button>
+              </div>
             </div>
-            <div className="mb-6">
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                Confirm Password
-              </label>
-              <input
-                type="password"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
-                value={confirm}
-                onChange={(e) => setConfirm(e.target.value)}
-                placeholder="Repeat new password"
-                required
-              />
+
+            <div className="auth-field">
+              <label className="auth-label">Confirm Password</label>
+              <div className="auth-input-wrap">
+                <Icons.Lock className="auth-icon" />
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  className="auth-input with-left-icon with-right-icon"
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  placeholder="Repeat new password"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="auth-icon-btn"
+                  aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                >
+                  {showConfirmPassword ? (
+                    <Icons.EyeOff className="h-5 w-5" />
+                  ) : (
+                    <Icons.Eye className="h-5 w-5" />
+                  )}
+                </button>
+              </div>
             </div>
-            <button
+
+            <Button
               type="submit"
               disabled={loading}
-              className={`w-full rounded-lg px-3 py-3 text-sm font-semibold text-white transition disabled:cursor-not-allowed ${loading ? "bg-gray-400" : "bg-green-600 hover:bg-green-700"}`}
+              className="w-full mt-4"
             >
               {loading ? "Resetting..." : "Reset Password"}
-            </button>
+            </Button>
           </form>
         )}
       </div>

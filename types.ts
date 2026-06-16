@@ -377,6 +377,7 @@ export interface ContractorPortfolioEntry {
   description?: string;
   image?: string | null;
   createdAt?: string;
+  category?: string;
 }
 
 export interface ContractorReviewEntry {
@@ -396,6 +397,8 @@ export interface ContractorProfile extends ContractorSummary {
   portfolio: ContractorPortfolioEntry[];
   services: ContractorServiceOffer[];
   reviews: ContractorReviewEntry[];
+  phone?: string;
+  businessName?: string;
 }
 
 // =============================================

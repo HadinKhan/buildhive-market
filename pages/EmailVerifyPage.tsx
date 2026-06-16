@@ -42,7 +42,7 @@ export default function EmailVerifyPage() {
     let cancelled = false;
 
     if (redirectedResult) {
-      setStatus(redirectedResult.status);
+      setStatus(redirectedResult.status as "loading" | "success" | "error");
       setMessage(redirectedResult.message);
 
       if (redirectedResult.status === "success") {
@@ -72,9 +72,12 @@ export default function EmailVerifyPage() {
       .catch((error) => {
         if (cancelled) return;
         setStatus("error");
-        setMessage(
-          error?.message || "Verification failed. Please request a new link.",
-        );
+        const msg =
+          error?.response?.data?.message ||
+          error?.response?.data?.error ||
+          error?.message ||
+          "Verification failed. Please request a new link.";
+        setMessage(msg);
       });
 
     return () => {

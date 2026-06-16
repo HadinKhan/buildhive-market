@@ -15,8 +15,8 @@ export interface Service {
   name: string;
   category: string;
   subcategory: string;
-  creatorName: string;
-  creatorRole: "Contractor" | "Seller";
+  creatorName?: string;
+  creatorRole?: "Contractor" | "Seller";
   creatorId?: string;
   memberSince?: string;
   price: number;
@@ -27,10 +27,10 @@ export interface Service {
     description?: string;
   }>;
   priceType: "fixed" | "hourly" | "per-sqft" | "project-based";
-  deliveryDays: number;
+  deliveryDays?: number;
   rating: number;
   reviews: number;
-  reviewCount: number;
+  reviewCount?: number;
   image: string;
   badge?: string;
   provider: string;
@@ -1457,7 +1457,12 @@ const toServiceView = (service: ApiService | any): Service => ({
   reviewCount: Number(
     service.total_reviews || service.review_count || service.reviews || 0,
   ),
-  image: service.image || service.images?.[0]?.image_url || "",
+  image:
+    service.image ||
+    service.image_url ||
+    service.imageUrl ||
+    (Array.isArray(service.images) && service.images[0]?.image_url) ||
+    "",
   badge: service.badge,
   provider:
     service.provider?.name ||
@@ -1741,6 +1746,37 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
     };
   }, [authLoading, isAuthenticated]);
 
+  React.useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
+    if (!isAuthenticated) {
+      setLikedServices([]);
+      return;
+    }
+
+    let cancelled = false;
+    api
+      .get("/wishlist/services")
+      .then((res: any) => {
+        if (!cancelled) {
+          const items = res.data?.data?.items || [];
+          const ids = items
+            .map((item: any) => item.service_id || item.service?.id)
+            .filter(Boolean);
+          setLikedServices(ids);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load liked services", err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, isAuthenticated]);
+
   const visibleCategories = useMemo(() => {
     const query = searchParams.categorySearch.trim().toLowerCase();
     if (!query) return serviceCategories;
@@ -1937,6 +1973,35 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
     });
   };
 
+  const handleChatWithProvider = (service: Service) => {
+    if (!isAuthenticated) {
+      onNavigate("signin");
+      return;
+    }
+
+    const participantId = service.creatorId;
+    if (!participantId) {
+      toastify.error("Cannot message this provider right now");
+      return;
+    }
+
+    void api
+      .post("/chat/conversations", {
+        participantId: participantId,
+      })
+      .then((response) => {
+        const conversationId =
+          response.data?.data?.conversationId ||
+          response.data?.data?.id ||
+          response.data?.conversationId ||
+          response.data?.id;
+        onNavigate(`account?tab=messages${conversationId ? `&conversationId=${encodeURIComponent(conversationId)}` : ""}`);
+      })
+      .catch(() => {
+        toastify.error("Unable to start the conversation right now.");
+      });
+  };
+
   const showToast = (message: string, timeout = 2200) => {
     setToast(message);
     window.setTimeout(() => setToast(null), timeout);
@@ -2035,189 +2100,187 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
     <Icons.Star style={{ width: 16, height: 16, fill: "currentColor" }} />
   );
 
-  const renderServiceCard = (service: Service) => (
-    <article
-      key={service.id}
-      className="service-card"
-      onClick={() => {
-        setSelectedService(service);
-        setSelectedServiceImage(service.image);
-      }}
-    >
-      <div className="service-image-wrap">
-        {service.image ? (
-          <img src={service.image} alt={service.name} />
-        ) : (
-          <div className="service-image-placeholder" aria-hidden="true">
-            {service.name}
-          </div>
-        )}
-        {service.badge && (
-          <span className="service-badge">{service.badge}</span>
-        )}
-        <div className="floating-actions">
-          <button
-            className="icon-pill"
-            aria-label={
-              likedServices.includes(service.id)
-                ? "Remove from liked services"
-                : "Like service"
-            }
-            onClick={(event) => {
-              event.stopPropagation();
-              setLikedServices((current) =>
-                current.includes(service.id)
-                  ? current.filter((id) => id !== service.id)
-                  : [...current, service.id],
-              );
-              showToast(
+  const renderServiceCard = (service: Service) => {
+    const initials = String(service.creatorName || service.provider || "B")
+      .slice(0, 1)
+      .toUpperCase();
+    
+    const colors = [
+      "bg-purple-600 text-purple-100",
+      "bg-blue-600 text-blue-100",
+      "bg-emerald-600 text-emerald-100",
+      "bg-amber-600 text-amber-100",
+      "bg-pink-600 text-pink-100",
+      "bg-rose-600 text-rose-100",
+      "bg-indigo-600 text-indigo-100"
+    ];
+    const colorIdx = initials.charCodeAt(0) % colors.length;
+    const avatarColor = colors[colorIdx];
+
+    return (
+      <article
+        key={service.id}
+        className="group relative flex flex-col h-full overflow-hidden rounded-2xl border border-white/10 bg-[#0f0f15] shadow-md transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-purple-500/30 cursor-pointer"
+        onClick={() => {
+          onNavigate(`services/${service.id}`);
+        }}
+      >
+        <div className="relative aspect-video w-full overflow-hidden bg-zinc-950">
+          <img
+            src={service.image || "/productsplaceholder.png"}
+            alt={service.name}
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+            onError={(e) => {
+              e.currentTarget.onerror = null;
+              e.currentTarget.src = "/productsplaceholder.png";
+            }}
+          />
+
+          <span className="absolute top-3 right-3 rounded-full bg-amber-500/90 backdrop-blur-sm px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-950 shadow-sm border border-amber-400/20">
+            {service.category || "Other"}
+          </span>
+
+          <div className="absolute top-3 left-3 flex gap-2">
+            <button
+              type="button"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-black/40 border border-white/10 text-white backdrop-blur-sm transition-colors hover:bg-black/60"
+              aria-label={
                 likedServices.includes(service.id)
-                  ? "Removed from liked services"
-                  : "Added to liked services",
-              );
-            }}
-          >
-            <Icons.Heart
-              style={{
-                width: 18,
-                height: 18,
-                fill: likedServices.includes(service.id)
-                  ? "currentColor"
-                  : "none",
+                  ? "Remove from liked services"
+                  : "Like service"
+              }
+              onClick={async (event) => {
+                event.stopPropagation();
+                if (!isAuthenticated) {
+                  onNavigate("signin");
+                  return;
+                }
+                const isLiked = likedServices.includes(service.id);
+                try {
+                  if (isLiked) {
+                    await api.delete(`/wishlist/services/${service.id}`);
+                    setLikedServices((current) => current.filter((id) => id !== service.id));
+                    showToast("Removed from liked services");
+                  } else {
+                    await api.post("/wishlist/services", { serviceId: service.id });
+                    setLikedServices((current) => [...current, service.id]);
+                    showToast("Added to liked services");
+                  }
+                } catch (err) {
+                  showToast("Failed to update liked services");
+                }
               }}
-            />
-          </button>
-          <label
-            className="icon-pill"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <input
-              type="checkbox"
-              checked={comparisonItems.includes(service.id)}
-              onChange={() => toggleComparison(service.id)}
-              style={{
-                width: 16,
-                height: 16,
-                accentColor: "#a78bfa",
-                cursor: "pointer",
+            >
+              <Icons.Heart
+                style={{
+                  width: 14,
+                  height: 14,
+                  fill: likedServices.includes(service.id)
+                    ? "currentColor"
+                    : "none",
+                }}
+              />
+            </button>
+
+            <button
+              type="button"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-black/40 border border-white/10 text-white backdrop-blur-sm transition-colors hover:bg-black/60"
+              aria-label="Chat with provider"
+              onClick={(event) => {
+                event.stopPropagation();
+                handleChatWithProvider(service);
               }}
-              aria-label="Compare service"
-            />
-          </label>
-        </div>
-      </div>
-
-      <div className="service-card-body">
-        <span className="subcategory-pill">{service.category || "Other"}</span>
-        <h3>{service.name}</h3>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            marginBottom: 10,
-          }}
-        >
-          <span style={{ color: "#cbd5e1", fontSize: 12 }}>
-            {service.creatorName}
-          </span>
-          <span
-            style={{
-              fontSize: "10px",
-              padding: "1px 5px",
-              background: "#EEF2FF",
-              color: "#4338CA",
-              borderRadius: "4px",
-              fontWeight: 800,
-              lineHeight: 1.4,
-            }}
-          >
-            {service.creatorRole === "Seller" ? "Seller" : "Contractor"}
-          </span>
-        </div>
-        <p>{service.description}</p>
-
-        <div className="service-meta-row">
-          <span className="service-meta-item">
-            <Icons.Award style={{ width: 14, height: 14 }} />
-            {service.experience} years
-          </span>
-          <span className="service-meta-item">
-            <Icons.Folder style={{ width: 14, height: 14 }} />
-            {service.completedProjects} projects
-          </span>
-          <span className="service-meta-item">
-            <Icons.MapPin style={{ width: 14, height: 14 }} />
-            {service.location}
-          </span>
+            >
+              <Icons.Message
+                style={{
+                  width: 14,
+                  height: 14,
+                }}
+              />
+            </button>
+          </div>
         </div>
 
-        <div className="price-rating-row">
-          <div>
-            <div className="service-price">
-              {service.packages && service.packages.length > 0 ? "From " : ""}
-              PKR {service.price.toLocaleString()}
+        <div className="flex flex-col flex-1 p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <div className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${avatarColor}`}>
+              {initials}
             </div>
-            <span className="service-price-type">
-              Delivered in {service.deliveryDays || 0} days
+            <div className="flex flex-col min-w-0">
+              <span className="text-xs font-semibold text-slate-200 truncate">
+                {service.creatorName || service.provider}
+              </span>
+              <span className="text-[10px] text-slate-400 font-medium">
+                {service.creatorRole === "Seller" ? "Supplier" : "Contractor"}
+              </span>
+            </div>
+            {service.verified && (
+              <Icons.Check className="h-3.5 w-3.5 text-emerald-400 flex-shrink-0" />
+            )}
+          </div>
+
+          <h3 className="text-sm font-bold text-white line-clamp-2 mb-2 leading-snug group-hover:text-purple-300 transition-colors break-words overflow-hidden">
+            {service.name}
+          </h3>
+
+          <p className="text-xs text-slate-400 line-clamp-2 mb-4 leading-relaxed break-words overflow-hidden">
+            {service.description}
+          </p>
+
+          <div className="flex items-center gap-2 mb-4">
+            <div className="flex items-center gap-1 text-amber-400">
+              {renderStar()}
+              <span className="text-xs font-bold text-slate-200">
+                {service.rating.toFixed(1)}
+              </span>
+            </div>
+            <span className="text-xs text-slate-400">
+              ({service.reviewCount || service.reviews} reviews)
             </span>
           </div>
-          <div className="rating-pill">
-            {renderStar()}
-            {service.rating.toFixed(1)}
-            <span>({service.reviewCount || service.reviews})</span>
+
+          <div className="flex items-baseline justify-between gap-2 border-t border-white/5 pt-3 mt-auto">
+            <div className="flex flex-col">
+              <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
+                Starting at
+              </span>
+              <span className="text-base font-black text-white">
+                PKR {Number(service.price).toLocaleString("en-PK")}
+              </span>
+            </div>
+            <span className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 text-[10px] font-bold uppercase text-emerald-400">
+              {service.deliveryDays || 0} days delivery
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 mt-4">
+            <button
+              type="button"
+              className="flex items-center justify-center gap-1.5 rounded-xl bg-purple-600 py-2 text-xs font-bold text-white transition-all hover:bg-purple-700 active:scale-95 shadow-lg shadow-purple-600/10"
+              onClick={(event) => {
+                event.stopPropagation();
+                openQuoteModal(service);
+              }}
+            >
+              <Icons.Message style={{ width: 13, height: 13 }} />
+              Quote
+            </button>
+            <button
+              type="button"
+              className="flex items-center justify-center gap-1.5 rounded-xl bg-zinc-800 border border-white/10 py-2 text-xs font-bold text-slate-200 transition-all hover:bg-zinc-700 hover:text-white active:scale-95"
+              onClick={(event) => {
+                event.stopPropagation();
+                onNavigate(`services/${service.id}`);
+              }}
+            >
+              Details
+              <Icons.ArrowRight style={{ width: 13, height: 13 }} />
+            </button>
           </div>
         </div>
-
-        <div className="availability-indicator">
-          <span
-            className={`availability-dot availability-${service.availability}`}
-          />
-          {availabilityLabels[service.availability]}
-        </div>
-
-        <button
-          type="button"
-          className="btn-request-quote"
-          onClick={(event) => {
-            event.stopPropagation();
-            openQuoteModal(service);
-          }}
-        >
-          <Icons.Message style={{ width: 16, height: 16 }} />
-          Request Quote
-        </button>
-
-        <button
-          type="button"
-          className="btn-secondary"
-          onClick={(event) => {
-            event.stopPropagation();
-            onNavigate(`services/${service.id}`);
-          }}
-        >
-          <Icons.ArrowRight style={{ width: 16, height: 16 }} />
-          View Details
-        </button>
-
-        <div
-          className="provider-row"
-          onClick={(event) => {
-            event.stopPropagation();
-            setSelectedProvider(getProviderProfile(service));
-          }}
-        >
-          <div className="provider-avatar">{service.provider.charAt(0)}</div>
-          <span style={{ color: "#9aa9c2", fontSize: 13 }}>
-            {service.provider}
-          </span>
-          {service.verified && (
-            <Icons.Check style={{ width: 16, height: 16, color: "#34d399" }} />
-          )}
-        </div>
-      </div>
-    </article>
-  );
+      </article>
+    );
+  };
 
   return (
     <div className="services-page">
@@ -2665,7 +2728,7 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
             onClick={(event) => event.stopPropagation()}
           >
             <div className="modal-header">
-              <h2>{selectedService.name}</h2>
+              <h2 className="break-words overflow-hidden">{selectedService.name}</h2>
               <button
                 className="modal-close"
                 onClick={() => setSelectedService(null)}
@@ -2689,17 +2752,15 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
 
                     return (
                       <>
-                        {activeImage ? (
-                          <img
-                            src={activeImage}
-                            alt={selectedService.name}
-                            className="main-image"
-                          />
-                        ) : (
-                          <div className="main-image service-image-placeholder">
-                            {selectedService.name}
-                          </div>
-                        )}
+                        <img
+                          src={activeImage || "/productsplaceholder.png"}
+                          alt={selectedService.name}
+                          className="main-image object-cover"
+                          onError={(e) => {
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src = "/productsplaceholder.png";
+                          }}
+                        />
 
                         {(() => {
                           const filteredGalleryImages =
@@ -2737,7 +2798,7 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
                   )} */}
                 </div>
                 <div className="detail-info">
-                  <h3>{selectedService.name}</h3>
+                  <h3 className="break-words overflow-hidden">{selectedService.name}</h3>
                   <div className="detail-price">
                     PKR {selectedService.price.toLocaleString()}
                   </div>
@@ -2760,7 +2821,7 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
                     {selectedService.rating.toFixed(1)}
                     <span>({selectedService.reviews} reviews)</span>
                   </div>
-                  <p style={{ color: "#cbd5e1", lineHeight: 1.7 }}>
+                  <p style={{ color: "#cbd5e1", lineHeight: 1.7 }} className="break-words overflow-hidden whitespace-pre-wrap">
                     {selectedService.description}
                   </p>
 
@@ -2806,7 +2867,7 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
                   )}
 
                   <div className="provider-card">
-                    <p style={{ color: "#cbd5e1", margin: 0, fontSize: 13 }}>
+                    <p style={{ color: "#cbd5e1", margin: 0, fontSize: 13 }} className="break-words overflow-hidden">
                       <strong style={{ color: "#fff" }}>Contractor:</strong>{" "}
                       {selectedService.provider}
                       {selectedService.verified && (
@@ -3155,12 +3216,6 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
               <div className="seller-stats-grid">
                 <div className="seller-stat-card">
                   <div className="seller-stat-value">
-                    {selectedProvider.rating.toFixed(1)}
-                  </div>
-                  <div className="seller-stat-label">Rating</div>
-                </div>
-                <div className="seller-stat-card">
-                  <div className="seller-stat-value">
                     {
                       services.filter(
                         (service) => service.provider === selectedProvider.name,
@@ -3185,32 +3240,9 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
                 )}
               </div>
 
-              {selectedProvider.reviewSummary && (
-                <div className="seller-section">
-                  <h3>Review Summary</h3>
-                  <div className="seller-stats-grid">
-                    <div className="seller-stat-card">
-                      <div className="seller-stat-value">
-                        {Number(
-                          selectedProvider.reviewSummary.averageRating ||
-                            selectedProvider.rating,
-                        ).toFixed(1)}
-                      </div>
-                      <div className="seller-stat-label">Average rating</div>
-                    </div>
-                    <div className="seller-stat-card">
-                      <div className="seller-stat-value">
-                        {selectedProvider.reviewSummary.totalReviews || 0}
-                      </div>
-                      <div className="seller-stat-label">Total reviews</div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               <div className="seller-section">
                 <h3>About</h3>
-                <p style={{ color: "#cbd5e1", lineHeight: 1.7, margin: 0 }}>
+                <p style={{ color: "#cbd5e1", lineHeight: 1.7, margin: 0 }} className="break-words overflow-hidden">
                   {selectedProvider.description}
                 </p>
               </div>
@@ -3230,16 +3262,18 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
                 </p>
               </div>
 
-              <div className="seller-section">
-                <h3>Certifications</h3>
-                <div className="seller-certifications">
-                  {selectedProvider.certifications.map((certification) => (
-                    <span key={certification} className="seller-cert-tag">
-                      {certification}
-                    </span>
-                  ))}
+              {selectedProvider.certifications && selectedProvider.certifications.length > 0 && (
+                <div className="seller-section">
+                  <h3>Certifications</h3>
+                  <div className="seller-certifications">
+                    {selectedProvider.certifications.map((certification) => (
+                      <span key={certification} className="seller-cert-tag">
+                        {certification}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {selectedProvider.coverageArea && (
                 <div className="seller-section">

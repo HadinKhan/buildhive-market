@@ -578,18 +578,22 @@ export const cartPageStyles = `
 .btn-checkout {
   width: 100%;
   margin-top: 20px;
-  border: 1px solid rgba(167, 139, 250, 0.44);
-  background: linear-gradient(180deg, rgba(196, 181, 253, 0.12), rgba(124, 58, 237, 0.06)), #1a1426;
-  color: #f5f3ff;
+  border: none;
+  background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+  color: #ffffff;
   font-size: 15px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 14px 30px rgba(0, 0, 0, 0.24), 0 0 0 1px rgba(124, 58, 237, 0.2);
+  box-shadow: 0 4px 20px rgba(124, 58, 237, 0.3);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .btn-checkout:hover:not(:disabled) {
-  transform: translateY(-2px);
-  border-color: rgba(196, 181, 253, 0.68);
-  background: linear-gradient(180deg, rgba(196, 181, 253, 0.16), rgba(124, 58, 237, 0.08)), #211830;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 18px 38px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(167, 139, 250, 0.22);
+  transform: translateY(-2.5px);
+  background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+  box-shadow: 0 8px 25px rgba(124, 58, 237, 0.5);
+}
+
+.btn-checkout:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
 }
 
 .btn-checkout:disabled {

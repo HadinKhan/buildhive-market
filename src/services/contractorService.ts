@@ -145,6 +145,7 @@ const normalisePortfolioEntry = (item: Record<string, any>): ContractorPortfolio
   description: safeString(item.description || item.caption || item.summary) || undefined,
   image: item.image || item.image_url || item.imageUrl || item.photo || null,
   createdAt: safeString(item.created_at || item.createdAt) || undefined,
+  category: safeString(item.category || item.tag || item.discipline || ""),
 });
 
 const normaliseServiceOffer = (item: Record<string, any>): ContractorServiceOffer => ({
@@ -236,80 +237,69 @@ const contractorService = {
   },
 
   async getContractorById(id: string): Promise<ContractorProfile> {
-    const profile = await tryRequest<any>(`/business/${id}`);
-    const fallbackProfile = profile || (await tryRequest<any>(`/services/${id}/contractor-profile`)) || (await tryRequest<any>(`/users/${id}`)) || {};
-    const base = normaliseContractorSummary(fallbackProfile || {});
-    const profilePayload = unwrapResponse(fallbackProfile) || fallbackProfile || {};
-    const contractorUserId =
-      base.userId ||
-      safeString(profilePayload.user_id || profilePayload.userId || profilePayload.contractor_id || profilePayload.contractor?.id) ||
-      id;
+    // Fetch business profile list and find the one belonging to this user ID
+    const businessResponse = await tryRequest<any>("/business", { limit: 100 });
+    const businessItems = getCollection(businessResponse);
+    const business = businessItems.find((b: any) => b.user_id === id);
 
-    const [portfolio, services, reviews] = await Promise.all([
-      this.getContractorPortfolio(contractorUserId),
-      this.getContractorServices(contractorUserId),
-      this.getContractorReviews(contractorUserId),
+    // Fetch portfolio, reviews, and raw services in parallel
+    const [portfolio, reviews, rawServicesResponse] = await Promise.all([
+      this.getContractorPortfolio(id),
+      this.getContractorReviews(id),
+      tryRequest<any>("/services/public", { contractorId: id }),
     ]);
 
-    const profilePortfolio = getCollection(
-      profilePayload.portfolio ||
-        profilePayload.portfolioItems ||
-        profilePayload.portfolio_items ||
-        profilePayload.contractorProfile?.portfolio ||
-        profilePayload.contractor_profile?.portfolio ||
-        [],
-    ).map((item) => normalisePortfolioEntry(item));
+    const rawServices = getCollection(rawServicesResponse);
+    const services = rawServices.map((item) => normaliseServiceOffer(item));
 
-    const profileServices = getCollection(
-      profilePayload.services ||
-        profilePayload.items ||
-        profilePayload.contractorProfile?.services ||
-        profilePayload.contractor_profile?.services ||
-        [],
-    ).map((item) => normaliseServiceOffer(item));
+    // Fallbacks from raw services data
+    const rawContractorInfo = rawServices[0]?.contractor || {};
+    const rawCity = rawServices[0]?.city || "";
 
-    const profileReviews = getCollection(
-      profilePayload.reviews ||
-        profilePayload.reviewSummary?.recentReviews ||
-        profilePayload.review_summary?.recentReviews ||
-        profilePayload.contractorProfile?.reviews ||
-        profilePayload.contractor_profile?.reviews ||
-        [],
-    ).map((item) => normaliseReviewEntry(item));
+    const contractorName = business?.business_name || rawContractorInfo.full_name || "Contractor";
+    const trade = business?.business_type || (rawServices[0]?.category?.name || rawServices[0]?.category || "Contractor");
+    const phone = business?.phone || rawContractorInfo.phone || "";
+    const email = business?.email || rawContractorInfo.email || "";
+    const location = business?.city || business?.location || rawCity || "Location available on request";
+    const bio = business?.description || "Professional contractor service.";
 
-    const skills = toArray(
-      profilePayload.skills ||
-        profilePayload.specialties ||
-        profilePayload.tags ||
-        profilePayload.contractorProfile?.skills ||
-        profilePayload.contractor_profile?.skills ||
-        base.skills ||
-        [],
-    )
-      .map((skill) => safeString(skill))
-      .filter(Boolean);
+    // Calculate rating and reviewCount
+    const rating = business?.rating || (reviews.length > 0 ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length : 0);
+    const reviewCount = reviews.length;
+    const verified = business ? (business.status === "approved") : (rawServices[0]?.verified || false);
 
-    return {
-      ...base,
-      name: base.name || safeString(profilePayload.name || profilePayload.business_name || "Contractor"),
-      bio: safeString(
-        profilePayload.bio ||
-          profilePayload.description ||
-          profilePayload.about ||
-          profilePayload.contractorProfile?.bio ||
-          profilePayload.contractor_profile?.bio ||
-          base.bio,
-      ),
-      skills: skills.length > 0 ? skills : base.skills || [],
-      responseRate: safeString(profilePayload.response_rate || profilePayload.responseRate) || undefined,
-      avgResponseTime: safeString(profilePayload.avg_response_time || profilePayload.avgResponseTime || base.responseTime) || undefined,
-      portfolio: portfolio.length > 0 ? portfolio : profilePortfolio,
-      services: services.length > 0 ? services : profileServices,
-      reviews: reviews.length > 0 ? reviews : profileReviews,
-      reviewCount: base.reviewCount || toNumber(profilePayload.review_count ?? profilePayload.total_reviews ?? profilePayload.reviewCount, 0),
-      rating: base.rating || toNumber(profilePayload.average_rating ?? profilePayload.rating ?? profilePayload.review_rating, 0),
-      verified: base.verified || Boolean(profilePayload.verified ?? profilePayload.is_verified ?? profilePayload.approved),
+    const skills = Array.from(new Set(rawServices.flatMap((s: any) => s.skills || s.tags || []))).map((skill) => safeString(skill)).filter(Boolean);
+
+    const base: ContractorProfile = {
+      id: business?.id || id, // businessId or userId
+      userId: id,
+      businessId: business?.id || undefined,
+      name: contractorName,
+      trade: trade,
+      bio: bio,
+      rating: rating,
+      reviewCount: reviewCount,
+      location: location,
+      city: business?.city || location.split(",")[0].trim() || "",
+      verified: verified,
+      servicesCount: services.length,
+      availableNow: true,
+      avatar: business?.logo || rawContractorInfo.profile_image || null,
+      image: business?.logo || rawContractorInfo.profile_image || null,
+      featured: false,
+      skills: skills,
+      portfolio: portfolio,
+      services: services,
+      reviews: reviews,
+      phone: phone,
+      businessName: business?.business_name || "",
+      about: bio,
+      responseRate: business?.response_rate || undefined,
+      avgResponseTime: business?.avg_response_time || undefined,
+      memberSince: business?.created_at || undefined,
     };
+
+    return base;
   },
 };
 
