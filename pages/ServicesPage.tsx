@@ -922,6 +922,11 @@ const servicesPageStyles = `
   font-size: 13px;
 }
 
+.quote-form-grid select option {
+  color: #111827;
+  background-color: #ffffff;
+}
+
 .quote-form-grid textarea {
   padding: 12px 14px;
   min-height: 120px;

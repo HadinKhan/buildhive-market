@@ -223,7 +223,6 @@ export const Header: React.FC<HeaderProps> = ({
                     { label: "Home", slug: "home" },
                     { label: "Products", slug: "products" },
                     { label: "Services", slug: "services" },
-                    { label: "Find Contractors", slug: "contractors" },
                     {
                       label: "AI",
                       slug: "ai",
@@ -364,7 +363,6 @@ export const Header: React.FC<HeaderProps> = ({
                     { label: "Home", slug: "home" },
                     { label: "Products", slug: "products" },
                     { label: "Services", slug: "services" },
-                    { label: "Find Contractors", slug: "contractors" },
                     {
                       label: "AI",
                       slug: "ai",
@@ -719,7 +717,6 @@ export const Header: React.FC<HeaderProps> = ({
                     { label: "Products", slug: "products" },
                     { label: "Support", slug: "support" },
                     { label: "Services", slug: "services" },
-                    { label: "Find Contractors", slug: "contractors" },
                     { label: "AI", slug: "ai" },
                     { label: "About Us", slug: "about" },
                     { label: "Contact", slug: "contact" },
@@ -728,7 +725,6 @@ export const Header: React.FC<HeaderProps> = ({
                     { label: "Home", slug: "home" },
                     { label: "Products", slug: "products" },
                     { label: "Services", slug: "services" },
-                    { label: "Find Contractors", slug: "contractors" },
                     { label: "AI", slug: "ai" },
                     { label: "About Us", slug: "about" },
                     { label: "Contact", slug: "contact" },
@@ -834,7 +830,6 @@ const footerColumns: FooterColumn[] = [
     links: [
       { label: "Products", path: "products" },
       { label: "Services", path: "services" },
-      { label: "Contractors", path: "contractors" },
     ],
   },
   {

@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Icons } from "../components/Icons";
 import { aiService } from "../src/services/aiService";
@@ -1166,13 +1166,6 @@ export const CostEstimatorPage: React.FC = () => {
                 className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
               >
                 Find Materials
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate("/contractors")}
-                className="inline-flex items-center justify-center rounded-2xl border border-amber-300 bg-amber-50 px-5 py-3 text-sm font-semibold text-amber-900 transition hover:bg-amber-100"
-              >
-                Find a Contractor
               </button>
             </div>
           </section>

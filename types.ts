@@ -378,6 +378,7 @@ export interface ContractorPortfolioEntry {
   image?: string | null;
   createdAt?: string;
   category?: string;
+  projectBudget?: number;
 }
 
 export interface ContractorReviewEntry {

@@ -68,9 +68,14 @@ const PortfolioLightbox: React.FC<{
                 Category: <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold">{item.category}</span>
               </div>
             )}
+            {item.projectBudget !== undefined && item.projectBudget > 0 && (
+              <div className="text-xs text-slate-400">
+                Budget: <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-semibold">{formatPrice(item.projectBudget)}</span>
+              </div>
+            )}
             {item.description && (
               <div className="text-xs text-slate-400">
-                Description: <p className="text-sm text-gray-600 mt-2">{item.description}</p>
+                Description: <p className="text-sm text-slate-300 mt-2">{item.description}</p>
               </div>
             )}
           </div>
@@ -585,8 +590,15 @@ export const ContractorProfilePage: React.FC = () => {
                     {item.image ? <img src={item.image} alt={item.title} className="h-full w-full object-cover transition-transform duration-300 hover:scale-105" /> : <div className="flex h-full items-center justify-center text-slate-400">No image</div>}
                   </div>
                   <div className="p-4">
-                    <h3 className="font-bold text-white truncate">{item.title}</h3>
-                    {item.description && <p className="text-xs text-gray-500 truncate mt-1">{item.description}</p>}
+                    <div className="flex justify-between items-start gap-2">
+                      <h3 className="font-bold text-white truncate flex-1">{item.title}</h3>
+                      {item.projectBudget !== undefined && item.projectBudget > 0 && (
+                        <span className="text-xs text-emerald-400 font-semibold shrink-0">
+                          {formatPrice(item.projectBudget)}
+                        </span>
+                      )}
+                    </div>
+                    {item.description && <p className="text-xs text-slate-400 truncate mt-1">{item.description}</p>}
                   </div>
                 </button>
               ))}

@@ -103,6 +103,7 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
 
       <div className="auth-card register">
         <div className="auth-header">
+          <img src="/Build-Hive-Logo.png" alt="BuildHive Logo" className="mx-auto h-12 w-auto mb-4 object-contain" />
           <span className="auth-badge">{getStartedPageData.badge}</span>
           <h1>{getStartedPageData.title}</h1>
           <p>{getStartedPageData.subtitle}</p>

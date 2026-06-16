@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { Icons } from "../components/Icons";
 import { Button } from "../components/Button";
 import { Order, orderService } from "../src/services/orderService";
+import api from "../src/services/api";
 
 const formatPkr = (value: unknown) =>
   `PKR ${Number(value || 0).toLocaleString("en-PK")}`;
@@ -46,6 +47,55 @@ export default function OrderConfirmationPage({
         const data = await orderService.getOrderById(orderId);
         if (!cancelled) setOrder(data);
       } catch (loadError: any) {
+        // Check if this is a project/service order (404 on orders endpoint)
+        try {
+          const projectResponse = await api.get(`/projects/${orderId}`);
+          const project = projectResponse.data?.data ?? projectResponse.data;
+          if (project) {
+            const mappedOrder: Order = {
+              id: project.id,
+              order_number: project.id.substring(0, 8).toUpperCase(),
+              user_id: project.client_id,
+              business_id: project.contractor_id,
+              shipping_address_line1: "Service Order",
+              shipping_city: "N/A",
+              shipping_state: "N/A",
+              shipping_postal_code: "N/A",
+              shipping_country: "Pakistan",
+              shipping_phone: "N/A",
+              subtotal: project.budget,
+              tax_amount: project.budget * 0.05,
+              shipping_fee: 0,
+              discount_amount: 0,
+              total_amount: project.budget * 1.05,
+              status: project.status === "pending" ? "pending_payment" : (project.status === "cancelled" ? "cancelled" : "processing"),
+              payment_status: project.payment_status === "paid" ? "paid" : "pending",
+              payment_method: "cod",
+              created_at: project.created_at,
+              updated_at: project.updated_at,
+              items: [
+                {
+                  id: project.id,
+                  order_id: project.id,
+                  product_id: project.service_id || "service",
+                  quantity: 1,
+                  price: project.budget,
+                  subtotal: project.budget,
+                  created_at: project.created_at,
+                  product: {
+                    name: project.title,
+                    slug: "service",
+                    business_name: project.contractor?.full_name || "Contractor"
+                  }
+                }
+              ]
+            };
+            if (!cancelled) setOrder(mappedOrder);
+            return;
+          }
+        } catch (projError) {
+          console.error("Failed to load as project:", projError);
+        }
         if (!cancelled) {
           setError(loadError?.message || "Unable to load order confirmation.");
         }
@@ -99,7 +149,8 @@ export default function OrderConfirmationPage({
   }
 
   const pm = String(order.payment_method || "").toLowerCase();
-  const isCard = ["card", "stripe", "online"].includes(pm);
+  const isCod = pm === "cod" || pm === "cash_on_delivery";
+  const isCard = !isCod && ["card", "stripe", "online"].includes(pm);
   const isPaid = order.payment_status === "paid" || (order.payment_status as string) === "completed";
   const isCancelled = order.status === "cancelled";
 
@@ -119,6 +170,9 @@ export default function OrderConfirmationPage({
     );
     statusTitle = "Order cancelled";
     statusDesc = `Your order #${order.order_number || order.id} has been cancelled due to a failed or abandoned payment.`;
+  } else if (isCod) {
+    statusTitle = "Order placed successfully!";
+    statusDesc = `Order #${order.order_number || order.id} — Pay on delivery when your items arrive.`;
   } else if (isCard && !isPaid) {
     statusIcon = (
       <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-amber-50 text-amber-600">
@@ -162,10 +216,22 @@ export default function OrderConfirmationPage({
             </div>
             <div className="rounded-2xl bg-gray-50 p-4 text-center">
               <p className="text-xs font-bold uppercase text-gray-400">
-                Estimated Delivery
+                Payment
               </p>
               <p className="mt-1 font-semibold text-gray-900">
-                3-5 business days
+                {isCod ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                    Cash on Delivery
+                  </span>
+                ) : isPaid ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                    Paid
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
+                    Pending
+                  </span>
+                )}
               </p>
             </div>
           </div>

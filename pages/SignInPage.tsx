@@ -102,6 +102,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({
 
       <div className="auth-card signin">
         <div className="auth-header">
+          <img src="/Build-Hive-Logo.png" alt="BuildHive Logo" className="mx-auto h-12 w-auto mb-4 object-contain" />
           <span className="auth-badge">{signInPageData.badge}</span>
           <h1>{signInPageData.title}</h1>
           <p>{signInPageData.subtitle}</p>
@@ -162,10 +163,6 @@ export const SignInPage: React.FC<SignInPageProps> = ({
           </div>
 
           <div className="auth-actions">
-            <label className="auth-check">
-              <input type="checkbox" />
-              <span>{signInPageData.form.rememberMe}</span>
-            </label>
             <button
               type="button"
               onClick={() => setShowForgotPassword(true)}

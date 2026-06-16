@@ -133,11 +133,11 @@ export const aboutPageData = {
   ],
 
   partners: [
-    { left: "COMSATS", right: "University" },
-    { left: "Cubic", right: "Solutions Inc." },
-    { left: "HEC", right: "Pakistan" },
-    { left: "Bestway", right: "Cement" },
-    { left: "Attock", right: "Cement" },
+    { left: "COMSATS University ", right: "Islamabad" },
+    { left: "Cubic ", right: "Solutions Inc." },
+    { left: "HEC ", right: "Pakistan" },
+    { left: "Bestway ", right: "Cement" },
+    { left: "Attock ", right: "Cement" },
   ],
 
   team: [

@@ -7,7 +7,6 @@ export const signInPageData = {
     emailPlaceholder: "you@example.com",
     passwordLabel: "Password",
     passwordPlaceholder: "••••••••",
-    rememberMe: "Remember me",
     forgotPassword: "Forgot Password?",
     submitIdle: "Sign In",
     submitLoading: "Signing In...",

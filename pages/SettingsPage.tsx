@@ -193,6 +193,25 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
           <div className="hero-grid"></div>
 
           <div className="hero-content">
+            {/* Breadcrumbs */}
+            <div className="mb-6 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400 reveal">
+              <span
+                className="cursor-pointer hover:text-purple-400 transition-colors"
+                onClick={() => onNavigate("home")}
+              >
+                Home
+              </span>
+              <Icons.ChevronRight className="h-3 w-3 text-slate-600" />
+              <span
+                className="cursor-pointer hover:text-purple-400 transition-colors"
+                onClick={() => onNavigate("account?tab=overview")}
+              >
+                Buyer Dashboard
+              </span>
+              <Icons.ChevronRight className="h-3 w-3 text-slate-600" />
+              <span className="text-purple-400">Settings</span>
+            </div>
+
             <div className="hero-badge reveal">
               <Icons.Settings className="h-[16px] w-[16px]" />
               Settings

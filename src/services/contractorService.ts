@@ -146,6 +146,7 @@ const normalisePortfolioEntry = (item: Record<string, any>): ContractorPortfolio
   image: item.image || item.image_url || item.imageUrl || item.photo || null,
   createdAt: safeString(item.created_at || item.createdAt) || undefined,
   category: safeString(item.category || item.tag || item.discipline || ""),
+  projectBudget: item.project_budget !== undefined ? toNumber(item.project_budget, 0) : (item.projectBudget !== undefined ? toNumber(item.projectBudget, 0) : undefined),
 });
 
 const normaliseServiceOffer = (item: Record<string, any>): ContractorServiceOffer => ({

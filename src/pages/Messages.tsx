@@ -352,6 +352,25 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ embedded = false }) 
   return (
     <div className={embedded ? "h-[720px]" : "min-h-screen bg-[#0b0f12] pt-20 pb-20"}>
       <div className={embedded ? "h-full" : "container mx-auto px-4 h-[calc(100vh-120px)]"}>
+        {!embedded && (
+          <div className="mb-6 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <span
+              className="cursor-pointer hover:text-purple-400 transition-colors"
+              onClick={() => navigate("/")}
+            >
+              Home
+            </span>
+            <Icons.ChevronRight className="h-3 w-3 text-slate-600" />
+            <span
+              className="cursor-pointer hover:text-purple-400 transition-colors"
+              onClick={() => navigate("/account?tab=overview")}
+            >
+              Buyer Dashboard
+            </span>
+            <Icons.ChevronRight className="h-3 w-3 text-slate-600" />
+            <span className="text-purple-400">Messages</span>
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-full">
           <div className="md:col-span-1 border border-zinc-800 rounded-2xl bg-[#11151d] flex flex-col">
             <div className="p-4 border-b border-zinc-800">

@@ -301,22 +301,290 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
   const downloadReceipt = async (order: any) => {
     setBusy(`receipt-${order.id}`);
     try {
-      const response = await api.get(`/orders/${order.id}/receipt`, {
-        responseType: "blob",
-      });
-      const blob = new Blob([response.data], {
-        type: response.headers?.["content-type"] || "application/json",
-      });
-      const objectUrl = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = objectUrl;
-      link.download = `receipt-${orderNumber(order)}.json`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(objectUrl);
+      const response = await api.get(`/orders/${order.id}/receipt`);
+      const receipt = response.data?.data || response.data;
+      if (!receipt) {
+        throw new Error("No receipt data found");
+      }
+
+      // Generate PDF Print Window
+      const printWindow = window.open("", "_blank");
+      if (!printWindow) {
+        toast.error("Popup blocked! Please allow popups to print/save the receipt.");
+        return;
+      }
+
+      const itemsHtml = (receipt.items || []).map((item: any) => `
+        <tr>
+          <td style="padding: 12px 10px; border-bottom: 1px solid #e5e7eb; text-align: left; font-size: 14px;">${item.productName || 'Product'}</td>
+          <td style="padding: 12px 10px; border-bottom: 1px solid #e5e7eb; text-align: center; font-size: 14px;">${item.quantity}</td>
+          <td style="padding: 12px 10px; border-bottom: 1px solid #e5e7eb; text-align: right; font-size: 14px;">PKR ${Number(item.unitPrice || 0).toLocaleString()}</td>
+          <td style="padding: 12px 10px; border-bottom: 1px solid #e5e7eb; text-align: right; font-size: 14px; font-weight: 600;">PKR ${Number(item.totalPrice || 0).toLocaleString()}</td>
+        </tr>
+      `).join('');
+
+      const formattedDate = receipt.issued_at 
+        ? new Date(receipt.issued_at).toLocaleDateString('en-PK', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+        : new Date().toLocaleDateString('en-PK', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          });
+
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Receipt - ${receipt.receipt_id || 'RCT'}</title>
+          <style>
+            body {
+              font-family: system-ui, -apple-system, sans-serif;
+              color: #1f2937;
+              margin: 0;
+              padding: 40px;
+              line-height: 1.5;
+              background-color: #ffffff;
+            }
+            .invoice-box {
+              max-width: 800px;
+              margin: auto;
+            }
+            .header {
+              display: flex;
+              justify-content: space-between;
+              align-items: flex-start;
+              border-bottom: 2px solid #6c3bd5;
+              padding-bottom: 20px;
+              margin-bottom: 30px;
+            }
+            .logo {
+              font-size: 28px;
+              font-weight: 800;
+              color: #6c3bd5;
+              letter-spacing: -0.05em;
+            }
+            .invoice-title {
+              font-size: 24px;
+              font-weight: 800;
+              text-align: right;
+              color: #111827;
+            }
+            .details-grid {
+              display: grid;
+              grid-template-columns: repeat(3, 1fr);
+              gap: 24px;
+              margin-bottom: 30px;
+            }
+            .details-block {
+              background-color: #f9fafb;
+              padding: 16px;
+              border-radius: 12px;
+              border: 1px solid #f3f4f6;
+            }
+            .details-block h3 {
+              margin-top: 0;
+              font-size: 11px;
+              color: #4b5563;
+              text-transform: uppercase;
+              letter-spacing: 0.05em;
+              border-bottom: 1px solid #e5e7eb;
+              padding-bottom: 6px;
+              margin-bottom: 10px;
+              font-weight: 700;
+            }
+            .details-block p {
+              margin: 6px 0;
+              font-size: 13px;
+              color: #374151;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 30px;
+            }
+            th {
+              background-color: #f3f4f6;
+              color: #374151;
+              font-weight: 700;
+              padding: 12px 10px;
+              border-bottom: 2px solid #e5e7eb;
+              font-size: 12px;
+              text-transform: uppercase;
+              letter-spacing: 0.05em;
+            }
+            .summary-wrapper {
+              display: flex;
+              justify-content: flex-end;
+              margin-top: 20px;
+            }
+            .summary-table {
+              width: 320px;
+              margin-bottom: 0;
+            }
+            .summary-table td {
+              padding: 8px 10px;
+              font-size: 14px;
+              color: #4b5563;
+            }
+            .total-row {
+              font-weight: 800;
+              font-size: 18px !important;
+              color: #6c3bd5;
+              border-top: 2px solid #e5e7eb;
+            }
+            .total-row td {
+              color: #6c3bd5 !important;
+            }
+            .footer {
+              margin-top: 60px;
+              text-align: center;
+              color: #9ca3af;
+              font-size: 12px;
+              border-top: 1px solid #e5e7eb;
+              padding-top: 20px;
+            }
+            .badge {
+              display: inline-block;
+              padding: 4px 8px;
+              border-radius: 6px;
+              font-size: 11px;
+              font-weight: 700;
+              text-transform: uppercase;
+            }
+            .badge-paid {
+              background-color: #d1fae5;
+              color: #065f46;
+            }
+            .badge-pending {
+              background-color: #fef3c7;
+              color: #92400e;
+            }
+            @media print {
+              body {
+                padding: 0;
+              }
+              .details-block {
+                border: 1px solid #e5e7eb !important;
+                background-color: #f9fafb !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
+              .badge-paid {
+                background-color: #d1fae5 !important;
+                color: #065f46 !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
+              .badge-pending {
+                background-color: #fef3c7 !important;
+                color: #92400e !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="invoice-box">
+            <div class="header">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <img src="/Build-Hive-Logo.png" alt="BuildHive Logo" style="height: 40px; width: auto; object-fit: contain;" />
+                <div>
+                  <div class="logo" style="line-height: 1;">BuildHive</div>
+                  <p style="margin: 4px 0 0 0; font-size: 12px; color: #4b5563; font-weight: 500;">Smarter Construction Marketplace</p>
+                </div>
+              </div>
+              <div class="invoice-title">
+                RECEIPT
+                <p style="margin: 6px 0 0 0; font-size: 13px; font-weight: 500; color: #4b5563;">Receipt ID: <strong>${receipt.receipt_id || 'N/A'}</strong></p>
+                <p style="margin: 4px 0 0 0; font-size: 13px; font-weight: 500; color: #4b5563;">Order No: <strong>#${receipt.order_number || 'N/A'}</strong></p>
+              </div>
+            </div>
+
+            <div class="details-grid">
+              <div class="details-block">
+                <h3>Order Information</h3>
+                <p><strong>Date:</strong> ${formattedDate}</p>
+                <p><strong>Payment Method:</strong> ${(() => { const pm = String(receipt.payment_method || '').toLowerCase(); if (pm === 'cod' || pm === 'cash_on_delivery') return 'Cash on Delivery'; if (pm === 'card' || pm === 'stripe') return 'Credit/Debit Card'; return receipt.payment_method?.toUpperCase() || 'N/A'; })()}</p>
+                <p><strong>Payment Status:</strong> <span class="badge ${receipt.payment_status === 'paid' ? 'badge-paid' : 'badge-pending'}">${(() => { const pm = String(receipt.payment_method || '').toLowerCase(); const isCod = pm === 'cod' || pm === 'cash_on_delivery'; if (isCod && receipt.payment_status !== 'paid') return 'Awaiting Collection'; return receipt.payment_status || 'pending'; })()}</span></p>
+              </div>
+              <div class="details-block">
+                <h3>Billed To</h3>
+                <p><strong>Name:</strong> ${receipt.customer?.full_name || 'Customer'}</p>
+                <p><strong>Email:</strong> ${receipt.customer?.email || 'N/A'}</p>
+                <p><strong>Phone:</strong> ${receipt.customer?.phone || 'N/A'}</p>
+                ${receipt.business_name ? `<p style="margin-top: 10px; font-size: 12px; color: #6b7280;"><strong>Seller Store:</strong> ${receipt.business_name}</p>` : ''}
+              </div>
+              <div class="details-block">
+                <h3>Delivery Address</h3>
+                <p>${receipt.shippingAddress?.line1 || ''}</p>
+                ${receipt.shippingAddress?.line2 ? `<p>${receipt.shippingAddress.line2}</p>` : ''}
+                <p>${receipt.shippingAddress?.city || ''}, ${receipt.shippingAddress?.state || ''} ${receipt.shippingAddress?.postal_code || ''}</p>
+                <p>${receipt.shippingAddress?.country || ''}</p>
+                <p><strong>Phone:</strong> ${receipt.shippingAddress?.phone || 'N/A'}</p>
+              </div>
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th style="text-align: left;">Product / Service Description</th>
+                  <th style="text-align: center; width: 60px;">Qty</th>
+                  <th style="text-align: right; width: 130px;">Unit Price</th>
+                  <th style="text-align: right; width: 130px;">Total Price</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemsHtml}
+              </tbody>
+            </table>
+
+            <div class="summary-wrapper">
+              <table class="summary-table">
+                <tr>
+                  <td style="text-align: left; border: none;">Subtotal:</td>
+                  <td style="text-align: right; border: none; font-weight: 500;">PKR ${Number(receipt.amounts?.subtotal || 0).toLocaleString()}</td>
+                </tr>
+                <tr>
+                  <td style="text-align: left; border: none;">Tax Amount (GST):</td>
+                  <td style="text-align: right; border: none; font-weight: 500;">PKR ${Number(receipt.amounts?.tax_amount || 0).toLocaleString()}</td>
+                </tr>
+                <tr>
+                  <td style="text-align: left; border: none;">Shipping Fee:</td>
+                  <td style="text-align: right; border: none; font-weight: 500;">PKR ${Number(receipt.amounts?.shipping_amount || 0).toLocaleString()}</td>
+                </tr>
+                <tr class="total-row">
+                  <td style="text-align: left; border: none; padding-top: 12px;">Total Paid:</td>
+                  <td style="text-align: right; border: none; padding-top: 12px;">PKR ${Number(receipt.amounts?.total_amount || 0).toLocaleString()}</td>
+                </tr>
+              </table>
+            </div>
+
+            <div class="footer">
+              <p style="font-weight: 600; color: #4b5563;">Thank you for shopping with BuildHive!</p>
+              <p style="margin-top: 6px; font-size: 11px;">This is a computer-generated invoice/receipt. No signature is required.</p>
+            </div>
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(function() { window.close(); }, 500);
+            };
+          </script>
+        </body>
+        </html>
+      `;
+
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Unable to download receipt.");
+      toast.error(err?.response?.data?.message || "Unable to download receipt PDF.");
     } finally {
       setBusy("");
     }
@@ -823,6 +1091,8 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
   const renderOrderCard = (order: any, includeTracking = false) => {
     const tracking = trackingByOrder[order.id];
     const payment = Array.isArray(order.payments) ? order.payments[0] : null;
+    const orderPm = String(order.payment_method || "").toLowerCase();
+    const isCodOrder = orderPm === "cod" || orderPm === "cash_on_delivery";
     return (
       <article key={order.id} className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -834,6 +1104,13 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
                 ? orderItems(order).map((item: any) => `${item.product?.name || item.products?.name || item.product_name || item.name || "Item"} x${item.quantity}`).join(", ")
                 : "Click View Details to see items"}
             </p>
+            {isCodOrder && (
+              <div className="mt-2">
+                <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 border border-emerald-100">
+                  Cash on Delivery
+                </span>
+              </div>
+            )}
             {(payment?.refund_status || order.refund_status) && (
               <div className="mt-2"><StatusBadge status={`Refund ${payment?.refund_status || order.refund_status}`} /></div>
             )}
@@ -1272,7 +1549,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
                         </div>
                         <div className="flex items-center gap-3">
                           <StatusBadge status={dispute.status || "open"} />
-                          <Button className={accountOutlineButton} variant="outline" size="sm" onClick={() => setModal({ type: "dispute", dispute })}>View</Button>
+                          <Button className={accountOutlineButton} variant="outline" size="sm" onClick={() => navigate(`/disputes/${dispute.id}`)}>View</Button>
                         </div>
                       </article>
                     ))}
@@ -1401,7 +1678,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
           {modal.type === "refund" && (
             <div className="space-y-4">
               <h2 className="text-xl font-bold text-gray-900">Request Refund</h2>
-              <select className="w-full rounded-lg border border-gray-200 px-3 py-2" value={refundReason} onChange={(event) => setRefundReason(event.target.value)}>
+              <select className="w-full rounded-lg border border-gray-200 px-3 py-2 text-gray-900 bg-white" value={refundReason} onChange={(event) => setRefundReason(event.target.value)}>
                 <option>Damaged or incomplete order</option>
                 <option>Wrong item delivered</option>
                 <option>Quality issue</option>
@@ -1418,14 +1695,6 @@ export const AccountPage: React.FC<AccountPageProps> = ({ user, onNavigate, onLo
           )}
           {modal.type === "dispute-form" && (
             <DisputeForm form={disputeForm} setForm={setDisputeForm} orders={orders} projects={projects} busy={busy} onSubmit={createDispute} />
-          )}
-          {modal.type === "dispute" && (
-            <DetailBlock title={`Dispute ${modal.dispute.dispute_number || modal.dispute.id}`} rows={[
-              ["Status", modal.dispute.status],
-              ["Reason", modal.dispute.reason],
-              ["Description", modal.dispute.description],
-              ["Filed", dateLabel(modal.dispute.created_at)],
-            ]} />
           )}
           {modal.type === "ticket-form" && (
             <TicketForm form={ticketForm} setForm={setTicketForm} busy={busy} onSubmit={createTicket} />
@@ -1550,10 +1819,12 @@ const AccountModal = ({ children, onClose }: { children: React.ReactNode; onClos
   </div>
 );
 
-const mapStatusLabel = (status: string): string => {
+const mapStatusLabel = (status: string, paymentMethod?: string): string => {
   const normalized = String(status || "").toLowerCase().trim();
+  const pm = String(paymentMethod || "").toLowerCase();
+  const isCod = pm === "cod" || pm === "cash_on_delivery";
   const mapping: Record<string, string> = {
-    pending_payment: "Pending Payment",
+    pending_payment: isCod ? "Awaiting Collection" : "Pending Payment",
     confirmed: "Confirmed",
     processing: "Processing",
     shipped: "Shipped",
@@ -1729,7 +2000,7 @@ const ProjectForm = ({ form, setForm, busy, onSubmit, isEditing }: { form: any; 
     <TextInput label="Title" value={form.title} onChange={(value) => setForm((current: any) => ({ ...current, title: value }))} />
     <label className="block text-sm font-semibold text-gray-700">
       Description
-      <textarea className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2" rows={4} value={form.description} onChange={(event) => setForm((current: any) => ({ ...current, description: event.target.value }))} />
+      <textarea className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-gray-900 bg-white" rows={4} value={form.description} onChange={(event) => setForm((current: any) => ({ ...current, description: event.target.value }))} />
     </label>
     <TextInput label="Budget (PKR)" type="number" value={form.budget} onChange={(value) => setForm((current: any) => ({ ...current, budget: value }))} />
     <div className="grid gap-3 sm:grid-cols-2">
@@ -1752,11 +2023,11 @@ const ProjectForm = ({ form, setForm, busy, onSubmit, isEditing }: { form: any; 
 const DisputeForm = ({ form, setForm, orders, projects, busy, onSubmit }: { form: any; setForm: React.Dispatch<React.SetStateAction<any>>; orders: any[]; projects: any[]; busy: string; onSubmit: (event: React.FormEvent) => void }) => (
   <form onSubmit={onSubmit} className="space-y-4">
     <h2 className="text-xl font-bold text-gray-900">Raise Dispute</h2>
-    <select className="w-full rounded-lg border border-gray-200 px-3 py-2" value={form.relatedType} onChange={(event) => setForm((current: any) => ({ ...current, relatedType: event.target.value, relatedId: "" }))}>
+    <select className="w-full rounded-lg border border-gray-200 px-3 py-2 text-gray-900 bg-white" value={form.relatedType} onChange={(event) => setForm((current: any) => ({ ...current, relatedType: event.target.value, relatedId: "" }))}>
       <option value="order">Order</option>
       <option value="project">Project</option>
     </select>
-    <select className="w-full rounded-lg border border-gray-200 px-3 py-2" value={form.relatedId} onChange={(event) => setForm((current: any) => ({ ...current, relatedId: event.target.value }))}>
+    <select className="w-full rounded-lg border border-gray-200 px-3 py-2 text-gray-900 bg-white" value={form.relatedId} onChange={(event) => setForm((current: any) => ({ ...current, relatedId: event.target.value }))}>
       <option value="">Select related {form.relatedType}</option>
       {(form.relatedType === "order" ? orders : projects).map((item) => (
         <option key={item.id} value={item.id}>{item.order_number || item.title || item.id}</option>
@@ -1765,7 +2036,7 @@ const DisputeForm = ({ form, setForm, orders, projects, busy, onSubmit }: { form
     <TextInput label="Reason" value={form.reason} onChange={(value) => setForm((current: any) => ({ ...current, reason: value }))} />
     <label className="block text-sm font-semibold text-gray-700">
       Description
-      <textarea className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2" rows={4} value={form.description} onChange={(event) => setForm((current: any) => ({ ...current, description: event.target.value }))} />
+      <textarea className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-gray-900 bg-white" rows={4} value={form.description} onChange={(event) => setForm((current: any) => ({ ...current, description: event.target.value }))} />
     </label>
     <Button type="submit" disabled={busy === "dispute"}>File Dispute</Button>
   </form>
@@ -1777,17 +2048,17 @@ const TicketForm = ({ form, setForm, busy, onSubmit }: { form: any; setForm: Rea
     <TextInput label="Subject" value={form.subject} onChange={(value) => setForm((current: any) => ({ ...current, subject: value }))} />
     <label className="block text-sm font-semibold text-gray-700">
       Description
-      <textarea className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2" rows={4} value={form.description} onChange={(event) => setForm((current: any) => ({ ...current, description: event.target.value }))} />
+      <textarea className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-gray-900 bg-white" rows={4} value={form.description} onChange={(event) => setForm((current: any) => ({ ...current, description: event.target.value }))} />
     </label>
     <div className="grid gap-3 sm:grid-cols-2">
-      <select className="rounded-lg border border-gray-200 px-3 py-2" value={form.category} onChange={(event) => setForm((current: any) => ({ ...current, category: event.target.value }))}>
+      <select className="rounded-lg border border-gray-200 px-3 py-2 text-gray-900 bg-white" value={form.category} onChange={(event) => setForm((current: any) => ({ ...current, category: event.target.value }))}>
         <option value="general">General</option>
         <option value="billing">Billing</option>
         <option value="technical">Technical</option>
         <option value="dispute">Dispute</option>
         <option value="other">Other</option>
       </select>
-      <select className="rounded-lg border border-gray-200 px-3 py-2" value={form.priority} onChange={(event) => setForm((current: any) => ({ ...current, priority: event.target.value }))}>
+      <select className="rounded-lg border border-gray-200 px-3 py-2 text-gray-900 bg-white" value={form.priority} onChange={(event) => setForm((current: any) => ({ ...current, priority: event.target.value }))}>
         <option value="low">Low</option>
         <option value="medium">Medium</option>
         <option value="high">High</option>

@@ -605,6 +605,25 @@ export const NotificationPage: React.FC<NotificationPageProps> = ({ onNavigate }
       <style>{notificationStyles}</style>
       <div className="notif-root">
         <div className="notif-header">
+          {/* Breadcrumbs */}
+          <div className="mx-auto max-w-[900px] mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <span
+              className="cursor-pointer hover:text-purple-400 transition-colors"
+              onClick={() => onNavigate("home")}
+            >
+              Home
+            </span>
+            <Icons.ChevronRight className="h-3 w-3 text-slate-600" />
+            <span
+              className="cursor-pointer hover:text-purple-400 transition-colors"
+              onClick={() => onNavigate("account?tab=overview")}
+            >
+              Buyer Dashboard
+            </span>
+            <Icons.ChevronRight className="h-3 w-3 text-slate-600" />
+            <span className="text-purple-400">Notifications</span>
+          </div>
+
           <div className="notif-header-inner">
             <div className="notif-title">
               <h1>Notifications</h1>

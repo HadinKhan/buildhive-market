@@ -1479,12 +1479,6 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                 >
                   Try Cost Estimator <Icons.ArrowRight className="ml-2 inline h-4 w-4" />
                 </button>
-                <button
-                  onClick={() => onNavigate("contractors")}
-                  className="rounded-xl border border-white/20 px-6 py-3 font-semibold text-inherit transition hover:bg-white/10"
-                >
-                  Find a Contractor
-                </button>
               </div>
             </div>
           </div>

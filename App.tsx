@@ -30,13 +30,13 @@ import { TermsPage } from "./pages/TermsPage";
 import { PrivacyPage } from "./pages/PrivacyPage";
 import { ServicesPage } from "./pages/ServicesPage";
 import ServiceDetailPage from "./pages/ServiceDetailPage";
-import { ContractorsPage } from "./pages/ContractorsPage";
 import { ContractorProfilePage } from "./pages/ContractorProfilePage";
 import { NotificationPage } from "./pages/NotificationPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { CostEstimatorPage } from "./pages/CostEstimatorPage";
 import RecommendationsPage from "./pages/RecommendationsPage";
 import NotFoundPage from "./pages/NotFoundPage";
+import { DisputeDetailPage } from "./pages/DisputeDetailPage";
 import { MessagesPage } from "./src/pages/Messages";
 import { SupportPage } from "./src/pages/Support";
 import { AIChatWidget } from "./components/AIChatWidget";
@@ -542,8 +542,6 @@ const AppContent: React.FC = () => {
 
         <Route path="/services/:id" element={<ServiceDetailPage />} />
 
-        <Route path="/contractors" element={<ContractorsPage />} />
-
         <Route path="/contractors/:id" element={<ContractorProfilePage />} />
 
         <Route
@@ -633,6 +631,15 @@ const AppContent: React.FC = () => {
           element={
             <ProtectedRoute>
               <AccountRoute onNavigate={navigateTo} onLogout={handleLogout} />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/disputes/:id"
+          element={
+            <ProtectedRoute>
+              <DisputeDetailPage />
             </ProtectedRoute>
           }
         />

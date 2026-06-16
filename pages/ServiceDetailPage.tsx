@@ -493,7 +493,7 @@ export default function ServiceDetailPage() {
 
           <aside className="lg:col-span-1">
             <div className="sticky top-24 bg-gradient-to-b from-[#16162a] to-[#0f0f1e] text-white rounded-2xl p-6 shadow-2xl border border-white/[0.08]">
-              <h3 className="text-lg font-bold text-white mb-4">Order Now</h3>
+              <h3 className="text-lg font-bold text-white mb-4">Hire Now</h3>
               <div className="space-y-3 text-sm text-slate-300">
                 <div className="flex items-center justify-between pb-2 border-b border-white/[0.05]">
                   <span>Selected Package</span>
@@ -518,7 +518,7 @@ export default function ServiceDetailPage() {
                 className="mt-6 w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl py-3 text-lg transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-amber-500/20"
                 onClick={handleOrderNow}
               >
-                Order Now
+                Hire Now
               </button>
             </div>
           </aside>
