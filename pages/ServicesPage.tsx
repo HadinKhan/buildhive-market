@@ -10,11 +10,22 @@ interface ServicesPageProps {
   onNavigate: (page: string) => void;
 }
 
+interface ApiCategoryOption {
+  id: string;
+  name: string;
+  slug?: string;
+  parent_id?: string | null;
+  parentId?: string | null;
+  type?: string;
+}
+
 export interface Service {
   id: string;
   name: string;
   category: string;
+  categoryId?: string;
   subcategory: string;
+  createdAt?: string;
   creatorName?: string;
   creatorRole?: "Contractor" | "Seller";
   creatorId?: string;
@@ -1380,24 +1391,43 @@ const toServiceView = (service: ApiService | any): Service => ({
   id: service.id,
   name: service.name || service.title || "Service",
   category:
+    service.categories?.name ||
     service.category?.name ||
     service.category_name ||
     service.category ||
     "Other",
+  categoryId:
+    service.category_id ||
+    service.categories?.id ||
+    service.category?.id ||
+    "",
   subcategory:
     service.subcategory ||
+    service.categories?.name ||
     service.category?.name ||
     service.category_name ||
     service.category ||
     "Other",
-  creatorName:
-    service.creator?.full_name ||
-    service.creator?.name ||
-    service.contractor?.business_name ||
-    service.business?.business_name ||
-    service.provider?.name ||
-    service.provider ||
-    "BuildHive Provider",
+  createdAt: service.created_at || service.createdAt || "",
+  creatorName: (() => {
+    if (service.business_name) return service.business_name;
+    if (service.provider?.business_name) return service.provider.business_name;
+    if (service.contractor_profile?.business_name) return service.contractor_profile.business_name;
+    const contractorBiz = Array.isArray(service.contractor?.businesses)
+      ? service.contractor.businesses[0]?.business_name
+      : service.contractor?.businesses?.business_name;
+    if (contractorBiz) return contractorBiz;
+    if (service.contractor?.business_name) return service.contractor.business_name;
+    if (service.creator?.fullName) return service.creator.fullName;
+    if (service.creator?.full_name) return service.creator.full_name;
+    if (service.contractor?.full_name) return service.contractor.full_name;
+    if (service.creator?.name) return service.creator.name;
+    if (service.provider?.name) return service.provider.name;
+    if (service.provider && typeof service.provider === 'string' && service.provider !== "BuildHive Provider") {
+      return service.provider;
+    }
+    return "Independent Provider";
+  })(),
   creatorRole:
     String(
       service.creator_role ||
@@ -1469,12 +1499,25 @@ const toServiceView = (service: ApiService | any): Service => ({
     (Array.isArray(service.images) && service.images[0]?.image_url) ||
     "",
   badge: service.badge,
-  provider:
-    service.provider?.name ||
-    service.contractor?.business_name ||
-    service.business?.business_name ||
-    service.provider ||
-    "BuildHive Provider",
+  provider: (() => {
+    if (service.business_name) return service.business_name;
+    if (service.provider?.business_name) return service.provider.business_name;
+    if (service.contractor_profile?.business_name) return service.contractor_profile.business_name;
+    const contractorBiz = Array.isArray(service.contractor?.businesses)
+      ? service.contractor.businesses[0]?.business_name
+      : service.contractor?.businesses?.business_name;
+    if (contractorBiz) return contractorBiz;
+    if (service.contractor?.business_name) return service.contractor.business_name;
+    if (service.creator?.fullName) return service.creator.fullName;
+    if (service.creator?.full_name) return service.creator.full_name;
+    if (service.contractor?.full_name) return service.contractor.full_name;
+    if (service.creator?.name) return service.creator.name;
+    if (service.provider?.name) return service.provider.name;
+    if (service.provider && typeof service.provider === 'string' && service.provider !== "BuildHive Provider") {
+      return service.provider;
+    }
+    return "Independent Provider";
+  })(),
   verified: Boolean(
     service.verified ?? service.is_verified ?? service.provider?.is_verified,
   ),
@@ -1675,6 +1718,40 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
   const [services, setServices] = useState<Service[]>([]);
   const [isLoadingServices, setIsLoadingServices] = useState(true);
   const [servicesError, setServicesError] = useState<string | null>(null);
+  const [apiCategories, setApiCategories] = useState<ApiCategoryOption[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
+  const [sortBy, setSortBy] = useState<string>("newest");
+  const [selectedBusiness, setSelectedBusiness] = useState<string>("all");
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setCategoriesLoading(true);
+    api
+      .get("/categories", { params: { limit: 100, type: "service" } })
+      .then((response) => {
+        const payload = response.data?.data ?? response.data;
+        const rows = Array.isArray(payload)
+          ? payload
+          : payload?.categories || payload?.items || [];
+        if (!cancelled) {
+          setApiCategories(
+            (Array.isArray(rows) ? rows : []).filter(
+              (category: ApiCategoryOption) =>
+                !category.parent_id && !category.parentId && category.type === "service",
+            ),
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setApiCategories([]);
+      })
+      .finally(() => {
+        if (!cancelled) setCategoriesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [searchParams, setSearchParams] = useState({
     query: "",
     categorySearch: "",
@@ -1814,19 +1891,35 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
       .filter((group) => group.options.length > 0);
   }, [activeCategory, searchParams.specialtySearch]);
 
+  const categoryMatches = React.useCallback((service: Service) => {
+    if (activeCategory === "all") return true;
+
+    if (activeCategory === "other") {
+      const known = apiCategories.map((c) => normalizeCategoryValue(c.name));
+      const serviceCategory = normalizeCategoryValue(service.category);
+      const serviceSubCategory = normalizeCategoryValue(service.subcategory);
+      return (
+        !known.includes(serviceCategory) &&
+        !known.includes(serviceSubCategory)
+      );
+    }
+
+    if (service.categoryId === activeCategory) return true;
+
+    const selectedCat = apiCategories.find((c) => c.id === activeCategory);
+    if (!selectedCat) return false;
+
+    const activeName = normalizeCategoryValue(selectedCat.name);
+    const activeSlug = normalizeCategoryValue(selectedCat.slug || "");
+
+    return [service.category, service.subcategory, ...service.tags]
+      .map((value) => normalizeCategoryValue(value))
+      .some((value) => value.includes(activeName) || value.includes(activeSlug));
+  }, [activeCategory, apiCategories]);
+
   const visibleProviders = useMemo(() => {
-    const query = searchParams.providerSearch.trim().toLowerCase();
-    return Array.from(new Set(services.map((service) => service.provider)))
-      .filter((provider) => {
-        const inCategory = services.some(
-          (service) =>
-            service.provider === provider &&
-            (activeCategory === "all" || service.category === activeCategory),
-        );
-        return inCategory && (!query || provider.toLowerCase().includes(query));
-      })
-      .sort();
-  }, [activeCategory, searchParams.providerSearch, services]);
+    return Array.from(new Set(services.map((service) => service.provider))).sort();
+  }, [services]);
 
   const serviceMatchesSpecialty = (service: Service, specialty: string) => {
     const needle = specialty.toLowerCase();
@@ -1841,27 +1934,7 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
   const filteredServices = useMemo(() => {
     const query = searchParams.query.trim().toLowerCase();
 
-    const categoryMatches = (service: Service) => {
-      if (activeCategory === "all") return true;
-      const active = normalizeCategoryValue(activeCategory);
-      if (active === "other") {
-        const known = marketplaceCategoryButtons
-          .slice(1, -1)
-          .map((category) => normalizeCategoryValue(category));
-        const serviceCategory = normalizeCategoryValue(service.category);
-        const serviceSubCategory = normalizeCategoryValue(service.subcategory);
-        return (
-          !known.includes(serviceCategory) &&
-          !known.includes(serviceSubCategory)
-        );
-      }
-
-      return [service.category, service.subcategory, ...service.tags]
-        .map((value) => normalizeCategoryValue(value))
-        .some((value) => value.includes(active));
-    };
-
-    return services
+    const filtered = services
       .filter((service) => categoryMatches(service))
       .filter(
         (service) =>
@@ -1873,44 +1946,44 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
             service.location,
             service.subcategory,
             ...service.tags,
-            ...(service.specialties || []),
           ].some((value) => value.toLowerCase().includes(query)),
       )
-      .filter(
-        (service) =>
-          selectedSpecialties.length === 0 ||
-          selectedSpecialties.some((specialty) =>
-            serviceMatchesSpecialty(service, specialty),
-          ),
-      )
-      .filter(
-        (service) =>
-          selectedProviders.length === 0 ||
-          selectedProviders.includes(service.provider),
-      )
-      .filter(
-        (service) =>
-          selectedAvailability.length === 0 ||
-          selectedAvailability.includes(service.availability),
-      )
-      .filter((service) => !showLikedOnly || likedServices.includes(service.id))
+      .filter((service) => selectedBusiness === "all" || service.provider === selectedBusiness)
       .filter(
         (service) =>
           service.price >= priceRange[0] && service.price <= priceRange[1],
       )
-      .filter((service) => rating === null || service.rating >= rating)
-      .filter((service) => service.experience >= experienceMin);
+      .filter((service) => rating === null || service.rating >= rating);
+
+    const sorted = [...filtered].sort((a, b) => {
+      if (sortBy === "newest") {
+        const dateA = new Date(a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdAt || 0).getTime();
+        return dateB - dateA;
+      }
+      if (sortBy === "most-reviewed") {
+        return (b.reviewCount || 0) - (a.reviewCount || 0);
+      }
+      if (sortBy === "highest-rated") {
+        return (b.rating || 0) - (a.rating || 0);
+      }
+      if (sortBy === "price-low") {
+        return a.price - b.price;
+      }
+      if (sortBy === "price-high") {
+        return b.price - a.price;
+      }
+      return 0;
+    });
+
+    return sorted;
   }, [
-    activeCategory,
-    experienceMin,
+    categoryMatches,
     priceRange,
     rating,
+    selectedBusiness,
+    sortBy,
     searchParams.query,
-    selectedAvailability,
-    selectedProviders,
-    selectedSpecialties,
-    showLikedOnly,
-    likedServices,
     services,
   ]);
 
@@ -1928,13 +2001,11 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
     .filter((service): service is Service => Boolean(service));
 
   const activeFilterCount =
-    selectedSpecialties.length +
-    selectedProviders.length +
-    selectedAvailability.length +
-    (rating !== null ? 1 : 0) +
-    (experienceMin > 0 ? 1 : 0) +
-    (showLikedOnly ? 1 : 0) +
+    (activeCategory !== "all" ? 1 : 0) +
     (priceRange[0] > 0 || priceRange[1] < 5000000 ? 1 : 0) +
+    (rating !== null ? 1 : 0) +
+    (selectedBusiness !== "all" ? 1 : 0) +
+    (sortBy !== "newest" ? 1 : 0) +
     (searchParams.query.trim() ? 1 : 0);
 
   const scrollToTop = () => {
@@ -2098,6 +2169,8 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
     setPriceRange([0, 5000000]);
     setRating(null);
     setExperienceMin(0);
+    setSortBy("newest");
+    setSelectedBusiness("all");
     setPage(1);
   };
 
@@ -2342,34 +2415,71 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
             >
               All
             </button>
-            {marketplaceCategoryButtons.slice(1).map((category) => (
+            {(() => {
+              const filteredNavCategories = apiCategories.filter((category) => {
+                const query = searchParams.categorySearch.trim().toLowerCase();
+                if (!query) return true;
+                return (
+                  category.name.toLowerCase().includes(query) ||
+                  (category.slug || "").toLowerCase().includes(query)
+                );
+              });
+              return filteredNavCategories.map((category) => (
+                <button
+                  key={category.id}
+                  onClick={() => setCategory(category.id)}
+                  style={{
+                    minHeight: 42,
+                    padding: "0 18px",
+                    borderRadius: 999,
+                    border:
+                      activeCategory === category.id
+                        ? "1px solid rgba(167, 139, 250, 0.44)"
+                        : "1px solid rgba(255,255,255,0.08)",
+                    background:
+                      activeCategory === category.id
+                        ? "linear-gradient(180deg, rgba(196, 181, 253, 0.12), rgba(124, 58, 237, 0.06)), #1a1426"
+                        : "rgba(255,255,255,0.03)",
+                    color: activeCategory === category.id ? "#f5f3ff" : "#94a3b8",
+                    boxShadow:
+                      activeCategory === category.id
+                        ? "inset 0 1px 0 rgba(255,255,255,0.12), 0 10px 22px rgba(0,0,0,0.22)"
+                        : "none",
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {category.name}
+                </button>
+              ));
+            })()}
+            {(!searchParams.categorySearch || "other".includes(searchParams.categorySearch.toLowerCase())) && (
               <button
-                key={category}
-                onClick={() => setCategory(category)}
+                onClick={() => setCategory("other")}
                 style={{
                   minHeight: 42,
                   padding: "0 18px",
                   borderRadius: 999,
                   border:
-                    activeCategory === category
+                    activeCategory === "other"
                       ? "1px solid rgba(167, 139, 250, 0.44)"
                       : "1px solid rgba(255,255,255,0.08)",
                   background:
-                    activeCategory === category
+                    activeCategory === "other"
                       ? "linear-gradient(180deg, rgba(196, 181, 253, 0.12), rgba(124, 58, 237, 0.06)), #1a1426"
                       : "rgba(255,255,255,0.03)",
-                  color: activeCategory === category ? "#f5f3ff" : "#94a3b8",
+                  color: activeCategory === "other" ? "#f5f3ff" : "#94a3b8",
                   boxShadow:
-                    activeCategory === category
+                    activeCategory === "other"
                       ? "inset 0 1px 0 rgba(255,255,255,0.12), 0 10px 22px rgba(0,0,0,0.22)"
                       : "none",
                   cursor: "pointer",
                   whiteSpace: "nowrap",
                 }}
               >
-                {category}
+                Other
               </button>
-            ))}
+            )}
           </nav>
         </div>
       </div>
@@ -2378,51 +2488,34 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
         <div className="services-layout">
           <aside className="sidebar">
             <div className="active-filters">
-              {selectedSpecialties.map((specialty) => (
-                <div key={specialty} className="filter-chip">
-                  {specialty}
-                  <button
-                    onClick={() =>
-                      toggleValue(specialty, setSelectedSpecialties)
-                    }
-                  >
-                    x
-                  </button>
-                </div>
-              ))}
-              {selectedProviders.map((provider) => (
-                <div key={provider} className="filter-chip">
-                  {provider}
-                  <button
-                    onClick={() => toggleValue(provider, setSelectedProviders)}
-                  >
-                    x
-                  </button>
-                </div>
-              ))}
-              {selectedAvailability.map((availability) => (
-                <div key={availability} className="filter-chip">
-                  {availabilityLabels[availability]}
-                  <button
-                    onClick={() =>
-                      toggleValue(availability, setSelectedAvailability)
-                    }
-                  >
-                    x
-                  </button>
-                </div>
-              ))}
-              {showLikedOnly && (
+              {activeCategory !== "all" && (
                 <div className="filter-chip">
-                  Liked Services Only
-                  <button
-                    onClick={() => {
-                      setShowLikedOnly(false);
-                      setPage(1);
-                    }}
-                  >
-                    x
-                  </button>
+                  Category: {apiCategories.find((c) => c.id === activeCategory)?.name || activeCategory}
+                  <button onClick={() => setCategory("all")}>x</button>
+                </div>
+              )}
+              {(priceRange[0] > 0 || priceRange[1] < 5000000) && (
+                <div className="filter-chip">
+                  Price: PKR {priceRange[0]} - PKR {priceRange[1]}
+                  <button onClick={() => setPriceRange([0, 5000000])}>x</button>
+                </div>
+              )}
+              {rating !== null && (
+                <div className="filter-chip">
+                  Rating: {rating}+ Stars
+                  <button onClick={() => setRating(null)}>x</button>
+                </div>
+              )}
+              {selectedBusiness !== "all" && (
+                <div className="filter-chip">
+                  Business: {selectedBusiness}
+                  <button onClick={() => setSelectedBusiness("all")}>x</button>
+                </div>
+              )}
+              {sortBy !== "newest" && (
+                <div className="filter-chip">
+                  Sort: {sortBy === "price-low" ? "Price: Low to High" : sortBy === "price-high" ? "Price: High to Low" : sortBy === "most-reviewed" ? "Most Reviewed" : sortBy === "highest-rated" ? "Highest Rated" : "Newest"}
+                  <button onClick={() => setSortBy("newest")}>x</button>
                 </div>
               )}
               {activeFilterCount > 0 && (
@@ -2433,56 +2526,26 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
             </div>
 
             <div className="filter-group">
-              <button className="filter-group-title">Specialties</button>
-              <div className="filter-search">
-                <Icons.Search style={{ width: 16, height: 16 }} />
-                <input
-                  type="search"
-                  placeholder="Search specialties"
-                  value={searchParams.specialtySearch}
-                  onChange={(event) =>
-                    setSearchParams((current) => ({
-                      ...current,
-                      specialtySearch: event.target.value,
-                    }))
-                  }
-                />
-              </div>
-              <div className="filter-options">
-                {activeSpecialtyGroups.map((group) => (
-                  <div key={group.label}>
-                    <div className="filter-subgroup-title">{group.label}</div>
-                    {group.options.map((specialty) => (
-                      <div key={specialty} className="filter-checkbox">
-                        <input
-                          id={`specialty-${specialty}`}
-                          type="checkbox"
-                          checked={selectedSpecialties.includes(specialty)}
-                          onChange={() =>
-                            toggleValue(specialty, setSelectedSpecialties)
-                          }
-                        />
-                        <label htmlFor={`specialty-${specialty}`}>
-                          <span>{specialty}</span>
-                          <span className="filter-badge">
-                            (
-                            {
-                              services.filter((service) =>
-                                serviceMatchesSpecialty(service, specialty),
-                              ).length
-                            }
-                            )
-                          </span>
-                        </label>
-                      </div>
-                    ))}
-                  </div>
+              <label className="filter-group-title" htmlFor="category-select">Category</label>
+              <select
+                id="category-select"
+                className="w-full rounded-xl border border-white/10 bg-[#120f1c] px-3 py-3 text-sm text-white outline-none transition focus:border-violet-400"
+                value={activeCategory}
+                onChange={(e) => setCategory(e.target.value)}
+                disabled={categoriesLoading}
+              >
+                <option value="all">All Categories</option>
+                {apiCategories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
                 ))}
-              </div>
+                <option value="other">Other</option>
+              </select>
             </div>
 
             <div className="filter-group">
-              <button className="filter-group-title">Price Range</button>
+              <label className="filter-group-title">Price Range (PKR)</label>
               <div className="price-inputs">
                 <input
                   type="number"
@@ -2492,7 +2555,7 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
                     setPriceRange([Number(event.target.value), priceRange[1]]);
                     setPage(1);
                   }}
-                  placeholder="Min"
+                  placeholder="Min Price (PKR)"
                 />
                 <span>-</span>
                 <input
@@ -2503,7 +2566,7 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
                     setPriceRange([priceRange[0], Number(event.target.value)]);
                     setPage(1);
                   }}
-                  placeholder="Max"
+                  placeholder="Max Price (PKR)"
                 />
               </div>
               <div className="range-helper">
@@ -2512,129 +2575,75 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
             </div>
 
             <div className="filter-group">
-              <button className="filter-group-title">Providers</button>
-              <div className="filter-search">
-                <Icons.Search style={{ width: 16, height: 16 }} />
-                <input
-                  type="search"
-                  placeholder="Search providers"
-                  value={searchParams.providerSearch}
-                  onChange={(event) =>
-                    setSearchParams((current) => ({
-                      ...current,
-                      providerSearch: event.target.value,
-                    }))
-                  }
-                />
-              </div>
-              <div className="filter-options">
-                {visibleProviders.map((provider) => (
-                  <div key={provider} className="filter-checkbox">
-                    <input
-                      id={`provider-${provider}`}
-                      type="checkbox"
-                      checked={selectedProviders.includes(provider)}
-                      onChange={() =>
-                        toggleValue(provider, setSelectedProviders)
-                      }
-                    />
-                    <label htmlFor={`provider-${provider}`}>
-                      <span>{provider}</span>
-                      <span className="filter-badge">
-                        (
-                        {
-                          services.filter(
-                            (service) => service.provider === provider,
-                          ).length
-                        }
-                        )
-                      </span>
-                    </label>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="filter-group">
-              <button className="filter-group-title">Availability</button>
-              <div className="filter-options">
-                {(
-                  Object.keys(availabilityLabels) as Service["availability"][]
-                ).map((availability) => (
-                  <div key={availability} className="filter-checkbox">
-                    <input
-                      id={`availability-${availability}`}
-                      type="checkbox"
-                      checked={selectedAvailability.includes(availability)}
-                      onChange={() =>
-                        toggleValue(availability, setSelectedAvailability)
-                      }
-                    />
-                    <label htmlFor={`availability-${availability}`}>
-                      <span>{availabilityLabels[availability]}</span>
-                    </label>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="filter-group">
-              <div className="filter-checkbox">
-                <input
-                  id="liked-services-only"
-                  type="checkbox"
-                  checked={showLikedOnly}
-                  onChange={() => {
-                    setShowLikedOnly((current) => !current);
-                    setPage(1);
-                    scrollToTop();
-                    requestAnimationFrame(scrollToTop);
-                    window.setTimeout(scrollToTop, 80);
-                  }}
-                />
-                <label htmlFor="liked-services-only">
-                  <span>Show Liked Services Only ({likedServices.length})</span>
-                </label>
-              </div>
-            </div>
-
-            <div className="filter-group">
-              <button className="filter-group-title">
-                Rating & Experience
-              </button>
-              <div
-                className="rating-control"
-                style={{ display: "grid", gap: 10, marginTop: 12 }}
+              <label className="filter-group-title" htmlFor="business-select">Business Name</label>
+              <select
+                id="business-select"
+                className="w-full rounded-xl border border-white/10 bg-[#120f1c] px-3 py-3 text-sm text-white outline-none transition focus:border-violet-400"
+                value={selectedBusiness}
+                onChange={(e) => {
+                  setSelectedBusiness(e.target.value);
+                  setPage(1);
+                }}
               >
-                <input
-                  type="number"
-                  min={0}
-                  max={5}
-                  step={0.1}
-                  value={rating ?? 0}
-                  onChange={(event) => {
-                    const next = Math.min(
-                      5,
-                      Math.max(0, Number(event.target.value)),
-                    );
-                    setRating(next === 0 ? null : next);
-                    setPage(1);
-                  }}
-                  placeholder="Minimum rating"
-                />
-                <input
-                  type="number"
-                  min={0}
-                  max={30}
-                  value={experienceMin}
-                  onChange={(event) => {
-                    setExperienceMin(Math.max(0, Number(event.target.value)));
-                    setPage(1);
-                  }}
-                  placeholder="Minimum experience"
-                />
-              </div>
+                <option value="all">All Businesses</option>
+                {visibleProviders.map((prov) => (
+                  <option key={prov} value={prov}>
+                    {prov}
+                  </option>
+                ))}
+              </select>
             </div>
+
+            <div className="filter-group">
+              <label className="filter-group-title" htmlFor="rating-select">Minimum Rating</label>
+              <select
+                id="rating-select"
+                className="w-full rounded-xl border border-white/10 bg-[#120f1c] px-3 py-3 text-sm text-white outline-none transition focus:border-violet-400"
+                value={rating === null ? "all" : String(rating)}
+                onChange={(event) => {
+                  const val = event.target.value;
+                  setRating(val === "all" ? null : Number(val));
+                  setPage(1);
+                }}
+              >
+                <option value="all">Any Rating</option>
+                <option value="1">1+ Stars</option>
+                <option value="2">2+ Stars</option>
+                <option value="3">3+ Stars</option>
+                <option value="4">4+ Stars</option>
+                <option value="5">5 Stars</option>
+              </select>
+            </div>
+
+            <div className="filter-group">
+              <label className="filter-group-title" htmlFor="sort-select">Sort By</label>
+              <select
+                id="sort-select"
+                className="w-full rounded-xl border border-white/10 bg-[#120f1c] px-3 py-3 text-sm text-white outline-none transition focus:border-violet-400"
+                value={sortBy}
+                onChange={(event) => {
+                  setSortBy(event.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="newest">Newest</option>
+                <option value="most-reviewed">Most Reviewed</option>
+                <option value="highest-rated">Highest Rated</option>
+                <option value="price-low">Price: Low to High</option>
+                <option value="price-high">Price: High to Low</option>
+              </select>
+            </div>
+
+            {activeFilterCount > 0 && (
+              <div className="filter-group" style={{ marginTop: 24 }}>
+                <button
+                  className="w-full rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-medium py-3 px-4 transition text-sm cursor-pointer"
+                  onClick={clearAllFilters}
+                >
+                  Clear Filters
+                </button>
+              </div>
+            )}
           </aside>
 
           <main className="services-main">

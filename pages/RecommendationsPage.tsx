@@ -225,15 +225,7 @@ const RecommendationsPage: React.FC = () => {
                     </span>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    navigate(`/products?search=${encodeURIComponent(item.name)}`)
-                  }
-                  className="mt-5 inline-flex items-center gap-2 rounded-xl border border-[#8B5CF6]/35 px-4 py-2 text-sm font-bold text-[#8B5CF6] transition hover:bg-[#6C3BD5] hover:text-white"
-                >
-                  View Product <Icons.ArrowRight className="h-4 w-4" />
-                </button>
+                
               </article>
             ))}
           {!loading && !error && normalizedResults.length === 0 && (

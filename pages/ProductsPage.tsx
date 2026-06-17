@@ -66,6 +66,7 @@ interface ApiCategoryOption {
   slug?: string;
   parent_id?: string | null;
   parentId?: string | null;
+  type?: string;
 }
 
 interface MaterialGroup {
@@ -2143,7 +2144,7 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
           setApiCategories(
             (Array.isArray(rows) ? rows : []).filter(
               (category: ApiCategoryOption) =>
-                !category.parent_id && !category.parentId,
+                !category.parent_id && !category.parentId && category.type === "product",
             ),
           );
         }
@@ -2185,7 +2186,7 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
         sortOrder: sort.sortOrder,
         ...(activeTag ? { tag: activeTag } : {}),
       })
-      .then((response) => {
+      .then((response: any) => {
         const prods = (response.products ||
           response.data?.products ||
           []) as ApiProduct[];
@@ -3120,6 +3121,44 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
                   placeholder="Max Price (PKR)"
                 />
               </div>
+            </div>
+
+            <div className="filter-group">
+              <div className="filter-group-title">Business Name</div>
+              <select
+                className="w-full rounded-xl border border-white/10 bg-[#120f1c] px-3 py-3 text-sm text-white outline-none transition focus:border-violet-400"
+                value={filters.sellers[0] || "all"}
+                onChange={(event) => {
+                  const val = event.target.value;
+                  updateFilter("sellers", val === "all" ? [] : [val]);
+                }}
+              >
+                <option value="all">All Businesses</option>
+                {Array.from(new Set(products.map((p) => p.seller))).sort().map((seller) => (
+                  <option key={seller} value={seller}>
+                    {seller}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="filter-group">
+              <div className="filter-group-title">Minimum Rating</div>
+              <select
+                className="w-full rounded-xl border border-white/10 bg-[#120f1c] px-3 py-3 text-sm text-white outline-none transition focus:border-violet-400"
+                value={filters.rating === null ? "all" : String(filters.rating)}
+                onChange={(event) => {
+                  const val = event.target.value;
+                  updateFilter("rating", val === "all" ? null : Number(val));
+                }}
+              >
+                <option value="all">Any Rating</option>
+                <option value="1">1+ Stars</option>
+                <option value="2">2+ Stars</option>
+                <option value="3">3+ Stars</option>
+                <option value="4">4+ Stars</option>
+                <option value="5">5 Stars</option>
+              </select>
             </div>
 
             <div className="filter-group">

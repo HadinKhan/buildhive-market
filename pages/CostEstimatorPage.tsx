@@ -10,10 +10,7 @@ type EstimateFormState = {
   sqft: string;
   floors: string;
   quality: string;
-  bedrooms: string;
-  washrooms: string;
-  projectDescription: string;
-  maxBudget: string;
+  bhk: string;
 };
 
 type PhaseItem = {
@@ -208,9 +205,9 @@ const normalizeBreakdown = (payload: any): BreakdownRow[] => {
     payload?.data?.data?.category_breakdown;
   if (objectBreakdown && !Array.isArray(objectBreakdown) && typeof objectBreakdown === "object") {
     const total = Object.values(objectBreakdown).reduce(
-      (sum, value) => sum + (Number(value) || 0),
+      (sum: any, value: any) => sum + (Number(value) || 0),
       0,
-    );
+    ) as number;
     return Object.entries(objectBreakdown).map(([label, amount]) => ({
       label,
       amount: Number(amount) || null,
@@ -361,13 +358,10 @@ export const CostEstimatorPage: React.FC = () => {
     city: "Lahore",
     projectType: "Full Construction",
     marla: "5",
-    sqft: String(5 * 272),
+    sqft: "1361",
     floors: "2",
     quality: "Standard",
-    bedrooms: "3",
-    washrooms: "2",
-    projectDescription: "5 marla house in Lahore",
-    maxBudget: "",
+    bhk: "3",
   });
   const [estimate, setEstimate] = useState<any>(null);
   const [comparison, setComparison] = useState<ComparisonRow[]>([]);
@@ -408,7 +402,7 @@ export const CostEstimatorPage: React.FC = () => {
 
     const marla = Number(form.marla);
     if (Number.isFinite(marla) && marla > 0) {
-      return Math.round(marla * 272);
+      return Math.round(marla * 272.25);
     }
 
     return 0;
@@ -498,18 +492,28 @@ export const CostEstimatorPage: React.FC = () => {
   );
 
   const handleMarlaChange = (value: string) => {
+    if (!value) {
+      setForm((current) => ({ ...current, marla: "", sqft: "" }));
+      return;
+    }
+    const num = Number(value);
     setForm((current) => ({
       ...current,
       marla: value,
-      sqft: value ? String(Math.round(Number(value) * 272)) : current.sqft,
+      sqft: String(Math.round(num * 272.25)),
     }));
   };
 
   const handleSqftChange = (value: string) => {
+    if (!value) {
+      setForm((current) => ({ ...current, marla: "", sqft: "" }));
+      return;
+    }
+    const num = Number(value);
     setForm((current) => ({
       ...current,
       sqft: value,
-      marla: value ? "" : current.marla,
+      marla: String(Number((num / 272.25).toFixed(2))),
     }));
   };
 
@@ -532,14 +536,12 @@ export const CostEstimatorPage: React.FC = () => {
         floors: Number(form.floors),
         quality: form.quality,
         city: form.city,
-        bhk: Number(form.bedrooms),
-        bedrooms: Number(form.bedrooms),
-        washrooms: Number(form.washrooms),
+        bhk: Number(form.bhk),
+        bedrooms: Number(form.bhk),
+        washrooms: 2,
         kitchens: 1,
         projectType: form.projectType,
-        area:
-          form.projectDescription.trim() ||
-          (form.marla ? `${form.marla} Marla` : `${sqftValue} sqft`),
+        area: form.marla ? `${form.marla} Marla` : `${sqftValue} sqft`,
       };
 
       const [estimateResult, comparisonResult] = await Promise.all([
@@ -666,44 +668,33 @@ export const CostEstimatorPage: React.FC = () => {
             </div>
 
             <div className="mt-8 grid gap-5">
-              <Field label="Project Description">
-                <textarea
-                  rows={4}
-                  placeholder="e.g. 5 marla house in Lahore"
-                  value={form.projectDescription}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      projectDescription: event.target.value,
-                    }))
-                  }
-                  className={inputClass}
-                  style={inputStyle}
-                />
-              </Field>
-
               <div className="grid gap-5 md:grid-cols-2">
-                <Field label="City">
-                  <select
-                    value={form.city}
-                    aria-label="City"
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        city: event.target.value,
-                      }))
-                    }
+                <Field label="Area (Marla)">
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 5"
+                    value={form.marla}
+                    onChange={(event) => handleMarlaChange(event.target.value)}
                     className={inputClass}
                     style={inputStyle}
-                  >
-                    {cityOptions.map((city) => (
-                      <option key={city} value={city}>
-                        {city}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </Field>
 
+                <Field label="Area (Sqft)">
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 1361"
+                    value={form.sqft}
+                    onChange={(event) => handleSqftChange(event.target.value)}
+                    className={inputClass}
+                    style={inputStyle}
+                  />
+                </Field>
+              </div>
+
+              <div className="grid gap-5 md:grid-cols-2">
                 <Field label="Project Type">
                   <select
                     value={form.projectType}
@@ -724,33 +715,47 @@ export const CostEstimatorPage: React.FC = () => {
                     ))}
                   </select>
                 </Field>
-              </div>
 
-              <div className="grid gap-5 md:grid-cols-2">
-                <Field label="Area in Marla">
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="e.g. 5"
-                    value={form.marla}
-                    onChange={(event) => handleMarlaChange(event.target.value)}
+                <Field label="Quality (Finishing Tier)">
+                  <select
+                    value={form.quality}
+                    aria-label="Quality (Finishing Tier)"
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        quality: event.target.value,
+                      }))
+                    }
                     className={inputClass}
                     style={inputStyle}
-                  />
-                </Field>
-
-                <Field label="Area in Sqft">
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="e.g. 1360"
-                    value={form.sqft}
-                    onChange={(event) => handleSqftChange(event.target.value)}
-                    className={inputClass}
-                    style={inputStyle}
-                  />
+                  >
+                    {["Standard", "Premium", "Luxury"].map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
                 </Field>
               </div>
+
+              <Field label="City">
+                <input
+                  type="text"
+                  value={form.city}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      city: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  style={inputStyle}
+                  placeholder="e.g. Lahore"
+                />
+                <p className="mt-1 text-xs text-[var(--bh-muted)]">
+                  Only cities with PKR rate cards are listed. Marla&rarr;sqft uses city standards from data. Minimum input: 2 marla (or equivalent sqft).
+                </p>
+              </Field>
 
               <div className="grid gap-5 md:grid-cols-2">
                 <Field label="Floors">
@@ -766,115 +771,35 @@ export const CostEstimatorPage: React.FC = () => {
                     className={inputClass}
                     style={inputStyle}
                   >
-                    {floorOptions.map((floor) => (
+                    {[1, 2, 3, 4].map((floor) => (
                       <option key={floor} value={floor}>
-                        {floor}
+                        {floor} Floor{floor > 1 ? "s" : ""}
                       </option>
                     ))}
                   </select>
                 </Field>
 
-                <Field label="Quality Grade">
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    {qualityOptions.map((quality) => {
-                      const active = form.quality === quality.value;
-                      return (
-                        <button
-                          key={quality.value}
-                          type="button"
-                          onClick={() =>
-                            setForm((current) => ({
-                              ...current,
-                              quality: quality.value,
-                            }))
-                          }
-                          className={`rounded-2xl border px-4 py-3 text-left text-sm transition active:scale-[0.98] ${
-                            active
-                              ? "border-[#6C3BD5] bg-[#6C3BD5] text-white shadow-lg shadow-violet-900/25"
-                              : "border-[var(--bh-border)] bg-[var(--bh-card)] text-[var(--bh-text)] hover:border-[#8B5CF6]"
-                          }`}
-                        >
-                          <span className="block font-bold">
-                            {quality.value}
-                          </span>
-                          <span
-                            className={`mt-1 block text-xs ${
-                              active ? "text-violet-100" : "text-[var(--bh-muted)]"
-                            }`}
-                          >
-                            {quality.description}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </Field>
-              </div>
-
-              <div className="grid gap-5 md:grid-cols-2">
-                <Field label="Bedrooms">
+                <Field label="Layout (BHK)">
                   <select
-                    value={form.bedrooms}
-                    aria-label="Bedrooms"
+                    value={form.bhk}
+                    aria-label="Layout (BHK)"
                     onChange={(event) =>
                       setForm((current) => ({
                         ...current,
-                        bedrooms: event.target.value,
+                        bhk: event.target.value,
                       }))
                     }
                     className={inputClass}
                     style={inputStyle}
                   >
-                    {bedroomOptions.map((bedrooms) => (
-                      <option key={bedrooms} value={bedrooms}>
-                        {bedrooms}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-
-                <Field label="Washrooms">
-                  <select
-                    value={form.washrooms}
-                    aria-label="Washrooms"
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        washrooms: event.target.value,
-                      }))
-                    }
-                    className={inputClass}
-                    style={inputStyle}
-                  >
-                    {washroomOptions.map((washrooms) => (
-                      <option key={washrooms} value={washrooms}>
-                        {washrooms}
+                    {[1, 2, 3, 4, 5].map((bhk) => (
+                      <option key={bhk} value={bhk}>
+                        {bhk} BHK
                       </option>
                     ))}
                   </select>
                 </Field>
               </div>
-
-              <Field label="Max Budget (optional)">
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-[var(--bh-muted)]">
-                    PKR
-                  </span>
-                  <input
-                    type="text"
-                    placeholder="e.g. 5,000,000"
-                    value={form.maxBudget}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        maxBudget: event.target.value,
-                      }))
-                    }
-                    className={`${inputClass} pl-14`}
-                    style={inputStyle}
-                  />
-                </div>
-              </Field>
 
               <button
                 type="button"
@@ -1139,7 +1064,7 @@ export const CostEstimatorPage: React.FC = () => {
             {tips.length > 0 && (
               <div className="rounded-[30px] border border-amber-200 bg-amber-50 p-6 shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
                 <h3 className="text-xl font-bold text-amber-950">
-                  ðŸ’¡ Tips to reduce cost
+                  Tips to reduce cost
                 </h3>
                 <ul className="mt-4 space-y-3 text-sm leading-6 text-amber-900">
                   {tips.map((tip: any, index: number) => (
