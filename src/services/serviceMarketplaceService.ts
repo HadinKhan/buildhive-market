@@ -51,6 +51,9 @@ export interface ServiceOrderData {
   startDate?: string;
   deadline?: string;
   milestones?: ServiceOrderMilestone[];
+  message?: string;
+  scheduled_date?: string | null;
+  package_id?: string | null;
 }
 
 export interface ServiceContractorProfileResponse {

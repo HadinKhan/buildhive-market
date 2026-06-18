@@ -74,7 +74,7 @@ interface DisputeAttachment {
   createdAt: string;
 }
 
-type ResolutionStatus = "open" | "in-progress" | "resolved";
+type ResolutionStatus = "open" | "resolved" | "under_review" | "escalated" | "closed";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = new Set([
@@ -180,7 +180,7 @@ const normalizeDispute = (item: any): DisputeDetail => {
     order: order ? { id: String(order.id), order_number: String(order.order_number) } : null,
     sellerResponse: String(item.sellerResponse ?? item.seller_response ?? ""),
     resolution: String(item.resolution ?? ""),
-    adminNote: String(item.adminNote ?? item.admin_note ?? ""),
+    adminNote: String(item.adminNote ?? item.admin_note ?? item.resolution ?? ""),
     partialRefundAmount: item.partialRefundAmount ?? item.partial_refund_amount ?? undefined,
     buyerId: String(item.buyerId ?? item.filed_by ?? ""),
     clientId: String(item.clientId ?? item.filed_by ?? ""),
@@ -449,8 +449,9 @@ Format: - What happened - What each party claims - Recommended resolution`;
 
   const fileCountLabel = `${attachments.length}/10 files uploaded`;
   const disputeStatus = dispute?.status || "open";
-  const canUploadEvidence = Boolean(dispute && (isAdmin || canUpload));
-  const canSendMessages = Boolean(dispute && (isAdmin || canChat));
+  const isResolved = disputeStatus.toLowerCase() === "resolved";
+  const canUploadEvidence = Boolean(dispute && (isAdmin || canUpload) && !isResolved);
+  const canSendMessages = Boolean(dispute && (isAdmin || canChat) && !isResolved);
 
   if (loading) {
     return (
@@ -478,10 +479,10 @@ Format: - What happened - What each party claims - Recommended resolution`;
             <ArrowLeft size={16} />
           </button>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white-400">
               Dispute Detail
             </p>
-            <h1 className="text-2xl font-bold text-gray-900">
+            <h1 className="text-2xl font-bold text-white-900">
               {disputeIdLabel}
             </h1>
           </div>
@@ -653,7 +654,7 @@ Format: - What happened - What each party claims - Recommended resolution`;
                       >
                         <Download size={16} /> Download
                       </a>
-                      {(isAdmin || attachment.userId === user?.id) && (
+                      {!isResolved && (isAdmin || attachment.userId === user?.id) && (
                         <button
                           onClick={() => void deleteAttachment(attachment.id)}
                           className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-red-200 bg-white text-red-600 hover:bg-red-50 transition"

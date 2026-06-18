@@ -45,6 +45,8 @@ export interface CreateAddressData {
   phone: string;
   is_default?: boolean;
   isDefault?: boolean;
+  isTemporary?: boolean;
+  is_temporary?: boolean;
 }
 
 const toApiAddressData = (data: CreateAddressData) => ({
@@ -58,6 +60,7 @@ const toApiAddressData = (data: CreateAddressData) => ({
   country: data.country,
   phone: data.phone,
   isDefault: data.is_default ?? data.isDefault,
+  isTemporary: data.is_temporary ?? data.isTemporary,
 });
 
 // =============================================

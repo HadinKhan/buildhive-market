@@ -64,10 +64,29 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const [serviceCheckout, setServiceCheckout] = useState<any | null>(null);
   const [serviceLoading, setServiceLoading] = useState(false);
   const stripePayment = useStripePayment();
-  const [formData, setFormData] = useState<FormData>(INITIAL_FORM_DATA);
+  const [formData, setFormData] = useState<FormData>(() => ({
+    ...INITIAL_FORM_DATA,
+    email: user?.email || "",
+    full_name: user?.full_name || user?.fullName || "",
+    phone: user?.phone || "",
+  }));
+
+  // Update form data if user loads asynchronously
+  useEffect(() => {
+    if (user) {
+      setFormData((prev) => ({
+        ...prev,
+        email: prev.email || user.email || "",
+        full_name: prev.full_name || user.full_name || user.fullName || "",
+        phone: prev.phone || user.phone || "",
+      }));
+    }
+  }, [user]);
+
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
   const [selectedSavedAddressId, setSelectedSavedAddressId] = useState("");
+  const [saveAddress, setSaveAddress] = useState(false);
 
   const paymentSucceededRef = useRef(false);
   const createdOrderIdRef = useRef<string | null>(null);
@@ -154,8 +173,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
           setSelectedSavedAddressId(defaultAddress.id);
           setFormData((prev) => ({
             ...prev,
-            full_name: defaultAddress.full_name,
-            phone: defaultAddress.phone,
+            full_name: defaultAddress.full_name || prev.full_name || user?.full_name || user?.fullName || "",
+            phone: defaultAddress.phone || prev.phone || user?.phone || "",
             address_line1: defaultAddress.address_line1,
             address_line2: defaultAddress.address_line2,
             city: defaultAddress.city,
@@ -179,13 +198,17 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   }, [user?.id]);
 
   const applySavedAddress = (addressId: string) => {
+    if (!addressId) {
+      setSelectedSavedAddressId("");
+      return;
+    }
     const address = savedAddresses.find((item) => item.id === addressId);
     if (!address) return;
     setSelectedSavedAddressId(addressId);
     setFormData((prev) => ({
       ...prev,
-      full_name: address.full_name,
-      phone: address.phone,
+      full_name: address.full_name || prev.full_name || user?.full_name || user?.fullName || "",
+      phone: address.phone || prev.phone || user?.phone || "",
       address_line1: address.address_line1,
       address_line2: address.address_line2,
       city: address.city,
@@ -302,26 +325,70 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         }
       }
 
-      // Step 1: Create address first
+      // Step 1: Resolve address — reuse saved address or create/use a new one
       if (!user?.id) {
         toast.error("User not found. Please sign in again.");
         return;
       }
-      const addressPayload = {
-        fullName: formData.full_name,
-        addressLine1: formData.address_line1,
-        addressLine2: formData.address_line2,
-        city: formData.city,
-        state: formData.state,
-        postalCode: formData.postal_code,
-        country: formData.country,
-        phone: formData.phone,
-        isDefault: false,
-      };
-      const address = await addressService.createAddress(
-        user.id,
-        addressPayload,
-      );
+
+      let resolvedAddressId: string;
+
+      // Helper: normalize strings for comparison
+      const norm = (v?: string) => String(v || "").trim().toLowerCase().replace(/\s+/g, " ");
+
+      // Deduplication: check if entered address already exists in savedAddresses
+      const findDuplicateAddress = () =>
+        savedAddresses.find(
+          (a) =>
+            norm(a.address_line1) === norm(formData.address_line1) &&
+            norm(a.city) === norm(formData.city) &&
+            norm(a.state) === norm(formData.state) &&
+            norm(a.postal_code) === norm(formData.postal_code) &&
+            norm(a.full_name) === norm(formData.full_name) &&
+            norm(a.phone) === norm(formData.phone),
+        );
+
+      if (selectedSavedAddressId) {
+        // User picked an existing saved address — reuse it directly
+        resolvedAddressId = selectedSavedAddressId;
+      } else {
+        const duplicate = findDuplicateAddress();
+        if (duplicate) {
+          // Exact same address already saved — reuse it silently
+          resolvedAddressId = duplicate.id;
+        } else if (saveAddress) {
+          // New address the user wants to save for future orders
+          const addressPayload = {
+            fullName: formData.full_name,
+            addressLine1: formData.address_line1,
+            addressLine2: formData.address_line2,
+            city: formData.city,
+            state: formData.state,
+            postalCode: formData.postal_code,
+            country: formData.country,
+            phone: formData.phone,
+            isDefault: savedAddresses.length === 0,
+          };
+          const address = await addressService.createAddress(user.id, addressPayload);
+          resolvedAddressId = address.id;
+        } else {
+          // One-time address — create a temporary record just for this order
+          const addressPayload = {
+            fullName: formData.full_name,
+            addressLine1: formData.address_line1,
+            addressLine2: formData.address_line2,
+            city: formData.city,
+            state: formData.state,
+            postalCode: formData.postal_code,
+            country: formData.country,
+            phone: formData.phone,
+            isDefault: false,
+            isTemporary: true,
+          };
+          const address = await addressService.createAddress(user.id, addressPayload);
+          resolvedAddressId = address.id;
+        }
+      }
 
       if (serviceCheckout) {
         const serviceOrder = await serviceMarketplaceService.createServiceOrder(
@@ -349,7 +416,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         stripePayment.resetStripeState();
         const stripeConfigData = await stripePayment.fetchStripeConfig();
         const intentData = await stripePayment.createPaymentIntent({
-          shippingAddressId: address.id,
+          shippingAddressId: resolvedAddressId,
           notes: formData.notes,
         });
 
@@ -374,7 +441,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
           quantity: item.quantity,
           price: item.product!.price,
         })),
-        shippingAddressId: address.id,
+        shippingAddressId: resolvedAddressId,
         paymentMethod: paymentMethod,
         notes: formData.notes,
       };
@@ -413,6 +480,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    // If user edits fields manually, deselect the saved address
+    if (name !== "notes") {
+      setSelectedSavedAddressId("");
+    }
     // Clear error when user starts typing
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: "" }));
@@ -576,6 +647,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   <input
                     required
                     type="email"
+                    name="email"
+                    value={formData.email}
+                    onChange={handleInputChange}
                     placeholder="john@example.com"
                     className="form-input"
                   />
@@ -585,6 +659,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   <input
                     required
                     type="tel"
+                    name="phone"
+                    value={formData.phone}
+                    onChange={handleInputChange}
                     placeholder="0300 1234567"
                     className="form-input"
                   />
@@ -736,6 +813,30 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                     )}
                   </div>
                 </div>
+                {/* Save address checkbox — only shown for manual/new address entry */}
+                {!selectedSavedAddressId && (
+                  <div className="form-field" style={{ marginTop: "0.25rem" }}>
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        cursor: "pointer",
+                        fontSize: "0.875rem",
+                        color: "#64748b",
+                        userSelect: "none",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={saveAddress}
+                        onChange={(e) => setSaveAddress(e.target.checked)}
+                        style={{ width: "1rem", height: "1rem", accentColor: "#7c3aed", cursor: "pointer" }}
+                      />
+                      Save this address for future orders
+                    </label>
+                  </div>
+                )}
                 <div className="form-field">
                   <label className="form-label">Order Notes (optional)</label>
                   <textarea

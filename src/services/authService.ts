@@ -152,6 +152,14 @@ class AuthService {
   }
 
   /**
+   * Resend email verification
+   */
+  async resendVerification(email: string): Promise<string> {
+    const response = await api.post<ApiResponse<any>>('/auth/resend-verification', { email });
+    return response.data.message || "Verification email sent successfully";
+  }
+
+  /**
    * Refresh authentication token
    */
   async refreshToken(): Promise<AuthResponse> {

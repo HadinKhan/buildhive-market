@@ -673,7 +673,7 @@ export const CartPage: React.FC<CartPageProps> = ({
 
 
 
-              <div className="payment-section">
+              {/* <div className="payment-section">
                 <span className="section-label">Payment Method</span>
                 {paymentMethods.map((method) => (
                   <div
@@ -700,17 +700,17 @@ export const CartPage: React.FC<CartPageProps> = ({
                     )}
                   </div>
                 ))}
-              </div>
+              </div> */}
 
               <button
                 className="btn-checkout"
                 onClick={handleCheckout}
                 disabled={cartItems.length === 0}
               >
-                <Icons.Lock className="h-4 w-4" />
+                <Icons.Lock className="h-z w-4 ml-3" />
                 Proceed to Checkout
                 <span
-                  style={{ marginLeft: "auto", fontSize: 13, opacity: 0.9 }}
+                  style={{ marginLeft: "auto", fontSize: 15, opacity: 0.9, marginRight: 8 }}
                 >
                   PKR {Math.round(orderSummary.total).toLocaleString()}
                 </span>

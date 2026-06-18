@@ -402,9 +402,11 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
           {/* Right Column - Details */}
           <div>
-            <div className="mb-2 text-sm font-medium uppercase tracking-wider text-slate-400">
-              Construction Material
-            </div>
+            {(product as any).category && (
+              <div className="mb-2 text-sm font-medium uppercase tracking-wider text-slate-400">
+                {(product as any).category}
+              </div>
+            )}
             <h1 className="mb-4 text-3xl font-bold text-white sm:text-4xl">
               {product.name}
             </h1>
@@ -424,7 +426,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               >
                 <Icons.Message className="mr-2 h-4 w-4" /> Message Seller
               </Button>
-              {isAuthenticated && (
+              {/* {isAuthenticated && (
                 <button
                   type="button"
                   onClick={() => setReportTarget({ type: "product" })}
@@ -432,7 +434,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 >
                   Report Product
                 </button>
-              )}
+              )} */}
             </div>
 
             <div className="mb-6 flex items-center gap-2">
@@ -447,14 +449,10 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               </span>
             </div>
 
-            <div className="mb-6 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+            <div className="mb-6 grid grid-cols-2 gap-3 text-sm">
               {[
                 ["SKU", (product as any).sku || "N/A"],
-                ["Barcode", (product as any).barcode || "N/A"],
                 ["Status", (product as any).status || "N/A"],
-                ["Featured", (product as any).is_featured ? "Yes" : "No"],
-                ["Low Stock", (product as any).low_stock_threshold ?? "N/A"],
-                ["Weight", (product as any).weight ? `${(product as any).weight} ${(product as any).weight_unit || ""}` : "N/A"],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-2xl border p-3" style={{background:"#16162a",borderColor:"#2a2a45"}}>
                   <div className="text-xs font-bold uppercase text-slate-500">{label}</div>
@@ -465,11 +463,6 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
             <div className="mb-8 text-3xl font-bold text-white">
               PKR {product.price.toLocaleString()}
-              {product.compare_at_price && (
-                <span className="ml-3 text-lg font-medium text-slate-600 line-through">
-                  PKR {product.compare_at_price.toLocaleString()}
-                </span>
-              )}
             </div>
 
             <p className="mb-8 text-base leading-relaxed text-slate-400 break-all overflow-hidden">
@@ -556,29 +549,17 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               <div className="mt-6">
                 {activeTab === "Overview" && (
                   <div className="space-y-4">
-                    <h3 className="font-bold text-white">
-                      About this product
-                    </h3>
-                    <p className="text-sm text-slate-400">
-                      The {product.name} is designed with industry
-                      professionals in mind. Whether you are managing a
-                      large-scale commercial project or a home renovation, this
-                      tool provides the efficiency and safety you expect.
+                    <h3 className="font-bold text-white">About this product</h3>
+                    <p className="text-sm text-slate-400 leading-relaxed whitespace-pre-wrap">
+                      {(product as any).full_description ||
+                        (product as any).fullDesc ||
+                        product.description ||
+                        "No description available for this product."}
                     </p>
-                    <h3 className="font-bold text-white">
-                      Feature Highlights
-                    </h3>
-                    <ul className="list-inside list-disc space-y-2 text-sm text-slate-400">
-                      <li>Industrial grade durability</li>
-                      <li>Certified safety standards (ISO 9001)</li>
-                      <li>High efficiency performance</li>
-                      <li>All-weather protection</li>
-                      <li>1 Year Manufacturer Warranty</li>
-                    </ul>
                     {productTags.length > 0 && (
                       <div>
-                        <h3 className="font-bold text-white">Tags</h3>
-                        <div className="mt-2 flex flex-wrap gap-2">
+                        <h3 className="font-bold text-white mb-2">Tags</h3>
+                        <div className="flex flex-wrap gap-2">
                           {productTags.map((tag: any) => (
                             <button
                               key={String(tag)}
@@ -600,15 +581,11 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     {[
                       ["SKU", (product as any).sku || "N/A"],
-                      ["Barcode", (product as any).barcode || "N/A"],
-                      ["Weight", (product as any).weight ? `${(product as any).weight} ${(product as any).weight_unit || ""}` : "N/A"],
-                      ["Cost Price", (product as any).cost_per_item ? `PKR ${Number((product as any).cost_per_item).toLocaleString()}` : "N/A"],
-                      ["Compare At", (product as any).compare_at_price ? `PKR ${Number((product as any).compare_at_price).toLocaleString()}` : "N/A"],
-                      ["Low Stock Threshold", (product as any).low_stock_threshold ?? "N/A"],
+                      ["Category", (product as any).category || "N/A"],
                       ["Track Quantity", (product as any).track_quantity ? "Yes" : "No"],
                       ["Requires Shipping", (product as any).requires_shipping ? "Yes" : "No"],
-                      ["Created", (product as any).created_at ? new Date((product as any).created_at).toLocaleDateString() : "N/A"],
-                      ["Updated", (product as any).updated_at ? new Date((product as any).updated_at).toLocaleDateString() : "N/A"],
+                      ["Listed", (product as any).created_at ? new Date((product as any).created_at).toLocaleDateString() : "N/A"],
+                      ["Last Updated", (product as any).updated_at ? new Date((product as any).updated_at).toLocaleDateString() : "N/A"],
                     ].map(([label, value]) => (
                       <React.Fragment key={label}>
                         <div className="font-medium text-slate-200">{label}</div>

@@ -30,10 +30,17 @@ export const SignInPage: React.FC<SignInPageProps> = ({
   const [resetSuccess, setResetSuccess] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
 
+  // Resend Verification
+  const [showResend, setShowResend] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendSuccessMessage, setResendSuccessMessage] = useState<string | null>(null);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setShowResend(false);
+    setResendSuccessMessage(null);
 
     try {
       await login({ email, password });
@@ -50,13 +57,17 @@ export const SignInPage: React.FC<SignInPageProps> = ({
       if (status === 401) {
         setError("Invalid email or password. Please try again.");
       } else if (status === 403) {
+        const isVerif = serverMsg?.toLowerCase().includes("verif");
         setError(
-          serverMsg?.toLowerCase().includes("verif")
+          isVerif
             ? "Account not verified. Please check your email and verify your account before logging in."
             : serverMsg?.toLowerCase().includes("inactive") || serverMsg?.toLowerCase().includes("pending")
             ? "Your account is pending approval. Please contact support."
             : "Access denied. Please check your credentials."
         );
+        if (isVerif) {
+          setShowResend(true);
+        }
       } else if (serverMsg) {
         setError(serverMsg);
       } else {
@@ -64,6 +75,31 @@ export const SignInPage: React.FC<SignInPageProps> = ({
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (!email) {
+      setError("Please enter your email address first.");
+      return;
+    }
+    setResendLoading(true);
+    setError(null);
+    setResendSuccessMessage(null);
+
+    try {
+      const { authService } = await import("../src/services/authService");
+      const msg = await authService.resendVerification(email);
+      setResendSuccessMessage(msg || "Verification email sent successfully.");
+      setShowResend(false);
+    } catch (err: any) {
+      setError(
+        err.response?.data?.message ||
+          err.response?.data?.error ||
+          "Failed to resend verification email."
+      );
+    } finally {
+      setResendLoading(false);
     }
   };
 
@@ -108,10 +144,30 @@ export const SignInPage: React.FC<SignInPageProps> = ({
           <p>{signInPageData.subtitle}</p>
         </div>
 
+        {resendSuccessMessage && (
+          <div className="auth-success" style={{ display: "flex", gap: "8px", alignItems: "center", backgroundColor: "#ecfdf5", border: "1px solid #10b981", color: "#065f46", padding: "10px 14px", borderRadius: "8px", fontSize: "0.875rem", marginBottom: "15px" }}>
+            <Icons.Check className="h-5 w-5 flex-shrink-0" />
+            <span>{resendSuccessMessage}</span>
+          </div>
+        )}
+
         {error && (
-          <div className="auth-error">
-            <Icons.AlertCircle className="h-5 w-5" />
-            <span>{error}</span>
+          <div className="auth-error" style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <Icons.AlertCircle className="h-5 w-5 flex-shrink-0" />
+              <span>{error}</span>
+            </div>
+            {showResend && (
+              <button
+                type="button"
+                onClick={handleResendVerification}
+                disabled={resendLoading}
+                className="auth-link"
+                style={{ textAlign: "left", alignSelf: "flex-start", padding: "4px 0", fontSize: "0.875rem", textDecoration: "underline", background: "none", border: "none", cursor: "pointer" }}
+              >
+                {resendLoading ? "Sending new link..." : "Resend verification email"}
+              </button>
+            )}
           </div>
         )}
 

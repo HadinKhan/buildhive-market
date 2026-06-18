@@ -1,5 +1,6 @@
 // Type definitions
 export interface FormData {
+  email: string;
   full_name: string;
   phone: string;
   address_line1: string;
@@ -19,6 +20,7 @@ export interface PaymentMethod {
 
 // Initial form data
 export const INITIAL_FORM_DATA: FormData = {
+  email: "",
   full_name: "",
   phone: "",
   address_line1: "",
