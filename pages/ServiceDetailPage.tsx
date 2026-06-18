@@ -393,6 +393,8 @@ export default function ServiceDetailPage() {
                       review.reviewer_name ||
                       review.reviewerName ||
                       review.user_name ||
+                      review.reviewer?.full_name ||
+                      review.reviewer?.fullName ||
                       "Anonymous";
                     const firstName = reviewer.split(" ")[0] || reviewer;
                     const created = review.created_at || review.createdAt || "";
