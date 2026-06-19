@@ -39,6 +39,7 @@ export interface Service {
   }>;
   priceType: "fixed" | "hourly" | "per-sqft" | "project-based";
   deliveryDays?: number;
+  deliveryTime?: string;
   rating: number;
   reviews: number;
   reviewCount?: number;
@@ -1473,6 +1474,7 @@ const toServiceView = (service: ApiService | any): Service => ({
     }));
   })(),
   priceType: service.price_type || service.priceType || "fixed",
+  deliveryTime: service.delivery_time || service.deliveryTime || "",
   deliveryDays: (() => {
     const rawPackages = service.packages || service.service_packages || [];
     if (Array.isArray(rawPackages) && rawPackages.length > 0) {
@@ -2327,7 +2329,16 @@ export const ServicesPage: React.FC<ServicesPageProps> = ({ onNavigate }) => {
               </span>
             </div>
             <span className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 text-[10px] font-bold uppercase text-emerald-400">
-              {service.deliveryDays || 0} days delivery
+              {(() => {
+                const time = service.deliveryTime || "";
+                if (!time) {
+                  return `${service.deliveryDays || 0} days delivery`;
+                }
+                if (time.toLowerCase().includes("delivery") || time.toLowerCase().includes("day")) {
+                  return time.toLowerCase().includes("delivery") ? time : `${time} delivery`;
+                }
+                return `${time} delivery`;
+              })()}
             </span>
           </div>
 

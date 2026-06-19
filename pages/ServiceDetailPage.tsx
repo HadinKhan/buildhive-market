@@ -26,6 +26,11 @@ type ServiceReview = {
   reviewer_name?: string;
   reviewerName?: string;
   user_name?: string;
+  reviewer?: {
+    id?: string;
+    full_name?: string;
+    fullName?: string;
+  };
 };
 
 export default function ServiceDetailPage() {
@@ -154,9 +159,12 @@ export default function ServiceDetailPage() {
   const baseDeliveryDays = Number(
     service?.delivery_days || service?.deliveryDays || 0,
   );
+  const baseDeliveryTime = service?.delivery_time || service?.deliveryTime || "";
 
   const priceToShow = selectedPackage?.price ?? basePrice;
-  const deliveryToShow = selectedPackage?.deliveryDays ?? baseDeliveryDays;
+  const deliveryToShow = selectedPackage
+    ? `${selectedPackage.deliveryDays} days`
+    : (baseDeliveryTime || (baseDeliveryDays ? `${baseDeliveryDays} days` : "0 days"));
 
   const tags = Array.isArray(service?.tags)
     ? service.tags
@@ -373,7 +381,13 @@ export default function ServiceDetailPage() {
                     PKR {basePrice.toLocaleString()}
                   </div>
                   <div className="text-sm text-slate-400">
-                    Delivered in {baseDeliveryDays || 0} days
+                    {baseDeliveryTime ? (
+                      baseDeliveryTime.toLowerCase().includes("same") || baseDeliveryTime.toLowerCase().includes("ongoing")
+                        ? baseDeliveryTime
+                        : `Delivered in ${baseDeliveryTime}`
+                    ) : (
+                      `Delivered in ${baseDeliveryDays || 0} days`
+                    )}
                   </div>
                 </div>
               )}
@@ -512,7 +526,7 @@ export default function ServiceDetailPage() {
                 <div className="flex items-center justify-between">
                   <span>Delivery Time</span>
                   <span className="font-semibold text-white">
-                    {deliveryToShow || 0} days
+                    {deliveryToShow}
                   </span>
                 </div>
               </div>
